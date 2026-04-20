@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SYNTEGRA TASK MANAGEMENT</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+  <footer>
+        <div class="container">
+            <p>&copy; 2026 SYNTEGRA TASK MANAGEMENT by Refiando Vandana.</p>
+        </div>
+    </footer>
+</html>
+
+<style>
+  /* Tampilan Default (Website / Desktop) */
+  footer {
+    background-color: #505050;  
+    color: var(--light-color, #7a7a7a);
+    text-align: right; /* Teks diratakan ke kanan agar aman dari sidebar */
+    font-weight: bold;
+    font-size: 0.9rem;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    padding-right: 810px; /* Jarak aman teks dari tepi kanan layar */
+    box-sizing: border-box;
+    z-index: 30; /* <--- KUNCI UTAMA: Disetel ke 30 agar mundur ke belakang Sidebar (z-50) */
+  }
+
+  /* Tampilan Mobile & Tablet (Layar di bawah 1024px) */
+  @media (max-width: 1024px) {
+    footer {
+      padding-right: 0px; 
+      text-align: right; /* Di HP, teks di tengah lebih rapi */
+      font-size: 0.75rem; /* Huruf sedikit dikecilkan untuk layar HP */
+      padding-bottom: 5px;
+      padding-top: 5px;
+      padding-right: 150px; /* Sedikit dinaikkan agar teks tidak tertutup menu bawah HP */
+    }
+  }
+</style>

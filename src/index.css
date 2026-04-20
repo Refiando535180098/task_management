@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@media print {
+    footer {
+        display: none !important;
+    }
+    
+    /* Opsional: Sembunyikan juga bagian kontak hitam di atas footer dan tombol back to top */
+    .contact-section-tech,
+    #backToTopBtn {
+        display: none !important;
+    }
+}
