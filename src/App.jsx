@@ -785,7 +785,7 @@ export default function App() {
         <Card className="w-full max-w-md p-6 md:p-8 shadow-2xl shadow-indigo-100 border-0 bg-white/95 backdrop-blur-xl relative z-10">
           <div className="text-center mb-6 md:mb-8">
             <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl transform hover:rotate-3 transition-transform">
-              <img src="src/assets/Logo_apps.png" alt="Logo" />
+              <img src="/Logo_apps.png" alt="Logo" />
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-yellow-500 tracking-tight uppercase">{sysConfig.brandName}<br/><span className="text-slate-800 text-lg md:text-xl">Task Management</span></h1>
             <p className="text-slate-500 text-xs md:text-sm font-medium mt-1">Sistem Manajemen Kinerja Terpadu</p>
@@ -866,7 +866,7 @@ export default function App() {
       <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 p-4 sticky top-0 z-30 print:hidden shadow-sm pt-safe">
         <div className="flex items-center gap-2.5">
           <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-1.5 rounded-lg shadow-sm">
-            <img src="src/assets/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
+            <img src="/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
           </div>
           <div>
             <span className="font-black text-sm tracking-tight text-slate-900 uppercase leading-none block">{sysConfig.brandName}</span>
@@ -893,7 +893,7 @@ export default function App() {
       <aside className={`fixed md:relative top-0 bottom-0 left-0 w-72 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-50 transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 ${isSidebarOpen ? 'md:ml-0' : 'md:-ml-72'}`}>
         <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2.5 rounded-2xl shadow-md"><img src="src/assets/Logo_apps.png" alt="Logo" /></div>
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2.5 rounded-2xl shadow-md"><img src="/Logo_apps.png" alt="Logo" /></div>
             <div><span className="font-black text-lg md:text-xl tracking-tight text-yellow-500 leading-none block uppercase">{sysConfig.brandName}<span className="text-xs md:text-sm text-slate-800 block mt-0.5"><br/>Task Management</span></span></div>
           </div>
           <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full" onClick={() => setMobileMenuOpen(false)}><X className="w-5 h-5" /></button>
@@ -1407,7 +1407,7 @@ export default function App() {
                     <Card className="p-0 border-0 shadow-sm bg-white print:shadow-none print:border-none print:w-full overflow-hidden print-page">
                       <div className="p-3 md:p-5 print:p-0 print:pb-2 border-b-2 md:border-b-4 border-indigo-600 bg-white print:border-b-2 print:border-black flex flex-col md:flex-row justify-between items-start md:items-center relative">
                         <div className="flex items-center gap-3 w-full md:w-auto">
-                          <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center text-white print:shadow-none shrink-0 print:rounded-none"><img src="src/assets/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" /></div>
+                          <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center text-white print:shadow-none shrink-0 print:rounded-none"><img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" /></div>
                           <div>
                             <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight print:text-black uppercase print:text-lg leading-tight">{sysConfig.brandName}</h1>
                             <p className="text-[8px] md:text-[10px] font-bold text-slate-500 print:text-black mt-0.5 leading-tight">Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br /> WetanTangerang, Kec. Serpong, Banten 15310</p>
