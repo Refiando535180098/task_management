@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.vkqrbcyowakcnnqhceyi.supabase.co;
-const supabaseKey = import.meta.env.sb_publishable_aeI9Lp8G41z7jikyJ3MOcw_2peTH6w5;
-const supabase = createClient(supabaseUrl, supabaseKey);
 import { 
   Camera, LayoutDashboard, CheckSquare, Users, Plus, LogOut, Clock, CheckCircle2, AlertCircle,
   Search, Menu, X, ChevronDown, ChevronRight, MessageSquare, Paperclip, Send, FileText,
@@ -11,6 +7,10 @@ import {
   ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter
 } from 'lucide-react';
 
+// --- KUNCI SUPABASE LANGSUNG DIMASUKKAN KE SINI ---
+const supabaseUrl = 'https://vkqrbcyowakcnnqhceyi.supabase.co';
+const supabaseKey = 'sb_publishable_aeI9Lp8G41z7jikyJ3MOcw_2peTH6w5';
+const supabase = createClient(supabaseUrl, supabaseKey);
 // ==========================================
 // 2. KOMPONEN UI PENDUKUNG
 // ==========================================
