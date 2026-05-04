@@ -280,30 +280,42 @@ export default function App() {
   // --- LOGIKA UPDATE STATUS (SISI STAFF) ---
   const handleStatusUpdate = async (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
-    const assignees = getAssigneesArray(task?.assignedTo);
+    if (!task) return;
+
+    const assignees = getAssigneesArray(task.assignedTo);
     
-    // Cek apakah ini tugas mandiri (dibuat sendiri untuk diri sendiri)
-    const isSelfTask = assignees.length === 1 && assignees[0] === currentUser.id && task?.assignedBy === currentUser.id;
+    // Deteksi Tugas Mandiri: Saya yang buat, saya yang ngerjain sendirian
+    const isSelfTask = assignees.length === 1 && 
+                       Number(assignees[0]) === Number(currentUser.id) && 
+                       Number(task.assignedBy) === Number(currentUser.id);
 
     let statusToSave = newStatus;
     
-    // Jika staff mengubah ke 'done' tapi BUKAN tugas mandiri, lempar ke approval
+    // Jika STAFF klik 'done' tapi ini BUKAN tugas mandiri -> masuk ke approval
     if (newStatus === 'done' && currentUser.role === 'staff' && !isSelfTask) {
       statusToSave = 'waiting-approval';
-      alert("Tugas dikirim untuk menunggu persetujuan pemberi tugas.");
+      alert("Tugas dikirim untuk menunggu persetujuan.");
     }
 
     try {
+      const updatePayload = { status: statusToSave };
+      
+      // Jika statusnya 'done' (karena mandiri atau diubah admin), isi tanggal selesai
+      if (statusToSave === 'done') {
+        updatePayload.completed_at = new Date().toISOString().split('T')[0];
+      }
+
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ 
-          status: statusToSave,
-          // Jika tugas mandiri langsung done, isi completed_at
-          completed_at: statusToSave === 'done' ? new Date().toISOString().split('T')[0] : null 
-        })
+        .update(updatePayload)
         .eq('id', taskId);
       
-      if (!error) loadTasksFromDB();
+      if (!error) {
+        loadTasksFromDB();
+      } else {
+        console.error("Gagal Update:", error.message);
+        alert("Error 400: Pastikan kolom 'completed_at' sudah ada di database!");
+      }
     } catch (error) {
       console.error(error);
     }
@@ -312,23 +324,25 @@ export default function App() {
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
-    const completedAt = isApproved ? new Date().toISOString().split('T')[0] : null;
+    const today = new Date().toISOString().split('T')[0];
 
     try {
       const { error } = await supabase
         .from('initial_tasks')
         .update({ 
           status: finalStatus,
-          completed_at: completedAt
+          completed_at: isApproved ? today : null
         })
         .eq('id', taskId);
       
       if (!error) {
-        alert(isApproved ? "Tugas berhasil di-approve!" : "Tugas dikembalikan ke staff.");
+        alert(isApproved ? "Berhasil di-approve!" : "Tugas dikembalikan untuk direvisi.");
         loadTasksFromDB();
+      } else {
+        alert("Gagal memproses: " + error.message);
       }
     } catch (error) {
-      alert("Gagal memproses approval.");
+      alert("Koneksi bermasalah.");
     }
   };
 
