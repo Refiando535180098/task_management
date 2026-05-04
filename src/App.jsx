@@ -279,9 +279,16 @@ export default function App() {
 
   // --- LOGIKA UPDATE STATUS (SISI STAFF) ---
   const handleStatusUpdate = async (taskId, newStatus) => {
-    // Jika staff mencoba menyelesaikan, arahkan ke 'waiting-approval'
+    const task = tasks.find(t => t.id === taskId);
+    const assignees = getAssigneesArray(task?.assignedTo);
+    
+    // Cek apakah ini tugas mandiri (dibuat sendiri untuk diri sendiri)
+    const isSelfTask = assignees.length === 1 && assignees[0] === currentUser.id && task?.assignedBy === currentUser.id;
+
     let statusToSave = newStatus;
-    if (newStatus === 'done' && currentUser.role === 'staff') {
+    
+    // Jika staff mengubah ke 'done' tapi BUKAN tugas mandiri, lempar ke approval
+    if (newStatus === 'done' && currentUser.role === 'staff' && !isSelfTask) {
       statusToSave = 'waiting-approval';
       alert("Tugas dikirim untuk menunggu persetujuan pemberi tugas.");
     }
@@ -289,18 +296,20 @@ export default function App() {
     try {
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ status: statusToSave })
+        .update({ 
+          status: statusToSave,
+          // Jika tugas mandiri langsung done, isi completed_at
+          completed_at: statusToSave === 'done' ? new Date().toISOString().split('T')[0] : null 
+        })
         .eq('id', taskId);
       
-      if (!error) {
-        loadTasksFromDB();
-      }
+      if (!error) loadTasksFromDB();
     } catch (error) {
       console.error(error);
     }
   };
 
-  // --- LOGIKA APPROVAL (SISI MANAGER/ADMIN) ---
+  // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
     const completedAt = isApproved ? new Date().toISOString().split('T')[0] : null;
@@ -310,7 +319,7 @@ export default function App() {
         .from('initial_tasks')
         .update({ 
           status: finalStatus,
-          completed_at: completedAt // Pastikan field ini ada di DB (Opsional)
+          completed_at: completedAt
         })
         .eq('id', taskId);
       
@@ -1375,15 +1384,15 @@ export default function App() {
                         {/* BAGIAN APPROVAL & UPDATE STATUS */}
                         <div className="flex flex-col gap-2 min-w-[180px] lg:border-l border-slate-100 lg:pl-6 justify-center">
                           
-                          {/* JIKA STATUS WAITING APPROVAL & USER ADALAH PEMBERI TUGAS */}
-                          {task.status === 'waiting-approval' && isIRequestedThis ? (
+                          {/* TOMBOL APPROVE MUNCUL JIKA: Status Waiting & (Saya Pemberi Tugas ATAU Saya Admin) */}
+                          {task.status === 'waiting-approval' && (task.assignedBy === currentUser.id || currentUser.role === 'admin') ? (
                             <div className="flex flex-col gap-2">
                               <p className="text-[10px] font-black text-orange-600 uppercase text-center">Butuh Persetujuan Anda</p>
                               <button 
                                 onClick={() => handleApproveTask(task.id, true)}
                                 className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-sm"
                               >
-                                <Check className="w-4 h-4"/> Approve (Selesai)
+                                <Check className="w-4 h-4"/> Approve Selesai
                               </button>
                               <button 
                                 onClick={() => handleApproveTask(task.id, false)}
@@ -1393,7 +1402,6 @@ export default function App() {
                               </button>
                             </div>
                           ) : (
-                            // Dropdown status biasa (Staff hanya bisa ke waiting-approval)
                             <div className="space-y-1">
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block text-center">Status Pekerjaan</span>
                               <select 
