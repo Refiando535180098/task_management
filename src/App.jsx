@@ -1797,7 +1797,7 @@ export default function App() {
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
               <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
                 
-                {/* Panel Kiri: Info Pekerjaan */}
+                {/* PANEL KIRI: INFO TUGAS */}
                 <div className="w-full md:w-1/2 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-[50%] md:h-full">
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
                     <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
@@ -1842,7 +1842,7 @@ export default function App() {
                         </div>
                         
                         <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve Oleh</span>
                           <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-indigo-600' : 'text-slate-400'}`}>
                             <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
                           </span>
@@ -1915,12 +1915,13 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Panel Kanan: Kolom Diskusi & TOMBOL EXIT (Desktop) */}
+                {/* PANEL KANAN: CHAT & TOMBOL EXIT */}
                 <div className="w-full md:w-1/2 flex flex-col bg-slate-100 h-[50%] md:h-full relative border-t md:border-t-0 md:border-l border-slate-200">
                   
-                  {/* Header Chat & Tombol Close (PC) */}
+                  {/* Header Chat & Tombol Exit (Desktop) */}
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
                     <h3 className="font-black text-base md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" /> Kolom Diskusi</h3>
+                    {/* Tombol exit khusus Desktop/PC */}
                     <button type="button" onClick={() => setSelectedTask(null)} className="hidden md:flex text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 p-2 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-5 h-5" /></button>
                   </div>
 
@@ -1941,7 +1942,7 @@ export default function App() {
                   </div>
 
                   {/* Input form untuk Chat */}
-                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-10 shrink-0">
+                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-10 md:pb-safe shrink-0">
                     <form onSubmit={handleAddComment} className="flex gap-2 items-center pb-2 md:pb-0">
                       <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik pesan..." className="flex-1 px-3 py-2.5 md:px-4 md:py-3.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 text-xs md:text-sm bg-slate-50 focus:bg-white font-bold transition-colors" />
                       <button type="submit" disabled={!newComment.trim()} className="bg-indigo-600 text-white p-2.5 md:p-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transform hover:-translate-y-0.5 shadow-sm shrink-0 transition-transform"><Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" /></button>
