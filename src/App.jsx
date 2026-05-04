@@ -1818,8 +1818,8 @@ export default function App() {
                     
                     <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
                     
-                    {/* RIWAYAT TANGGAL & APPROVAL (BARU) */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    {/* RIWAYAT TANGGAL (BARU) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                       <div className="flex flex-col">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -1827,25 +1827,16 @@ export default function App() {
                           {selectedTask.created_at ? selectedTask.created_at.split('T')[0] : '-'}
                         </span>
                       </div>
-                      
-                      <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                      <div className="flex flex-col border-y sm:border-y-0 sm:border-x border-slate-100 py-2 sm:py-0 sm:px-3">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
                         <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
                           <Clock className="w-3.5 h-3.5"/> {selectedTask.dueDate}
                         </span>
                       </div>
-                      
-                      <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                      <div className="flex flex-col sm:pl-3">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status Final</span>
                         <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve Oleh</span>
-                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-indigo-600' : 'text-slate-400'}`}>
-                          <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.status === 'done' ? 'Telah Selesai' : 'Belum Selesai'}
                         </span>
                       </div>
                     </div>
