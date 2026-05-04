@@ -284,7 +284,7 @@ export default function App() {
 
     const assignees = getAssigneesArray(task.assignedTo);
     
-    // PERBAIKAN: Gunakan String() untuk menyamakan tipe data Angka dan Teks
+    // Deteksi Tugas Mandiri: Saya yang buat, saya yang ngerjain sendirian
     const isSelfTask = assignees.length === 1 && 
                        String(assignees[0]) === String(currentUser.id) && 
                        String(task.assignedBy) === String(currentUser.id);
@@ -298,15 +298,23 @@ export default function App() {
     }
 
     try {
+      const updatePayload = { status: statusToSave };
+      
+      // Jika tugas Selesai (karena mandiri atau diubah admin), catat tanggal & siapa yang selesaikan
+      if (statusToSave === 'done') {
+        updatePayload.completed_at = new Date().toISOString().split('T')[0];
+        updatePayload.approved_by = currentUser.id; // Catat siapa yang klik selesai
+      }
+
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ status: statusToSave })
+        .update(updatePayload)
         .eq('id', taskId);
       
       if (!error) {
         loadTasksFromDB();
       } else {
-        alert("Gagal mengupdate status: " + error.message);
+        alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
       }
     } catch (error) {
       console.error(error);
@@ -316,19 +324,26 @@ export default function App() {
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
+    const today = new Date().toISOString().split('T')[0];
 
     try {
-      // HAPUS completed_at DARI SINI UNTUK MENCEGAH ERROR 400
+      const updatePayload = { 
+        status: finalStatus,
+        completed_at: isApproved ? today : null,
+        approved_by: isApproved ? currentUser.id : null // Catat ID si pemberi approval
+      };
+
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ status: finalStatus })
+        .update(updatePayload)
         .eq('id', taskId);
       
       if (!error) {
         alert(isApproved ? "Berhasil di-approve!" : "Tugas dikembalikan untuk direvisi.");
         loadTasksFromDB();
+        // Update tampilan modal seketika
         if (selectedTask && selectedTask.id === taskId) {
-          setSelectedTask({ ...selectedTask, status: finalStatus });
+          setSelectedTask({ ...selectedTask, ...updatePayload });
         }
       } else {
         alert("Gagal memproses: " + error.message);
@@ -1803,8 +1818,8 @@ export default function App() {
                     
                     <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
                     
-                    {/* RIWAYAT TANGGAL (BARU) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    {/* RIWAYAT TANGGAL & APPROVAL (BARU) */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                       <div className="flex flex-col">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -1812,16 +1827,25 @@ export default function App() {
                           {selectedTask.created_at ? selectedTask.created_at.split('T')[0] : '-'}
                         </span>
                       </div>
-                      <div className="flex flex-col border-y sm:border-y-0 sm:border-x border-slate-100 py-2 sm:py-0 sm:px-3">
+                      
+                      <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
                         <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
                           <Clock className="w-3.5 h-3.5"/> {selectedTask.dueDate}
                         </span>
                       </div>
-                      <div className="flex flex-col sm:pl-3">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status Final</span>
+                      
+                      <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
                         <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.status === 'done' ? 'Telah Selesai' : 'Belum Selesai'}
+                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve Oleh</span>
+                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-indigo-600' : 'text-slate-400'}`}>
+                          <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
                         </span>
                       </div>
                     </div>
