@@ -1778,7 +1778,6 @@ export default function App() {
             </div>
           )}
 
-          {/* === MODAL 1: DETAIL TUGAS === */}
           {/* === MODAL 1: DETAIL TUGAS & APPROVAL === */}
           {selectedTask && activeTab !== 'chat' && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
@@ -1821,9 +1820,9 @@ export default function App() {
                         </span>
                       </div>
                       <div className="flex flex-col sm:pl-3">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Selesai Approved</span>
-                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || 'Belum Selesai'}
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status Final</span>
+                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.status === 'done' ? 'Telah Selesai' : 'Belum Selesai'}
                         </span>
                       </div>
                     </div>
