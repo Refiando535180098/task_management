@@ -298,23 +298,16 @@ export default function App() {
     }
 
     try {
-      const updatePayload = { status: statusToSave };
-      
-      // Jika statusnya 'done' (karena mandiri atau diubah admin), isi tanggal selesai
-      if (statusToSave === 'done') {
-        updatePayload.completed_at = new Date().toISOString().split('T')[0];
-      }
-
+      // HAPUS completed_at DARI SINI UNTUK MENCEGAH ERROR 400
       const { error } = await supabase
         .from('initial_tasks')
-        .update(updatePayload)
+        .update({ status: statusToSave })
         .eq('id', taskId);
       
       if (!error) {
         loadTasksFromDB();
       } else {
-        console.error("Gagal Update:", error.message);
-        alert("Error 400: Pastikan kolom 'completed_at' sudah ada di database!");
+        alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
       }
     } catch (error) {
       console.error(error);
@@ -324,20 +317,20 @@ export default function App() {
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
-    const today = new Date().toISOString().split('T')[0];
 
     try {
+      // HAPUS completed_at DARI SINI UNTUK MENCEGAH ERROR 400
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ 
-          status: finalStatus,
-          completed_at: isApproved ? today : null
-        })
+        .update({ status: finalStatus })
         .eq('id', taskId);
       
       if (!error) {
         alert(isApproved ? "Berhasil di-approve!" : "Tugas dikembalikan untuk direvisi.");
         loadTasksFromDB();
+        if (selectedTask && selectedTask.id === taskId) {
+          setSelectedTask({ ...selectedTask, status: finalStatus });
+        }
       } else {
         alert("Gagal memproses: " + error.message);
       }
