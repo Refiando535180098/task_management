@@ -1794,120 +1794,164 @@ export default function App() {
 
           {/* === MODAL 1: DETAIL TUGAS & APPROVAL === */}
           {selectedTask && activeTab !== 'chat' && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
-            <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
-              
-              {/* Panel Kiri: Info Utama & Riwayat Tanggal */}
-              <div className="w-full md:w-1/2 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-[50%] md:h-full">
-                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
-                  <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
-                  <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shadow-sm"><X className="w-4 h-4" /></button>
-                </div>
-
-                <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30">
-                  {/* Header Status & Badge */}
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-4">
-                      {/* Logika Deteksi Terlambat */}
-                      {selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' && (
-                        <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
-                      )}
-                      <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
-                      <Badge type={selectedTask.priority}>PRIORITAS {selectedTask.priority.toUpperCase()}</Badge>
-                    </div>
-                    
-                    <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
-                    
-                    {/* RIWAYAT TANGGAL (BARU) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                      <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
-                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-indigo-500"/> 
-                          {selectedTask.created_at ? selectedTask.created_at.split('T')[0] : '-'}
-                        </span>
-                      </div>
-                      <div className="flex flex-col border-y sm:border-y-0 sm:border-x border-slate-100 py-2 sm:py-0 sm:px-3">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
-                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
-                          <Clock className="w-3.5 h-3.5"/> {selectedTask.dueDate}
-                        </span>
-                      </div>
-                      <div className="flex flex-col sm:pl-3">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status Final</span>
-                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.status === 'done' ? 'Telah Selesai' : 'Belum Selesai'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Deskripsi Instruksi */}
-                    <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
-                      <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">Instruksi Detail:</span>
-                      {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
-                    </div>
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
+              <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
+                
+                {/* Panel Kiri: Info Pekerjaan */}
+                <div className="w-full md:w-1/2 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-[50%] md:h-full">
+                  <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                    <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
+                    {/* Tombol exit khusus Mobile/HP */}
+                    <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shadow-sm"><X className="w-4 h-4" /></button>
                   </div>
 
-                  {/* AREA APPROVAL (BARU: Hanya muncul di detail jika butuh approval) */}
-                  {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
-                    <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
-                      <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button 
-                          onClick={() => handleApproveTask(selectedTask.id, true)}
-                          className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md"
-                        >
-                          <Check className="w-4 h-4"/> Approve Selesai
-                        </button>
-                        <button 
-                          onClick={() => handleApproveTask(selectedTask.id, false)}
-                          className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm"
-                        >
-                          <X className="w-4 h-4"/> Tolak & Revisi
-                        </button>
+                  <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        {selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' && (
+                          <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
+                        )}
+                        <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
+                        <Badge type={selectedTask.priority}>PRIORITAS {selectedTask.priority.toUpperCase()}</Badge>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Lampiran Bukti */}
-                  <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
-                      <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
-                        <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
-                      </h4>
-                      <div className="flex gap-2">
-                        <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} className="hidden" />
-                        <label htmlFor="upload-bukti" className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-3 py-2 rounded-xl cursor-pointer hover:bg-indigo-100 border border-indigo-200">
-                          + Upload
-                        </label>
-                      </div>
-                    </div>
-                    {/* List Lampiran (Looping data attachment Anda) */}
-                    <div className="space-y-2">
-                      {(selectedTask.attachments || []).map(file => (
-                        <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50">
-                          <div className="flex items-center gap-3 overflow-hidden">
-                              <div className="p-2 bg-white rounded-lg border border-slate-200"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
-                              <span className="text-xs font-bold text-slate-700 truncate">{file.name}</span>
-                          </div>
-                          <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5"><Download className="w-4 h-4"/></button>
+                      
+                      <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
+                      
+                      {/* RIWAYAT TANGGAL & APPROVAL */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-500"/> 
+                            {selectedTask.created_at ? selectedTask.created_at.split('T')[0] : '-'}
+                          </span>
                         </div>
-                      ))}
-                      {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
-                        <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
-                      )}
+                        
+                        <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                            <Clock className="w-3.5 h-3.5"/> {selectedTask.dueDate}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
+                        <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">Instruksi Detail:</span>
+                        {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
+                      </div>
+                    </div>
+
+                    {/* AREA APPROVAL KHUSUS PEMBERI TUGAS / ADMIN */}
+                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
+                      <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
+                        <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button 
+                            onClick={() => handleApproveTask(selectedTask.id, true)}
+                            className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md"
+                          >
+                            <Check className="w-4 h-4"/> Approve Selesai
+                          </button>
+                          <button 
+                            onClick={() => handleApproveTask(selectedTask.id, false)}
+                            className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm"
+                          >
+                            <X className="w-4 h-4"/> Tolak & Revisi
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* LAMPIRAN BUKTI */}
+                    <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                        <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
+                          <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
+                        </h4>
+                        <div className="flex gap-2">
+                          <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} className="hidden" />
+                          <label htmlFor="upload-bukti" className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-3 py-2 rounded-xl cursor-pointer hover:bg-indigo-100 border border-indigo-200 transition-colors shadow-sm">
+                            + Tambah File
+                          </label>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {(selectedTask.attachments || []).map(file => (
+                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
+                             <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
+                                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-700 truncate block hover:text-indigo-600">{file.name}</span>
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
+                                </div>
+                             </div>
+                             <div className="flex gap-2">
+                               <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
+                               {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
+                                 <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                               )}
+                             </div>
+                          </div>
+                        ))}
+                        {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
+                          <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Panel Kanan: Kolom Diskusi (Tetap sama) */}
-              <div className="w-full md:w-1/2 flex flex-col bg-slate-100 h-[50%] md:h-full relative border-t md:border-t-0 md:border-l border-slate-200">
-                {/* ... (Konten Chat Tetap Sama) ... */}
+                {/* Panel Kanan: Kolom Diskusi & TOMBOL EXIT (Desktop) */}
+                <div className="w-full md:w-1/2 flex flex-col bg-slate-100 h-[50%] md:h-full relative border-t md:border-t-0 md:border-l border-slate-200">
+                  
+                  {/* Header Chat & Tombol Close (PC) */}
+                  <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                    <h3 className="font-black text-base md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" /> Kolom Diskusi</h3>
+                    <button type="button" onClick={() => setSelectedTask(null)} className="hidden md:flex text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 p-2 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-5 h-5" /></button>
+                  </div>
+
+                  {/* Isi Chat */}
+                  <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-4 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-95">
+                    {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
+                      const isMe = String(chat?.userId) === String(currentUser?.id);
+                      return (
+                        <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                          <div className={`p-3 md:p-4 rounded-2xl shadow-sm max-w-[85%] ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'}`}>
+                            <p className="text-[11px] md:text-sm font-medium leading-relaxed">{chat?.text || ''}</p>
+                          </div>
+                          <span className="text-[8px] md:text-[10px] font-black tracking-widest text-slate-400 mt-1 px-1 uppercase">{isMe ? 'Anda' : getUserName(chat?.userId)} • {chat?.timestamp || ''}</span>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Input form untuk Chat */}
+                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-10 shrink-0">
+                    <form onSubmit={handleAddComment} className="flex gap-2 items-center pb-2 md:pb-0">
+                      <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik pesan..." className="flex-1 px-3 py-2.5 md:px-4 md:py-3.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 text-xs md:text-sm bg-slate-50 focus:bg-white font-bold transition-colors" />
+                      <button type="submit" disabled={!newComment.trim()} className="bg-indigo-600 text-white p-2.5 md:p-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transform hover:-translate-y-0.5 shadow-sm shrink-0 transition-transform"><Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" /></button>
+                    </form>
+                  </div>
+                </div>
+
               </div>
             </div>
-          </div>
-        )}
+          )}
 
           {/* === MODAL 2: TUGAS BARU === */}
           {isModalOpen && (
