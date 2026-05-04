@@ -27,8 +27,9 @@ const Badge = ({ children, type }) => {
     low: 'bg-blue-50 text-blue-600 border-blue-200',
     pending: 'bg-slate-100 text-slate-600 border-slate-200',
     'in-progress': 'bg-indigo-50 text-indigo-600 border-indigo-200',
+    'waiting-approval': 'bg-orange-100 text-orange-700 border-orange-300 animate-pulse', // Animasi berkedip
     done: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    mandiri: 'bg-purple-50 text-purple-600 border-purple-200',
+    overdue: 'bg-red-600 text-white border-red-700 font-bold', // Merah pekat
     admin: 'bg-slate-800 text-white border-slate-900',
   };
   return (
@@ -276,28 +277,49 @@ export default function App() {
     }
   };
 
+  // --- LOGIKA UPDATE STATUS (SISI STAFF) ---
   const handleStatusUpdate = async (taskId, newStatus) => {
-    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
-    setTasks(updatedTasks);
-    if (selectedTask && selectedTask.id === taskId) {
-      setSelectedTask({...selectedTask, status: newStatus});
-    }
-
-    if (newStatus === 'done') {
-      setNotifications(prev => prev.filter(n => n.taskId !== taskId));
+    // Jika staff mencoba menyelesaikan, arahkan ke 'waiting-approval'
+    let statusToSave = newStatus;
+    if (newStatus === 'done' && currentUser.role === 'staff') {
+      statusToSave = 'waiting-approval';
+      alert("Tugas dikirim untuk menunggu persetujuan pemberi tugas.");
     }
 
     try {
       const { error } = await supabase
         .from('initial_tasks')
-        .update({ status: newStatus })
+        .update({ status: statusToSave })
         .eq('id', taskId);
       
-      if (error) {
-        alert("Gagal mengupdate database: " + error.message);
+      if (!error) {
+        loadTasksFromDB();
       }
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  // --- LOGIKA APPROVAL (SISI MANAGER/ADMIN) ---
+  const handleApproveTask = async (taskId, isApproved) => {
+    const finalStatus = isApproved ? 'done' : 'in-progress';
+    const completedAt = isApproved ? new Date().toISOString().split('T')[0] : null;
+
+    try {
+      const { error } = await supabase
+        .from('initial_tasks')
+        .update({ 
+          status: finalStatus,
+          completed_at: completedAt // Pastikan field ini ada di DB (Opsional)
+        })
+        .eq('id', taskId);
+      
+      if (!error) {
+        alert(isApproved ? "Tugas berhasil di-approve!" : "Tugas dikembalikan ke staff.");
+        loadTasksFromDB();
+      }
+    } catch (error) {
+      alert("Gagal memproses approval.");
     }
   };
 
@@ -1285,64 +1307,119 @@ export default function App() {
                  </div>
                </Card>
 
-               <div className="grid grid-cols-1 gap-3 md:gap-3 max-h-[calc(100vh-240px)] overflow-y-auto custom-scrollbar pr-1 md:pr-2 pb-24 md:pb-10">
-                  {myTasks.filter(t => {
-                   if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
-                   if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
-                   if (taskFilterDate && t.dueDate !== taskFilterDate) return false;
-                   return true;
+               <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-240px)] overflow-y-auto custom-scrollbar pr-1 pb-24">
+                {myTasks.filter(t => {
+                  if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
+                  if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
+                  if (taskFilterDate && t.dueDate !== taskFilterDate) return false;
+                  return true;
                 }).map(task => {
                   const assigneesArr = getAssigneesArray(task.assignedTo);
-                  const isMandiri = assigneesArr.length === 1 && assigneesArr[0] === task.assignedBy;
                   
+                  // LOGIKA DETEKSI OVERDUE
+                  const today = new Date().toISOString().split('T')[0];
+                  const isOverdue = task.dueDate < today && task.status !== 'done';
+                  
+                  // LOGIKA APAKAH USER SEKARANG ADALAH PEMBERI TUGAS
+                  const isIRequestedThis = task.assignedBy === currentUser.id || currentUser.role === 'admin';
+
                   return (
-                  <Card key={task.id} className="p-3 md:p-4 hover:shadow-md transition-all duration-300 border border-slate-200/60 relative overflow-hidden group bg-white">
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors ${task.status === 'done' ? 'bg-emerald-500' : task.status === 'in-progress' ? 'bg-indigo-500' : 'bg-slate-300'}`}></div>
-                    <div className="flex flex-col md:flex-row justify-between gap-3 md:gap-4 pl-2 md:pl-3">
-                      <div className="flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
-                        <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-2 md:mb-3">
-                          <Badge type={task.status}>{task.status}</Badge>
-                          <Badge type={task.priority}>PRIO: {task.priority}</Badge>
-                          {isMandiri && <Badge type="mandiri">MANDIRI</Badge>}
-                        </div>
-                        <h3 className="font-black text-base md:text-lg text-slate-800 group-hover:text-indigo-600 transition-colors mb-1 tracking-tight line-clamp-1">{task.title}</h3>
-                        <p className="text-slate-500 text-[11px] md:text-xs mb-2 md:mb-3 line-clamp-1 leading-relaxed font-medium">{task.description}</p>
-                        
-                        <div className="flex flex-wrap items-center gap-2 md:gap-3 text-[10px] md:text-xs font-bold text-slate-500">
-                          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 px-2 py-1 md:px-3 md:py-1.5 rounded-lg shadow-sm">
-                            <Users className="w-3 h-3 md:w-4 h-4 text-slate-400" />
-                            <div className="flex -space-x-1.5 md:-space-x-2 ml-1">
-                              {assigneesArr.map(id => <div key={id} title={getUserName(id)} className="w-5 h-5 md:w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-[8px] md:text-[10px] border border-white">{getAvatar(id)}</div>)}
+                    <Card key={task.id} className="p-4 hover:shadow-md transition-all border border-slate-200 relative overflow-hidden bg-white">
+                      {/* Garis Status di Samping */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-2 ${isOverdue ? 'bg-red-600' : task.status === 'done' ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
+
+                      <div className="flex flex-col lg:flex-row justify-between gap-4 pl-3">
+                        <div className="flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {isOverdue && <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>}
+                            <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
+                            <Badge type={task.priority}>PRIO: {task.priority}</Badge>
+                          </div>
+
+                          <h3 className="font-black text-lg text-slate-800 mb-1">{task.title}</h3>
+                          
+                          {/* TANGGAL-TANGGAL PENTING */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Diberikan</span>
+                              <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                <Calendar className="w-3 h-3"/> {task.created_at ? task.created_at.split('T')[0] : '-'}
+                              </span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Deadline</span>
+                              <span className={`text-xs font-bold flex items-center gap-1 ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>
+                                <Clock className="w-3 h-3"/> {task.dueDate}
+                              </span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[8px] font-black text-slate-400 uppercase">Selesai (Approved)</span>
+                              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3"/> {task.completed_at || '-'}
+                              </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-1 md:px-3 md:py-1.5 rounded-lg shadow-sm">
-                            <span className="font-black">Dari:</span> {getUserName(task.assignedBy)}
+
+                          <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-400">Oleh:</span>
+                              <span className="text-indigo-600">{getUserName(task.assignedBy)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-400">Penerima:</span>
+                              <span className="text-slate-700">{getAssigneesNames(task.assignedTo)}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 px-2 py-1 md:px-3 md:py-1.5 rounded-lg shadow-sm"><Clock className="w-3 h-3 md:w-4 h-4 text-slate-400" /> {task.dueDate}</div>
-                          {task.comments?.length > 0 && <div className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-indigo-100 shadow-sm"><MessageSquare className="w-3 h-3 md:w-4 h-4" /> {task.comments.length}</div>}
-                          {task.attachments?.length > 0 && <div className="flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-blue-100 shadow-sm"><Paperclip className="w-3 h-3 md:w-4 h-4" /> {task.attachments.length}</div>}
+                        </div>
+
+                        {/* BAGIAN APPROVAL & UPDATE STATUS */}
+                        <div className="flex flex-col gap-2 min-w-[180px] lg:border-l border-slate-100 lg:pl-6 justify-center">
+                          
+                          {/* JIKA STATUS WAITING APPROVAL & USER ADALAH PEMBERI TUGAS */}
+                          {task.status === 'waiting-approval' && isIRequestedThis ? (
+                            <div className="flex flex-col gap-2">
+                              <p className="text-[10px] font-black text-orange-600 uppercase text-center">Butuh Persetujuan Anda</p>
+                              <button 
+                                onClick={() => handleApproveTask(task.id, true)}
+                                className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-sm"
+                              >
+                                <Check className="w-4 h-4"/> Approve (Selesai)
+                              </button>
+                              <button 
+                                onClick={() => handleApproveTask(task.id, false)}
+                                className="w-full py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-100"
+                              >
+                                <X className="w-4 h-4"/> Tolak (Revisi)
+                              </button>
+                            </div>
+                          ) : (
+                            // Dropdown status biasa (Staff hanya bisa ke waiting-approval)
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block text-center">Status Pekerjaan</span>
+                              <select 
+                                value={task.status}
+                                onChange={(e) => handleStatusUpdate(task.id, e.target.value)}
+                                disabled={task.status === 'done'}
+                                className={`w-full py-2 px-3 rounded-xl text-xs font-black border-2 focus:outline-none transition-all shadow-sm appearance-none cursor-pointer
+                                  ${task.status === 'done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                    task.status === 'waiting-approval' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                    'bg-white text-slate-700 border-slate-200'}`}
+                              >
+                                <option value="pending">PENDING</option>
+                                <option value="in-progress">IN PROGRESS</option>
+                                <option value="done">SELESAI</option>
+                                {task.status === 'waiting-approval' && <option value="waiting-approval">WAITING APPROVAL</option>}
+                              </select>
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                      <div className="flex flex-col md:items-center justify-center gap-2 min-w-0 md:min-w-[150px] pt-3 md:pt-0 border-t md:border-t-0 md:border-l border-slate-100 md:pl-6 shrink-0">
-                         <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest text-left md:text-center hidden md:block">Update Status</span>
-                         <select 
-                            value={task.status}
-                            onChange={(e) => handleStatusUpdate(task.id, e.target.value)}
-                            disabled={currentUser.role === 'admin' || currentUser.role === 'direksi'}
-                            className={`w-full py-2 px-3 md:py-3 md:px-4 rounded-xl text-xs md:text-sm font-black border-2 focus:ring-4 focus:outline-none text-left md:text-center transition-all shadow-sm appearance-none
-                              ${currentUser.role === 'admin' || currentUser.role === 'direksi' ? 'cursor-not-allowed opacity-80 ' : 'cursor-pointer '}
-                              ${task.status === 'done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : task.status === 'in-progress' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-700 border-slate-200'}`
-                            }>
-                            <option value="pending">PENDING</option><option value="in-progress">IN PROGRESS</option><option value="done">SELESAI</option>
-                          </select>
-                      </div>
-                    </div>
-                  </Card>
-                )})}
-               </div>
-            </div>
-          )}
+                    </Card>
+                  )
+                })}
+              </div>
+          </div>
+        )}
 
           {/* TAB: LAPORAN */}
           {activeTab === 'laporan' && (
