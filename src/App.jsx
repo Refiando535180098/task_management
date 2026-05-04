@@ -284,10 +284,10 @@ export default function App() {
 
     const assignees = getAssigneesArray(task.assignedTo);
     
-    // Deteksi Tugas Mandiri: Saya yang buat, saya yang ngerjain sendirian
+    // PERBAIKAN: Gunakan String() untuk menyamakan tipe data Angka dan Teks
     const isSelfTask = assignees.length === 1 && 
-                       Number(assignees[0]) === Number(currentUser.id) && 
-                       Number(task.assignedBy) === Number(currentUser.id);
+                       String(assignees[0]) === String(currentUser.id) && 
+                       String(task.assignedBy) === String(currentUser.id);
 
     let statusToSave = newStatus;
     
@@ -298,7 +298,6 @@ export default function App() {
     }
 
     try {
-      // HAPUS completed_at DARI SINI UNTUK MENCEGAH ERROR 400
       const { error } = await supabase
         .from('initial_tasks')
         .update({ status: statusToSave })
@@ -307,7 +306,7 @@ export default function App() {
       if (!error) {
         loadTasksFromDB();
       } else {
-        alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
+        alert("Gagal mengupdate status: " + error.message);
       }
     } catch (error) {
       console.error(error);
@@ -1336,10 +1335,10 @@ export default function App() {
                   const today = new Date().toISOString().split('T')[0];
                   const isOverdue = task.dueDate < today && task.status !== 'done';
                   
-                  // LOGIKA APAKAH USER SEKARANG ADALAH PEMBERI TUGAS
-                  const isIRequestedThis = task.assignedBy === currentUser.id || currentUser.role === 'admin';
+                  // PERBAIKAN: Gunakan String() agar tidak ada bentrok tipe data
+                  const isIRequestedThis = String(task.assignedBy) === String(currentUser.id) || currentUser.role === 'admin';
 
-                  return (
+                  return (  
                     <Card key={task.id} className="p-4 hover:shadow-md transition-all border border-slate-200 relative overflow-hidden bg-white">
                       {/* Garis Status di Samping */}
                       <div className={`absolute left-0 top-0 bottom-0 w-2 ${isOverdue ? 'bg-red-600' : task.status === 'done' ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
@@ -1835,7 +1834,7 @@ export default function App() {
                   </div>
 
                   {/* AREA APPROVAL (BARU: Hanya muncul di detail jika butuh approval) */}
-                  {(selectedTask.assignedBy === currentUser.id || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
+                  {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
                     <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                       <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
                       <div className="grid grid-cols-2 gap-3">
