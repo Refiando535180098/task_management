@@ -1560,25 +1560,54 @@ export default function App() {
                       <div className="px-3 md:px-5 print:px-0 pb-4 md:pb-6 bg-white">
                         <h3 className="text-xs md:text-sm font-black text-slate-800 mb-2 print:text-black flex items-center gap-2 print:text-xs"><FileText className="w-3.5 h-3.5 print:w-3 print:h-3"/> Rincian Aktivitas Pekerjaan</h3>
                         <div className="overflow-x-auto print:overflow-visible w-full custom-scrollbar">
-                          <table className="w-full text-left border-collapse border border-slate-200 print:border-black min-w-[400px]">
+                          <table className="w-full text-left border-collapse border border-slate-200 print:border-black min-w-[650px]">
                             <thead>
                               <tr className="bg-slate-50 print:bg-gray-100 text-slate-800 print:text-black text-[8px] md:text-[9px] uppercase tracking-widest font-black border-b border-slate-200 print:border-black print:text-[8px]">
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black w-6 text-center print:p-1">No</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Deskripsi Tugas & Pekerjaan</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Dikerjakan Oleh</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black text-center print:p-1 w-16">Deadline</th>
+                                {/* KOLOM BARU: TIMELINE (TGL DIBUAT + DEADLINE + OVERDUE) */}
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Timeline Pekerjaan</th>
+                                {/* KOLOM BARU: APPROVAL (TGL SELESAI + SIAPA YANG APPROVE) */}
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Data Approval</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-slate-200 print:border-black text-center print:p-1 w-16">Status</th>
                               </tr>
                             </thead>
                             <tbody>
                               {targetTasks.map((task, index) => { 
+                                 // LOGIKA DETEKSI OVERDUE (TERLAMBAT)
+                                 const today = new Date().toISOString().split('T')[0];
+                                 const isOverdue = task.dueDate < today && task.status !== 'done';
+
                                  return (
                                   <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1">{index + 1}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight">{task.title}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold text-indigo-600 border-r border-slate-200 print:border-black print:text-black print:p-1 line-clamp-1">{getAssigneesNames(task.assignedTo)}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center whitespace-nowrap print:p-1">{task.dueDate}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1">
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
+                                    
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight align-top">{task.title}</td>
+                                    
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold text-indigo-600 border-r border-slate-200 print:border-black print:text-black print:p-1 align-top whitespace-nowrap">{getAssigneesNames(task.assignedTo)}</td>
+                                    
+                                    {/* DATA TIMELINE */}
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? task.created_at.split('T')[0] : '-'}</span></span>
+                                        <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
+                                          Deadline: <span className="font-bold">{task.dueDate}</span>
+                                        </span>
+                                        {/* LABEL TERLAMBAT MUNCUL JIKA OVERDUE */}
+                                        {isOverdue && <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded border border-red-200 w-fit font-bold mt-0.5 print:border-none print:p-0 print:text-red-600">TERLAMBAT</span>}
+                                      </div>
+                                    </td>
+
+                                    {/* DATA APPROVAL */}
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at || '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-indigo-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1 align-top">
                                         <span className="print:hidden"><Badge type={task.status}>{String(task.status).toUpperCase()}</Badge></span>
                                         <span className="hidden print:inline">{task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}</span>
                                     </td>
