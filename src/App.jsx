@@ -4,7 +4,7 @@ import {
   Camera, LayoutDashboard, CheckSquare, Users, Plus, LogOut, Clock, CheckCircle2, AlertCircle,
   Search, Menu, X, ChevronDown, ChevronRight, MessageSquare, Paperclip, Send, FileText,
   Image as ImageIcon, BarChart3, Download, Calendar, TrendingUp, Briefcase, Printer,
-  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter, Loader2
+  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter
 } from 'lucide-react';
 
 // --- KUNCI SUPABASE LANGSUNG DIMASUKKAN KE SINI ---
