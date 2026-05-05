@@ -361,6 +361,42 @@ export default function App() {
     }
   };
 
+  // --- FUNGSI HAPUS TUGAS (KHUSUS ADMIN) ---
+  const handleDeleteTask = async (taskId, taskTitle) => {
+    if (currentUser.role !== 'admin') {
+      return alert("Akses ditolak. Hanya Admin yang dapat menghapus tugas.");
+    }
+    
+    // Popup Konfirmasi sebelum menghapus
+    if (!window.confirm(`PERINGATAN: Yakin ingin menghapus tugas "${taskTitle}"?\n\nData tugas, riwayat chat, dan lampiran tidak dapat dikembalikan jika sudah dihapus.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('initial_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (!error) {
+        alert("Tugas berhasil dihapus permanen!");
+        
+        // Hilangkan tugas dari layar secara otomatis tanpa harus refresh halaman
+        setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+        
+        // Tutup modal pop-up secara otomatis jika sedang dibuka
+        if (selectedTask && selectedTask.id === taskId) {
+          setSelectedTask(null);
+        }
+      } else {
+        alert("Gagal menghapus tugas: " + error.message);
+      }
+    } catch (err) {
+      alert("Gagal terhubung ke database saat menghapus tugas.");
+      console.error(err);
+    }
+  };
+
   const loadTasksFromDB = async () => {
     try {
       const { data, error } = await supabase.from('initial_tasks').select('*').order('id', { ascending: false });
@@ -1422,18 +1458,18 @@ export default function App() {
                         <div className="flex flex-col gap-2 min-w-[180px] lg:border-l border-slate-100 lg:pl-6 justify-center">
                           
                           {/* TOMBOL APPROVE MUNCUL JIKA: Status Waiting & (Saya Pemberi Tugas ATAU Saya Admin) */}
-                          {task.status === 'waiting-approval' && (task.assignedBy === currentUser.id || currentUser.role === 'admin') ? (
+                          {task.status === 'waiting-approval' && (String(task.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') ? (
                             <div className="flex flex-col gap-2">
-                              <p className="text-[10px] font-black text-orange-600 uppercase text-center">Butuh Persetujuan Anda</p>
+                              <p className="text-[10px] font-black text-orange-600 uppercase text-center">Butuh Persetujuan</p>
                               <button 
-                                onClick={() => handleApproveTask(task.id, true)}
+                                onClick={(e) => { e.stopPropagation(); handleApproveTask(task.id, true); }}
                                 className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-sm"
                               >
                                 <Check className="w-4 h-4"/> Approve Selesai
                               </button>
                               <button 
-                                onClick={() => handleApproveTask(task.id, false)}
-                                className="w-full py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-100"
+                                onClick={(e) => { e.stopPropagation(); handleApproveTask(task.id, false); }}
+                                className="w-full py-2 bg-white text-red-600 border border-red-200 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm"
                               >
                                 <X className="w-4 h-4"/> Tolak (Revisi)
                               </button>
@@ -1445,6 +1481,7 @@ export default function App() {
                                 value={task.status}
                                 onChange={(e) => handleStatusUpdate(task.id, e.target.value)}
                                 disabled={task.status === 'done'}
+                                onClick={(e) => e.stopPropagation()}
                                 className={`w-full py-2 px-3 rounded-xl text-xs font-black border-2 focus:outline-none transition-all shadow-sm appearance-none cursor-pointer
                                   ${task.status === 'done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
                                     task.status === 'waiting-approval' ? 'bg-orange-50 text-orange-700 border-orange-200' :
@@ -1456,6 +1493,16 @@ export default function App() {
                                 {task.status === 'waiting-approval' && <option value="waiting-approval">WAITING APPROVAL</option>}
                               </select>
                             </div>
+                          )}
+
+                          {/* FITUR BARU: TOMBOL HAPUS TUGAS (KHUSUS ADMIN) */}
+                          {currentUser.role === 'admin' && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, task.title); }}
+                              className="mt-2 w-full py-1.5 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1.5 transition-colors uppercase tracking-widest"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Hapus Tugas
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1845,7 +1892,20 @@ export default function App() {
                 {/* PANEL KIRI: INFO TUGAS */}
                 <div className="w-full md:w-1/2 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-[50%] md:h-full">
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
-                    <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
+                      
+                      {/* FITUR BARU: TOMBOL HAPUS DI DALAM MODAL DETAIL (KHUSUS ADMIN) */}
+                      {currentUser?.role === 'admin' && (
+                        <button 
+                          type="button" 
+                          onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} 
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg border border-red-200 text-[10px] font-black transition-colors shadow-sm"
+                        >
+                          <Trash2 className="w-3 h-3" /> Hapus
+                        </button>
+                      )}
+                    </div>
                     {/* Tombol exit khusus Mobile/HP */}
                     <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shadow-sm"><X className="w-4 h-4" /></button>
                   </div>
