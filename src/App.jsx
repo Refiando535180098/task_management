@@ -4,7 +4,7 @@ import {
   Camera, LayoutDashboard, CheckSquare, Users, Plus, LogOut, Clock, CheckCircle2, AlertCircle,
   Search, Menu, X, ChevronDown, ChevronRight, MessageSquare, Paperclip, Send, FileText,
   Image as ImageIcon, BarChart3, Download, Calendar, TrendingUp, Briefcase, Printer,
-  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter
+  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter, Loader2
 } from 'lucide-react';
 
 // --- KUNCI SUPABASE LANGSUNG DIMASUKKAN KE SINI ---
@@ -594,10 +594,16 @@ export default function App() {
     }
   };
 
+  // --- STATE UNTUK ANIMASI LOADING TUGAS BARU ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- FUNGSI SIMPAN TUGAS ---
   const handleCreateTask = async (e) => {
     e.preventDefault();
     const assignedUserIds = currentUser.role === 'staff' ? [currentUser.id] : newTask.assignedTo;
     if (currentUser.role !== 'staff' && assignedUserIds.length === 0) return alert("Pilih minimal satu anggota atau tim!");
+
+    setIsSubmitting(true); // MULAI ANIMASI LOADING
 
     const taskData = {
       title: newTask.title,
@@ -624,6 +630,8 @@ export default function App() {
     } catch (error) {
       alert("Error gagal terhubung ke server.");
       console.error(error);
+    } finally {
+      setIsSubmitting(false); // MATIKAN ANIMASI LOADING (baik sukses maupun gagal)
     }
   };
 
@@ -2001,8 +2009,16 @@ export default function App() {
                       </div>
                   </div>
                   <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
-                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
-                      <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Pekerjaan</button>
+                      <button type="button" onClick={() => setIsModalOpen(false)} disabled={isSubmitting} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm disabled:opacity-50">Batal</button>
+                      <button type="submit" disabled={isSubmitting} className="px-4 py-2.5 md:px-5 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md flex items-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...
+                          </>
+                        ) : (
+                          'Simpan Pekerjaan'
+                        )}
+                      </button>
                   </div>
                 </form>
               </Card>
