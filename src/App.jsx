@@ -1121,29 +1121,46 @@ export default function App() {
   return (
     <div className="h-screen overflow-hidden bg-slate-50 font-sans text-slate-800 flex flex-col md:flex-row print:bg-white print:block">
       
-      {/* MOBILE HEADER */}
-      <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 p-4 sticky top-0 z-30 print:hidden shadow-sm pt-safe">
-        <div className="flex items-center gap-2.5">
-          <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-1.5 rounded-lg shadow-sm">
-            <img src="/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
-          </div>
-          <div>
-            <span className="font-black text-sm tracking-tight text-slate-900 uppercase leading-none block">{sysConfig.brandName}</span>
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{activeTab === 'dashboard' ? 'Beranda' : activeTab === 'tasks' ? 'Pekerjaan' : activeTab === 'chat' ? 'Pusat Pesan' : 'Sistem'}</span>
-          </div>
-        </div>
-        
-        <div className="flex gap-3 items-center">
-            <button type="button" onClick={() => setIsNotifOpen(!isNotifOpen)} className="text-slate-400 hover:text-indigo-600 relative">
-                <Bell className="w-6 h-6" />
-                {unreadNotifsCount > 0 && <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-white">{unreadNotifsCount}</span>}
-            </button>
+      {/* HEADER MOBILE GLOBAL (LOGO SEBAGAI TOMBOL MENU) */}
+        <div className="md:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-xl border-b border-slate-100 px-4 py-3 flex justify-between items-center shadow-sm print:hidden">
+          
+          {/* TOMBOL BUKA MENU (LOGO PERUSAHAAN) */}
+          <button 
+            type="button" 
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex items-center gap-2.5 active:scale-95 transition-transform text-left"
+          >
+            {/* Ikon Logo */}
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 rounded-xl shadow-sm shrink-0">
+              <img src="/Logo_apps.png" alt="Logo" className="w-4 h-4 object-contain" />
+            </div>
             
-            <button type="button" onClick={() => setMobileMenuOpen(true)} className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-white text-xs shadow-sm border-2 border-white ring-1 ring-slate-200 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-              {currentUser.avatar}
+            {/* Teks Nama Perusahaan */}
+            <div className="flex flex-col overflow-hidden">
+              <span className="font-black text-xs tracking-tight text-yellow-500 uppercase leading-none truncate">
+                {sysConfig.brandName}
+              </span>
+              <span className="text-[8px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
+                Task Management
+              </span>
+            </div>
+          </button>
+          
+          {/* TOMBOL NOTIFIKASI DI KANAN */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button 
+              type="button" 
+              onClick={() => setIsNotifOpen(!isNotifOpen)} 
+              className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadNotifsCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+              )}
             </button>
+          </div>
+          
         </div>
-      </div>
 
       {/* OVERLAY MOBILE SIDEBAR */}
       <div className={`fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
