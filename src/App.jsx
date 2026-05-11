@@ -258,12 +258,12 @@ export default function App() {
     }
   };
 
-  // --- FUNGSI KIRIM CHAT ---
+  // --- FUNGSI KIRIM CHAT & TRIGGER NOTIFIKASI ---
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim() || !selectedTask) return;
+    // Pengaman ekstra jika data belum siap saat di-refresh
+    if (!newComment || !newComment.trim() || !selectedTask || !currentUser) return;
 
-    // 1. Siapkan objek chat baru
     const chatMsg = {
       userId: currentUser.id,
       text: newComment,
@@ -273,7 +273,6 @@ export default function App() {
     const updatedComments = [...(selectedTask.comments || []), chatMsg];
 
     try {
-      // 2. Simpan chat ke dalam database Tugas (Tasks)
       const { error } = await supabase
         .from('tasks')
         .update({ comments: updatedComments })
@@ -281,29 +280,21 @@ export default function App() {
 
       if (error) throw error;
 
-      // 3. Update tampilan layar lokal agar chat langsung muncul
       setSelectedTask({ ...selectedTask, comments: updatedComments });
       setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, comments: updatedComments } : t));
-      setNewComment(''); // Kosongkan kolom input
+      setNewComment('');
 
-      // 4. LOGIKA PENTING: TENTUKAN SIAPA YANG DIKIRIMI NOTIFIKASI
-      // Jika yang nge-chat adalah pembuat tugas (Manager), kirim notif ke penerima tugas (Staff)
-      // Jika yang nge-chat adalah penerima tugas (Staff), kirim notif ke pembuat tugas (Manager)
       let recipientIds = [];
-      
       if (String(currentUser.id) === String(selectedTask.assignedBy)) {
-        // Manager mengirim pesan, cari tahu siapa saja staff yang ditugaskan
         recipientIds = selectedTask.assignedTo.includes(',') 
           ? selectedTask.assignedTo.split(',').map(id => id.trim()) 
           : [selectedTask.assignedTo];
       } else {
-        // Staff membalas pesan, kirim ke Manager/Pembuat tugas
         recipientIds = [selectedTask.assignedBy];
       }
 
-      // 5. KIRIM NOTIFIKASI KE SUPABASE
       const notificationsToInsert = recipientIds
-        .filter(id => String(id) !== String(currentUser.id)) // Jangan kirim notif ke diri sendiri
+        .filter(id => String(id) !== String(currentUser.id))
         .map(recipientId => ({
           userId: recipientId,
           type: 'chat',
@@ -319,7 +310,6 @@ export default function App() {
 
     } catch (error) {
       console.error('Gagal mengirim pesan:', error.message);
-      alert('Pesan gagal dikirim, silakan periksa koneksi Anda.');
     }
   };
 
