@@ -1345,7 +1345,7 @@ export default function App() {
                     </div>
 
                     <div className="p-2 md:p-5 bg-white border-t border-slate-200 pb-20 md:pb-safe shrink-0">
-                      <form onSubmit={handleAddComment} className="flex gap-2 items-center pb-5">
+                      <form onSubmit={handleAddComment} className="flex gap-2 items-center md:pb-safe">
                         <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik balasan diskusi..." className="flex-1 px-3 py-2 md:px-4 md:py-3.5 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-500 text-[10px] md:text-sm bg-slate-50 focus:bg-white font-medium" />
                         <button type="submit" disabled={!newComment.trim()} className="bg-indigo-600 text-white p-2 md:p-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transform hover:-translate-y-0.5 shadow-sm shrink-0"><Send className="w-3.5 h-3.5 md:w-5 md:h-5 ml-0.5" /></button>
                       </form>
