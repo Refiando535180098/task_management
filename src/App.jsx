@@ -1984,57 +1984,62 @@ export default function App() {
                     {/* LAMPIRAN BUKTI */}
                     <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
-                        <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
-                          <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
-                        </h4>
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
-                        <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
-                          <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
-                        </h4>
+                        <div>
+                          <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
+                            <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
+                          </h4>
+                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max 5MB</p>
+                        </div>
+                        
                         <div className="flex gap-2">
+                          {/* 1. TOMBOL UPLOAD FILE/GALERI */}
                           <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
-                          
-                          {/* LOGIKA TOMBOL LOADING */}
-                          <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 cursor-pointer hover:bg-indigo-100 border border-indigo-200'}`}>
+                          <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 cursor-pointer hover:bg-indigo-100 border border-indigo-200'}`}>
                             {isUploading ? (
                               <>
                                 <svg className="w-3.5 h-3.5 animate-spin text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                Mengunggah...
+                                Proses...
                               </>
                             ) : (
-                              <>+ Tambah File</>
+                              <><Plus className="w-3.5 h-3.5"/> Galeri</>
                             )}
                           </label>
 
+                          {/* 2. TOMBOL KAMERA KHUSUS HP (Otomatis buka kamera) */}
+                          <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                          <label htmlFor={isUploading ? "" : "upload-kamera"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-slate-800 text-white cursor-pointer hover:bg-black border border-slate-900'}`}>
+                            <Camera className="w-3.5 h-3.5"/> Kamera
+                          </label>
                         </div>
                       </div>
-                      </div>
+
+                      {/* DAFTAR FILE LAMPIRAN */}
                       <div className="space-y-2">
-                        {(selectedTask.attachments || []).map(file => (
-                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
-                             <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
-                                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
-                                <div className="min-w-0">
-                                  <span className="text-xs font-bold text-slate-700 truncate block hover:text-indigo-600">{file.name}</span>
-                                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
-                                </div>
-                             </div>
-                             <div className="flex gap-2">
-                               <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
-                               {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
-                                 <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
-                               )}
-                             </div>
-                          </div>
-                        ))}
-                        {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
-                          <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
-                        )}
+                          {(selectedTask.attachments || []).map(file => (
+                            <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
+                              <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
+                                  <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
+                                  <div className="min-w-0">
+                                    <span className="text-xs font-bold text-slate-700 truncate block hover:text-indigo-600">{file.name}</span>
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
+                                  </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
+                                {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
+                                  <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
+                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
                   </div>
                 </div>
 
