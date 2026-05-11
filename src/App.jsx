@@ -1200,7 +1200,7 @@ export default function App() {
           
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 md:mb-8 print:hidden">
             <div>
-              <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-xl md:text-4xl font-black text-slate-900 tracking-tight">
                 {activeTab === 'dashboard' && 'Beranda Kinerja'}
                 {activeTab === 'tasks' && (currentUser.role === 'admin' ? 'Seluruh Daftar Pekerjaan' : 'Daftar Pekerjaan')}
                 {activeTab === 'laporan' && 'Laporan Kinerja'}
@@ -1246,9 +1246,12 @@ export default function App() {
                    </div>
                )}
 
+               {/* TOMBOL TAMBAH TUGAS (HEADER) */}
                {activeTab !== 'laporan' && activeTab !== 'admin_users' && activeTab !== 'admin_settings' && (
-                  <button type="button" onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
-                    <Plus className="w-4 h-4 md:w-5 h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
+                  // PERBAIKAN: Tambahkan "hidden md:flex" agar tombol ini HILANG di HP
+                  // karena di HP sudah ada tombol (+) bundar di navigasi bawah.
+                  <button type="button" onClick={() => setIsModalOpen(true)} className="hidden md:flex bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
+                    <Plus className="w-4 h-4 md:w-5 md:h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
                   </button>
                )}
                {activeTab === 'admin_users' && (
