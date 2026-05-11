@@ -1014,15 +1014,20 @@ export default function App() {
         
         {/* HEADER SIDEBAR (LOGO & TOMBOL TOGGLE) */}
         <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
-          <div className={`flex items-center gap-3 overflow-hidden ${!isSidebarOpen && 'hidden md:flex flex-col'}`}>
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2.5 rounded-2xl shadow-md shrink-0">
-              <img src="/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
+          <div className={`flex items-center gap-3 ${!isSidebarOpen && 'hidden md:flex flex-col'}`}>
+            {/* Ikon Logo */}
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0">
+              <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
             </div>
+            
+            {/* Teks Logo (Dibuat responsif dan otomatis membungkus teks panjang) */}
             {isSidebarOpen && (
-              <div className="animate-in fade-in duration-300 whitespace-nowrap">
-                <span className="font-black text-lg md:text-xl tracking-tight text-yellow-500 leading-none block uppercase">
+              <div className="flex flex-col animate-in fade-in duration-300">
+                <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight">
                   {sysConfig.brandName}
-                  <span className="text-xs md:text-sm text-slate-800 block mt-0.5"><br/>Task Management</span>
+                </span>
+                <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5">
+                  Task Management
                 </span>
               </div>
             )}
@@ -1035,12 +1040,12 @@ export default function App() {
             className={`hidden md:flex p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl transition-colors shadow-sm shrink-0 ${!isSidebarOpen && 'mt-4'}`}
             title="Buka/Tutup Menu"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-4 h-4 md:w-5 md:h-5" />
           </button>
           
           {/* Tombol Tutup Khusus Mobile */}
           <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0" onClick={() => setMobileMenuOpen(false)}>
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
         
