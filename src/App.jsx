@@ -1386,8 +1386,8 @@ export default function App() {
               </div>
 
               {/* Daftar Aktivitas Terkini (ala Recent Transactions) */}
-              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full mb-3">
-                <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center mb-3">
+              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
+                <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
                   <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600">Lihat Semua</button>
                 </div>
