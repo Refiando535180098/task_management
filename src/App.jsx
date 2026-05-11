@@ -2631,18 +2631,7 @@ export default function App() {
               </Card>
             </div>
           )}
-
-          {/* COPYRIGHT KHUSUS MOBILE (MUNCUL SAAT SCROLL PALING BAWAH) */}
-          <div className="md:hidden mt-auto pt-8 pb-8 flex flex-col items-center text-center print:hidden cursor-default opacity-80">
-            <div className="h-px w-10 bg-slate-200 mb-3"></div>
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
-              © {new Date().getFullYear()} {sysConfig.brandName}
-            </p>
-            <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
-              Crafted by <span className="font-black text-slate-500">Vanda Tech</span>
-            </p>
-          </div>
-
+          
           {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60] print:hidden">
             {/* Tambahan pb-safe untuk iPhone agar tidak menabrak garis bawah layar */}
@@ -2687,6 +2676,17 @@ export default function App() {
                 <span className={`text-[10px] font-black tracking-wide ${activeTab === 'chat' ? 'text-indigo-600' : 'text-slate-400'}`}>Pesan</span>
               </button>
             </div>
+          </div>
+
+          {/* COPYRIGHT KHUSUS MOBILE (MUNCUL SAAT SCROLL PALING BAWAH) */}
+          <div className="md:hidden mt-auto pt-8 pb-8 flex flex-col items-center text-center print:hidden cursor-default opacity-80">
+            <div className="h-px w-10 bg-slate-200 mb-3"></div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+              © {new Date().getFullYear()} {sysConfig.brandName}
+            </p>
+            <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
+              Crafted by <span className="font-black text-slate-500">Vanda Tech</span>
+            </p>
           </div>
 
         </div>
