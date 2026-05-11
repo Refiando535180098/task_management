@@ -24,7 +24,7 @@ const Badge = ({ children, type }) => {
   const styles = {
     high: 'bg-red-50 text-red-600 border-red-200',
     medium: 'bg-amber-50 text-amber-600 border-amber-200',
-    low: 'bg-blue-50 text-blue-600 border-blue-200',
+    low: 'bg-amber-50 text-amber-600 border-amber-200',
     pending: 'bg-slate-100 text-slate-600 border-slate-200',
     'in-progress': 'bg-amber-50 text-amber-600 border-amber-200',
     'waiting-approval': 'bg-orange-100 text-orange-700 border-orange-300 animate-pulse', // Animasi berkedip
@@ -1341,7 +1341,7 @@ export default function App() {
         {/* AREA PROFIL BAWAH */}
         <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 mb-10 md:mb-0">
           <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
-            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-amber-600' : 'bg-emerald-600'}`}>
               {currentUser.avatar}
             </div>
             {isSidebarOpen && (
@@ -1419,7 +1419,7 @@ export default function App() {
                           .filter(n => !n.read) 
                           .map(notif => (
                            <div key={notif.id} onClick={() => handleReadNotification(notif)} className="p-4 border-b border-slate-50 hover:bg-amber-50/30 transition-colors cursor-pointer flex gap-3.5 bg-amber-50/10">
-                             <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                             <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
                                {notif.type === 'chat' ? <MessageSquare className="w-4 h-4 md:w-5 md:h-5" /> : <CheckSquare className="w-4 h-4 md:w-5 md:h-5" />}
                              </div>
                              <div className="flex-1 min-w-0">
@@ -1554,7 +1554,7 @@ export default function App() {
               {/* Profil Singkat Mobile */}
               <div className="md:hidden flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3.5">
-                   <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-inner ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
+                   <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-inner ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-amber-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
                    <div>
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Selamat Datang,</p>
                      <h2 className="text-sm font-black text-slate-800 leading-none">{currentUser.name}</h2>
@@ -1629,7 +1629,7 @@ export default function App() {
               <div className="grid grid-cols-3 gap-3 md:gap-6">
                 {[
                   { title: 'Pending', count: activeTasks.filter(t => t.status === 'pending').length, color: 'text-amber-600', bg: 'bg-amber-100' },
-                  { title: 'Diproses', count: activeTasks.filter(t => t.status === 'in-progress').length, color: 'text-blue-600', bg: 'bg-blue-100' },
+                  { title: 'Diproses', count: activeTasks.filter(t => t.status === 'in-progress').length, color: 'text-amber-600', bg: 'bg-amber-100' },
                   { title: 'Selesai', count: activeTasks.filter(t => t.status === 'done').length, color: 'text-emerald-600', bg: 'bg-emerald-100' },
                 ].map((stat, i) => (
                   <div key={i} className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center justify-center gap-2">
