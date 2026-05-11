@@ -1262,13 +1262,14 @@ export default function App() {
                   </button>
                )}
                {activeTab === 'admin_users' && (
-                <div className="flex flex-wrap items-center gap-2 flex-1 justify-end md:flex-none">
-                  <button type="button" onClick={() => setIsMassUserModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all text-xs md:text-sm">
-                    <Users className="w-4 h-4" /> Input Tabel
-                  </button>
-                  <button type="button" onClick={handleDownloadTemplateCSV} className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all text-xs md:text-sm">
-                    <Download className="w-4 h-4" /> Template CSV
-                  </button>
+                 <div className="flex flex-wrap items-center gap-2 flex-1 justify-end md:flex-none">
+                   {/* TOMBOL REFRESH DATA (BARU) */}
+                   <button type="button" onClick={fetchInitialGlobalData} className="p-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-all shadow-sm mr-2" title="Segarkan Data">
+                     <Activity className="w-5 h-5" />
+                   </button>
+                   <button type="button" onClick={() => setIsMassUserModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all text-xs md:text-sm">
+                     <Users className="w-4 h-4" /> Input Tabel
+                   </button>
                   <input type="file" id="upload-massal-user" accept=".csv" onChange={handleMassUploadCSV} className="hidden" />
                   <label htmlFor="upload-massal-user" className="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-2 md:px-4 md:py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all text-xs md:text-sm cursor-pointer">
                     <Paperclip className="w-4 h-4" /> Import CSV
