@@ -1216,305 +1216,169 @@ export default function App() {
           )}
 
           {/* TAB: DASHBOARD */}
+          {/* TAB: DASHBOARD (DESAIN ALA M-BANKING) */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-                {[
-                  { title: 'Total Tugas', count: activeTasks.length, color: 'slate', icon: LayoutDashboard },
-                  { title: 'Pending', count: activeTasks.filter(t => t.status === 'pending').length, color: 'orange', icon: Clock },
-                  { title: 'In Progress', count: activeTasks.filter(t => t.status === 'in-progress').length, color: 'indigo', icon: Activity },
-                  { title: 'Selesai', count: activeTasks.filter(t => t.status === 'done').length, color: 'emerald', icon: CheckCircle2 },
-                ].map((stat, i) => {
-                  const rate = activeTasks.length === 0 ? 0 : Math.round((activeTasks.filter(t => t.status === 'done').length / activeTasks.length) * 100);
-                  return (
-                    <Card key={i} className={`p-4 md:p-6 border-0 shadow-sm relative overflow-hidden group bg-white`}>
-                      <div className={`absolute -right-4 -top-4 md:-right-6 md:-top-6 w-16 h-16 md:w-24 md:h-24 bg-${stat.color}-50 rounded-full opacity-60 z-0`}></div>
-                      <div className="relative z-10 flex flex-col h-full justify-between">
-                        <div className="flex items-center justify-between mb-2 md:mb-4"><p className="text-[9px] md:text-[11px] font-black text-slate-500 uppercase tracking-widest">{stat.title}</p><stat.icon className={`w-4 h-4 md:w-5 md:h-5 text-${stat.color}-500 hidden sm:block`} /></div>
-                        <div className="flex flex-col sm:flex-row sm:items-end gap-1 md:gap-2">
-                          <h3 className="text-2xl md:text-5xl font-black text-slate-800 tracking-tighter">{stat.count}</h3>
-                          {stat.title === 'Selesai' && <span className="text-[9px] md:text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md w-fit mb-0 md:mb-1.5">{rate}% Selesai</span>}
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
+            <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0">
+              
+              {/* Profil Singkat Mobile (Hanya muncul di HP) */}
+              <div className="md:hidden flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3.5">
+                   <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-inner ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
+                   <div>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Selamat Datang,</p>
+                     <h2 className="text-sm font-black text-slate-800 leading-none">{currentUser.name}</h2>
+                   </div>
+                </div>
+                <Badge type="low">{currentUser.role}</Badge>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-                <div className="lg:col-span-2 space-y-6 md:space-y-8 overflow-hidden">
-                  {(currentUser.role !== 'staff') && (
-                    <Card className="border-0 shadow-sm overflow-hidden bg-white w-full">
-                      <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <h3 className="font-black text-lg md:text-xl text-slate-800 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 md:w-6 h-6 text-emerald-500"/> Log Pekerjaan Selesai</h3>
-                        </div>
-                        <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-inner w-full sm:w-auto overflow-hidden">
-                          <select value={dashDivFilter} onChange={(e) => setDashDivFilter(e.target.value)} className="w-full sm:w-auto px-3 py-1.5 border-0 bg-transparent text-xs md:text-sm font-bold text-indigo-700 focus:outline-none cursor-pointer">
-                            {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <option value="Semua Divisi">Semua Divisi</option>}
-                            {divisions.filter(div => (currentUser.role === 'direksi' || currentUser.role === 'admin') || div === currentUser.division).map(div => <option key={div} value={div}>{div}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="max-h-[300px] overflow-auto w-full custom-scrollbar pb-2">
-                        <table className="w-full text-left border-collapse min-w-[500px]">
-                            <thead>
-                              <tr className="bg-slate-50 text-slate-400 text-[9px] md:text-[10px] uppercase tracking-widest font-black border-b border-slate-100">
-                                <th className="p-3 md:p-5">Staf</th><th className="p-3 md:p-5">Tugas Diselesaikan</th><th className="p-3 md:p-5">Divisi</th><th className="p-3 md:p-5 text-right">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tasks.filter(t => t.status === 'done' && (dashDivFilter === 'Semua Divisi' || getAssigneesArray(t.assignedTo).some(id => users.find(u => u.id === id)?.division === dashDivFilter))).slice(0, 5).map((task) => {
-                                  const assignees = getAssigneesArray(task.assignedTo);
-                                  return (
-                                    <tr key={task.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                      <td className="p-3 md:p-5 flex items-center gap-2 md:gap-3">
-                                        <div className="flex -space-x-2">
-                                          {assignees.map(id => (
-                                            <div key={id} title={getUserName(id)} className="w-7 h-7 md:w-9 h-9 rounded-lg md:rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-[10px] md:text-sm border border-white relative">{getAvatar(id)}</div>
-                                          ))}
-                                        </div>
-                                        <div><span className="font-bold text-slate-800 block line-clamp-1 max-w-[80px] md:max-w-[150px] text-[10px] md:text-xs">{getAssigneesNames(task.assignedTo)}</span></div>
-                                      </td>
-                                      <td className="p-3 md:p-5">
-                                        <span className="font-bold text-slate-800 cursor-pointer hover:text-indigo-600 block line-clamp-2 md:truncate max-w-[150px] md:max-w-[250px] text-xs md:text-sm" onClick={() => setSelectedTask(task)}>{task.title}</span>
-                                        <span className="text-[8px] md:text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1 mt-1"><CheckCircle2 className="w-3 h-3 text-emerald-500"/> Selesai</span>
-                                      </td>
-                                      <td className="p-3 md:p-5 font-bold text-slate-600 text-xs md:text-sm"><Badge type="low">{users.find(u => u.id === assignees[0])?.division}</Badge></td>
-                                      <td className="p-3 md:p-5 text-right"><Badge type="done">Done</Badge></td>
-                                    </tr>
-                                  )
-                                })}
-                            </tbody>
-                          </table>
-                      </div>
-                    </Card>
-                  )}
+              {/* Main "Balance" Card (Kartu Utama Saldo/Tugas) */}
+              <div className="bg-indigo-600 rounded-[2rem] p-6 md:p-8 text-white shadow-[0_15px_40px_rgba(79,70,229,0.3)] relative overflow-hidden flex flex-col justify-between min-h-[160px] md:min-h-[200px]">
+                 {/* Ornamen Latar Ala Kartu Kredit */}
+                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
+                 <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-900 opacity-20 rounded-full blur-xl"></div>
+                 
+                 <div className="relative z-10">
+                   <p className="text-indigo-100 text-xs md:text-sm font-bold tracking-wide uppercase mb-1">Total Pekerjaan Anda</p>
+                   <h1 className="text-5xl md:text-6xl font-black flex items-baseline gap-2">
+                     {activeTasks.length} <span className="text-lg md:text-xl font-medium opacity-80 mb-1 md:mb-2">Tugas</span>
+                   </h1>
+                 </div>
 
-                  {currentUser.role === 'staff' && (
-                    <Card className="border-0 shadow-sm overflow-hidden bg-white">
-                      <div className="p-4 md:p-6 border-b border-slate-100">
-                        <h3 className="font-black text-lg md:text-xl text-slate-800 flex items-center gap-2"><AlertCircle className="w-5 h-5 md:w-6 h-6 text-orange-500"/> Prioritas Pekerjaan</h3>
-                      </div>
-                      <div className="p-0 max-h-[350px] overflow-y-auto custom-scrollbar">
-                        {myTasks.filter(t => t.status !== 'done').sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 5).map((task) => (
-                          <div key={task.id} className="p-4 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 hover:bg-slate-50/80 border-b border-slate-100">
-                              <div className="flex items-start gap-3 md:gap-4">
-                                  <div className={`p-2.5 md:p-3 rounded-xl shadow-sm border ${task.priority === 'high' ? 'bg-red-50 text-red-500 border-red-100' : task.priority === 'medium' ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-blue-50 text-blue-500 border-blue-100'}`}><Clock className="w-4 h-4 md:w-5 h-5" /></div>
-                                  <div>
-                                      <h4 className="font-bold text-sm md:text-base text-slate-800 cursor-pointer hover:text-indigo-600 line-clamp-2" onClick={() => setSelectedTask(task)}>{task.title}</h4>
-                                      <div className="flex flex-wrap gap-2 text-[10px] md:text-xs text-slate-500 mt-1.5 font-bold"><span className="flex items-center gap-1"><Calendar className="w-3 h-3"/> {task.dueDate}</span><span className="hidden sm:inline">•</span><span>Oleh: {getUserName(task.assignedBy)}</span></div>
-                                  </div>
-                              </div>
-                              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 mt-2 sm:mt-0"><Badge type={task.status}>{task.status}</Badge><Badge type={task.priority}>{task.priority}</Badge></div>
-                          </div>
-                        ))}
-                        {myTasks.filter(t => t.status !== 'done').length === 0 && <p className="p-6 text-center text-sm font-bold text-slate-400">Semua tugas sudah diselesaikan! 🎉</p>}
-                      </div>
-                    </Card>
-                  )}
+                 <div className="relative z-10 flex items-center justify-between mt-6 pt-4 border-t border-indigo-500/50">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] md:text-xs font-bold text-indigo-200">Selesai (KPI)</span>
+                      <span className="text-sm md:text-base font-black">{activeTasks.length === 0 ? 0 : Math.round((activeTasks.filter(t => t.status === 'done').length / activeTasks.length) * 100)}%</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                      <span className="text-[10px] md:text-xs font-bold text-indigo-200">Divisi</span>
+                      <span className="text-sm md:text-base font-black">{currentUser.division}</span>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Grid Status Cepat (Pending, Progress, Selesai) */}
+              <div className="grid grid-cols-3 gap-3 md:gap-6">
+                {[
+                  { title: 'Pending', count: activeTasks.filter(t => t.status === 'pending').length, color: 'text-amber-600', bg: 'bg-amber-100' },
+                  { title: 'Diproses', count: activeTasks.filter(t => t.status === 'in-progress').length, color: 'text-blue-600', bg: 'bg-blue-100' },
+                  { title: 'Selesai', count: activeTasks.filter(t => t.status === 'done').length, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+                ].map((stat, i) => (
+                  <div key={i} className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center justify-center gap-2 hover:-translate-y-1 transition-transform">
+                    <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full ${stat.bg} ${stat.color} flex items-center justify-center font-black text-lg md:text-2xl`}>
+                      {stat.count}
+                    </div>
+                    <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest">{stat.title}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Daftar Log Singkat ala "Recent Transactions" */}
+              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
+                <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
+                  <h3 className="font-black text-base md:text-lg text-slate-800">Aktivitas Terkini</h3>
+                  <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600 hover:text-indigo-800">Lihat Semua</button>
                 </div>
-
-                <div className="space-y-6 md:space-y-8">
-                  <Card className="p-5 md:p-6 border-0 shadow-sm bg-white overflow-hidden relative">
-                    <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-indigo-50 rounded-bl-full -z-10"></div>
-                    <div className="flex items-center gap-4 mb-2">
-                      <div className={`w-14 h-14 md:w-16 h-16 rounded-2xl flex items-center justify-center text-xl md:text-2xl font-black text-white shadow-lg shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
-                      <div className="overflow-hidden">
-                        <h4 className="font-black text-lg md:text-xl text-slate-800 tracking-tight truncate">{currentUser.name}</h4>
-                        <p className="text-[10px] md:text-xs text-slate-500 font-bold mb-1 truncate">{currentUser.position || 'Admin Utama'}</p>
-                        <Badge type="low">Divisi {currentUser.division}</Badge>
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card className="p-5 md:p-6 border-0 shadow-sm bg-white">
-                    <h3 className="font-black text-sm md:text-base text-slate-800 mb-4 md:mb-6 border-b border-slate-100 pb-3 md:pb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 md:w-5 h-5 text-indigo-500"/> Ringkasan Beban Kerja</h3>
-                    <div className="space-y-4 md:space-y-6">
-                      {['high', 'medium', 'low'].map(prio => {
-                        const count = activeTasks.filter(t => String(t.priority).toLowerCase().trim() === prio).length;
-                        const total = activeTasks.length > 0 ? activeTasks.length : 1; 
-                        
-                        const colors = { high: 'bg-red-500', medium: 'bg-amber-500', low: 'bg-blue-500' };
-                        const bgColors = { high: 'bg-red-50', medium: 'bg-amber-50', low: 'bg-blue-50' };
-                        const labels = { high: 'Prioritas Tinggi', medium: 'Prioritas Sedang', low: 'Prioritas Rendah' };
-                        
-                        return (
-                          <div key={prio}>
-                            <div className="flex justify-between text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 md:mb-2">
-                              <span>{labels[prio]}</span>
-                              <span className="text-slate-800">{count} Tugas</span>
-                            </div>
-                            <div className={`w-full ${bgColors[prio]} rounded-full h-2 md:h-2.5 overflow-hidden shadow-inner`}>
-                              <div className={`${colors[prio]} h-full rounded-full transition-all duration-500`} style={{width: `${(count/total)*100}%`}}></div>
-                            </div>
+                <div className="p-2 md:p-4">
+                  {activeTasks.slice(0, 5).map((task) => {
+                    const isOverdue = task.dueDate < new Date().toISOString().split('T')[0] && task.status !== 'done';
+                    return (
+                      <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm
+                            ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : task.status === 'in-progress' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                            {task.status === 'done' ? <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7" /> : <Clock className="w-6 h-6 md:w-7 md:h-7" />}
                           </div>
-                        )
-                      })}
-                    </div>
-                  </Card>
+                          <div>
+                            <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1">{task.title}</h4>
+                            <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> {task.dueDate}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {isOverdue ? <span className="text-[10px] font-black text-white bg-red-600 px-2 py-1 rounded-md uppercase">Terlambat</span> : <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {activeTasks.length === 0 && <div className="p-8 text-center text-sm font-bold text-slate-400">Belum ada aktivitas.</div>}
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB: TASKS */}
+          {/* TAB: TASKS (DESAIN ALA M-BANKING) */}
           {activeTab === 'tasks' && (
-            <div className="space-y-4 print:hidden animate-in fade-in duration-300">
-               <Card className="p-3 md:p-4 bg-white border-slate-200 shadow-sm mb-4">
-                 <div className="flex flex-col xl:flex-row gap-3 md:gap-4 items-start xl:items-center justify-between">
-                   <div className="flex items-center gap-2 shrink-0">
-                     <Filter className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" />
-                     <span className="font-bold text-slate-700 text-xs md:text-sm uppercase tracking-wider">Cari & Filter:</span>
-                   </div>
-                   
-                   <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full xl:w-auto">
-                     <div className="flex items-center relative w-full sm:w-48 md:w-56 shrink-0">
-                       <Search className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400 absolute left-3" />
-                       <input type="text" placeholder="Ketik judul tugas..." value={taskSearchQuery} onChange={(e) => setTaskSearchQuery(e.target.value)} className="w-full pl-8 pr-3 py-1.5 md:py-2 border border-slate-200 rounded-lg text-xs md:text-sm font-bold focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white" />
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Bulan:</label>
-                       <input type="month" value={taskFilterMonth} onChange={(e) => {setTaskFilterMonth(e.target.value); setTaskFilterDate('');}} className="px-2 py-1.5 md:px-3 md:py-2 border border-slate-200 rounded-lg text-xs md:text-sm font-bold focus:border-indigo-500 outline-none w-full sm:w-auto" />
-                     </div>
-                     <div className="flex items-center gap-2">
-                       <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Tgl:</label>
-                       <input type="date" value={taskFilterDate} onChange={(e) => {setTaskFilterDate(e.target.value); setTaskFilterMonth('');}} className="px-2 py-1.5 md:px-3 md:py-2 border border-slate-200 rounded-lg text-xs md:text-sm font-bold focus:border-indigo-500 outline-none w-full sm:w-auto" />
-                     </div>
-                     
-                     {(taskFilterMonth || taskFilterDate || taskSearchQuery) && (
-                       <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate('');}} className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-100 px-3 py-1.5 md:py-2 bg-red-50 border border-red-200 rounded-lg shadow-sm w-full sm:w-auto">Reset</button>
-                     )}
-                   </div>
+            <div className="space-y-4 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0">
+               
+               {/* Search Bar Ala Kolom Pencarian Transaksi */}
+               <div className="bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col md:flex-row items-center gap-2">
+                 <div className="flex w-full items-center bg-slate-50 rounded-xl px-4 py-2 border border-slate-100 focus-within:border-indigo-300 focus-within:bg-white transition-colors">
+                   <Search className="w-5 h-5 text-slate-400 shrink-0" />
+                   <input type="text" placeholder="Cari nama pekerjaan..." value={taskSearchQuery} onChange={(e) => setTaskSearchQuery(e.target.value)} className="w-full bg-transparent border-none outline-none pl-3 text-sm font-bold text-slate-700 placeholder:text-slate-400" />
                  </div>
-               </Card>
+                 
+                 <div className="flex w-full md:w-auto gap-2">
+                   <input type="month" value={taskFilterMonth} onChange={(e) => {setTaskFilterMonth(e.target.value); setTaskFilterDate('');}} className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-indigo-300" />
+                   {(taskFilterMonth || taskFilterDate || taskSearchQuery) && (
+                     <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate('');}} className="px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-xl hover:bg-red-100 shrink-0">Reset</button>
+                   )}
+                 </div>
+               </div>
 
-               <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-240px)] overflow-y-auto custom-scrollbar pr-1 pb-24">
-                {myTasks.filter(t => {
-                  if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
-                  if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
-                  if (taskFilterDate && t.dueDate !== taskFilterDate) return false;
-                  return true;
-                }).map(task => {
-                  const assigneesArr = getAssigneesArray(task.assignedTo);
-                  
-                  // LOGIKA DETEKSI OVERDUE
-                  const today = new Date().toISOString().split('T')[0];
-                  const isOverdue = task.dueDate < today && task.status !== 'done';
-                  
-                  // PERBAIKAN: Gunakan String() agar tidak ada bentrok tipe data
-                  const isIRequestedThis = String(task.assignedBy) === String(currentUser.id) || currentUser.role === 'admin';
-
-                  return (  
-                    <Card key={task.id} className="p-4 hover:shadow-md transition-all border border-slate-200 relative overflow-hidden bg-white">
-                      {/* Garis Status di Samping */}
-                      <div className={`absolute left-0 top-0 bottom-0 w-2 ${isOverdue ? 'bg-red-600' : task.status === 'done' ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
-
-                      <div className="flex flex-col lg:flex-row justify-between gap-4 pl-3">
-                        <div className="flex-1 cursor-pointer" onClick={() => setSelectedTask(task)}>
-                          <div className="flex flex-wrap items-center gap-2 mb-3">
-                            {isOverdue && <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>}
-                            <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
-                            <Badge type={task.priority}>PRIO: {task.priority}</Badge>
+               {/* Task List (Desain Riwayat) */}
+               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh]">
+                 <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
+                 
+                 <div className="space-y-1 overflow-y-auto custom-scrollbar">
+                  {myTasks.filter(t => {
+                    if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
+                    if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
+                    if (taskFilterDate && t.dueDate !== taskFilterDate) return false;
+                    return true;
+                  }).map(task => {
+                    const today = new Date().toISOString().split('T')[0];
+                    const isOverdue = task.dueDate < today && task.status !== 'done';
+                    const assigneesArr = getAssigneesArray(task.assignedTo);
+                    
+                    return (  
+                      <div key={task.id} onClick={() => setSelectedTask(task)} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-slate-100 gap-4">
+                        
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white
+                            ${isOverdue ? 'bg-red-100 text-red-600' : task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : task.status === 'waiting-approval' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-50 text-indigo-500'}`}>
+                            {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : isOverdue ? <AlertCircle className="w-6 h-6"/> : <FileText className="w-6 h-6" />}
                           </div>
-
-                          <h3 className="font-black text-lg text-slate-800 mb-1">{task.title}</h3>
                           
-                          {/* TANGGAL & INFO (DESAIN ALA M-BANKING) */}
-                          <div className="flex flex-col gap-2.5 my-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                            
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Diberikan</span>
-                              <span className="text-xs font-black text-slate-800">{task.created_at ? task.created_at.split('T')[0] : '-'}</span>
-                            </div>
-                            
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Deadline</span>
-                              <span className={`text-xs font-black ${isOverdue ? 'text-red-600' : 'text-slate-800'}`}>{task.dueDate}</span>
-                            </div>
-                            
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> Selesai Pada</span>
-                              <span className={`text-xs font-black ${task.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>{task.completed_at || '-'}</span>
-                            </div>
-                            
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/> Di-Approve</span>
-                              <span className="text-xs font-black text-indigo-600">{task.approved_by ? getUserName(task.approved_by) : '-'}</span>
-                            </div>
-
-                          </div>
-
-                          <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-400">Oleh:</span>
-                              <span className="text-indigo-600">{getUserName(task.assignedBy)}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-slate-400">Penerima:</span>
-                              <span className="text-slate-700">{getAssigneesNames(task.assignedTo)}</span>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1 mb-1">{task.title}</h4>
+                            <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-400">
+                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {task.dueDate}</span>
+                              <span>•</span>
+                              <span className="truncate">Oleh: {getUserName(task.assignedBy)}</span>
                             </div>
                           </div>
                         </div>
 
-                        {/* BAGIAN APPROVAL & UPDATE STATUS */}
-                        <div className="flex flex-col gap-2 min-w-[180px] lg:border-l border-slate-100 lg:pl-6 justify-center">
+                        {/* Status Badges di Kanan */}
+                        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0 pl-16 sm:pl-0">
+                          {isOverdue && <span className="text-[9px] font-black text-white bg-red-600 px-2 py-1 rounded-md uppercase tracking-wider shadow-sm">Overdue</span>}
+                          {!isOverdue && <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>}
                           
-                          {/* TOMBOL APPROVE MUNCUL JIKA: Status Waiting & (Saya Pemberi Tugas ATAU Saya Admin) */}
-                          {task.status === 'waiting-approval' && (String(task.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') ? (
-                            <div className="flex flex-col gap-2">
-                              <p className="text-[10px] font-black text-orange-600 uppercase text-center">Butuh Persetujuan</p>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleApproveTask(task.id, true); }}
-                                className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-sm"
-                              >
-                                <Check className="w-4 h-4"/> Approve Selesai
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleApproveTask(task.id, false); }}
-                                className="w-full py-2 bg-white text-red-600 border border-red-200 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm"
-                              >
-                                <X className="w-4 h-4"/> Tolak (Revisi)
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block text-center">Status Pekerjaan</span>
-                              <select 
-                                value={task.status}
-                                onChange={(e) => handleStatusUpdate(task.id, e.target.value)}
-                                disabled={task.status === 'done'}
-                                onClick={(e) => e.stopPropagation()}
-                                className={`w-full py-2 px-3 rounded-xl text-xs font-black border-2 focus:outline-none transition-all shadow-sm appearance-none cursor-pointer
-                                  ${task.status === 'done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                                    task.status === 'waiting-approval' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                    'bg-white text-slate-700 border-slate-200'}`}
-                              >
-                                <option value="pending">PENDING</option>
-                                <option value="in-progress">IN PROGRESS</option>
-                                <option value="done">SELESAI</option>
-                                {task.status === 'waiting-approval' && <option value="waiting-approval">WAITING APPROVAL</option>}
-                              </select>
-                            </div>
-                          )}
-
-                          {/* FITUR BARU: TOMBOL HAPUS TUGAS (KHUSUS ADMIN) */}
-                          {currentUser.role === 'admin' && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, task.title); }}
-                              className="mt-2 w-full py-1.5 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1.5 transition-colors uppercase tracking-widest"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Hapus Tugas
-                            </button>
-                          )}
+                          {/* Avatar tumpuk pembuat/penerima (Hanya Desktop) */}
+                          <div className="hidden sm:flex -space-x-2 mt-1">
+                            {assigneesArr.slice(0,3).map(id => <div key={id} title={getUserName(id)} className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-10">{getAvatar(id)}</div>)}
+                            {assigneesArr.length > 3 && <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-0">+{assigneesArr.length - 3}</div>}
+                          </div>
                         </div>
+
                       </div>
-                    </Card>
-                  )
-                })}
-              </div>
-          </div>
-        )}
+                    )
+                  })}
+                  {myTasks.length === 0 && <div className="p-10 text-center text-sm font-bold text-slate-400">Tidak ada data pekerjaan yang ditemukan.</div>}
+                 </div>
+               </div>
+            </div>
+          )}
 
           {/* TAB: LAPORAN */}
           {activeTab === 'laporan' && (
