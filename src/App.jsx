@@ -49,6 +49,42 @@ export default function App() {
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
+  // --- STATE & FUNGSI UNTUK MANAJEMEN ROLE ---
+  const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']); // Default role
+  const [newRoleName, setNewRoleName] = useState('');
+
+  const handleAddRole = () => {
+    if (!newRoleName.trim()) return;
+    const cleanRole = newRoleName.trim().toLowerCase();
+    if (roles.includes(cleanRole)) {
+      return alert('Role ini sudah ada!');
+    }
+    setRoles([...roles, cleanRole]);
+    setNewRoleName('');
+  };
+
+  const handleDeleteRole = (roleToDelete) => {
+    if (roleToDelete === 'admin' || roleToDelete === 'staff') {
+      return alert('Ditolak: Role Admin dan Staff adalah role inti sistem dan tidak boleh dihapus.');
+    }
+    if (window.confirm(`Yakin ingin menghapus role "${roleToDelete}"?`)) {
+      setRoles(roles.filter(r => r !== roleToDelete));
+    }
+  };
+
+  const handleEditRole = (oldRole) => {
+    if (oldRole === 'admin' || oldRole === 'staff') {
+      return alert('Ditolak: Role Admin dan Staff adalah role inti sistem dan tidak boleh diubah.');
+    }
+    const newRole = window.prompt(`Ubah nama role "${oldRole}" menjadi:`, oldRole);
+    if (newRole && newRole.trim() !== '' && newRole.trim() !== oldRole) {
+       const cleanNewRole = newRole.trim().toLowerCase();
+       if (roles.includes(cleanNewRole)) {
+          return alert('Nama role tersebut sudah digunakan!');
+       }
+       setRoles(roles.map(r => r === oldRole ? cleanNewRole : r));
+    }
+  };
   
   
   const [sysConfig, setSysConfig] = useState({ 
@@ -1920,7 +1956,7 @@ export default function App() {
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Identitas & Organisasi
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Identitas & Struktur
                   </h4>
                 </div>
                 
@@ -1937,13 +1973,13 @@ export default function App() {
                   
                   {/* Input Divisi (Gaya Tag/Pill) */}
                   <div className="pt-2">
-                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Struktur Divisi</label>
+                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Daftar Divisi Aktif</label>
                     <div className="flex gap-2 mb-4">
                       <input type="text" value={newDivName} onChange={e => setNewDivName(e.target.value)} placeholder="Ketik nama divisi baru..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
                       <button onClick={handleAddDivision} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
                     </div>
                     
-                    {/* Daftar Divisi gaya Badge/Pill */}
+                    {/* Daftar Divisi */}
                     <div className="flex flex-wrap gap-2.5">
                       {divisions.map(d => (
                         <div key={d} className="group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50/50 border border-indigo-100 text-indigo-700 rounded-full transition-all hover:bg-indigo-100 hover:shadow-sm">
@@ -1953,9 +1989,38 @@ export default function App() {
                           </button>
                         </div>
                       ))}
-                      {divisions.length === 0 && <span className="text-xs font-bold text-slate-400 italic py-2">Belum ada divisi yang ditambahkan.</span>}
                     </div>
                   </div>
+
+                  {/* FITUR BARU: MANAJEMEN ROLE SISTEM */}
+                  <div className="pt-6 border-t border-slate-100">
+                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Role & Jabatan Sistem</label>
+                    <div className="flex gap-2 mb-4">
+                      <input type="text" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="Contoh: supervisor, direktur..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                      <button onClick={handleAddRole} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
+                    </div>
+                    
+                    {/* Daftar Role */}
+                    <div className="flex flex-wrap gap-2.5">
+                      {roles.map(r => (
+                        <div key={r} className="group flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50/50 border border-emerald-100 text-emerald-700 rounded-full transition-all hover:bg-emerald-100 hover:shadow-sm">
+                          <span className="font-bold text-xs md:text-sm capitalize">{r}</span>
+                          <div className="flex items-center border-l border-emerald-200 pl-1.5 ml-1">
+                            <button onClick={() => handleEditRole(r)} className="text-emerald-500 hover:text-indigo-600 p-1.5 rounded-full transition-colors" title="Ubah Role">
+                              <Edit className="w-3 h-3 md:w-3.5 md:h-3.5"/>
+                            </button>
+                            <button onClick={() => handleDeleteRole(r)} className="text-emerald-500 hover:text-red-500 p-1.5 rounded-full transition-colors" title="Hapus Role">
+                              <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5"/>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-4 leading-relaxed">
+                      *Role <span className="text-slate-600 border-b border-slate-300">admin</span> dan <span className="text-slate-600 border-b border-slate-300">staff</span> adalah inti sistem dan tidak dapat dihapus.
+                    </p>
+                  </div>
+
                 </div>
               </div>
 
