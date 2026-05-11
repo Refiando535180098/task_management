@@ -629,18 +629,42 @@ export default function App() {
     if (customAction) customAction();
   };
 
-  const addNotification = async (userId, type, message, taskId) => {
-    const timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  // --- FUNGSI KLIK NOTIFIKASI SATUAN ---
+  const handleReadNotification = async (notif) => {
+    // 1. Hilangkan titik merah seketika di layar
+    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
     
-    const newNotif = { id: Date.now(), userId, type, message, read: false, time: timeNow, taskId };
-    setNotifications(prev => [newNotif, ...prev]);
-
+    // 2. Simpan status "Sudah Dibaca" ke Supabase agar permanen
     try {
-      await supabase.from('notifications').insert([{
-        userId: userId, type: type, message: message, time: timeNow, taskId: taskId, read_status: false
-      }]);
-    } catch (error) {
-      console.error('Gagal simpan notifikasi ke DB', error);
+      await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id);
+    } catch (err) {
+      console.error("Gagal update status notif", err);
+    }
+
+    // 3. SMART ROUTING (Mengarahkan layar sesuai tipe notifikasi)
+    if (notif.taskId) {
+      const task = tasks.find(t => t.id === notif.taskId);
+      if (task) {
+        setSelectedTask(task);
+        setIsNotifOpen(false); // Tutup pop-up notifikasi
+        
+        if (notif.type === 'chat') {
+          navigateTo('chat');       // Pindah ke tab Pusat Pesan
+          setShowMobileChat(true);  // Langsung buka layar chat penuh (khusus HP)
+        } else {
+          navigateTo('tasks');      // Pindah ke tab Daftar Tugas
+        }
+      }
+    }
+  };
+
+  // --- FUNGSI KLIK "TANDAI SEMUA DIBACA" ---
+  const handleReadAllNotifs = async () => {
+    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    try {
+      await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id);
+    } catch (err) {
+      console.error("Gagal update semua notif", err);
     }
   };
 
@@ -1228,23 +1252,36 @@ export default function App() {
                </div>
                
                {isNotifOpen && (
-                   <div className="absolute top-20 right-15 md:right-15 md:top-20 md:mt-20 w-[calc(100vw-2rem)] md:w-50 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
-                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
-                       <h4 className="font-bold text-slate-800">Notifikasi Terbaru</h4>
-                       {unreadNotifsCount > 0 && <button type="button" onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))} className="text-[10px] font-bold text-indigo-600 hover:underline uppercase tracking-wider">Tandai Dibaca</button>}
+                   <div className="fixed top-20 left-4 right-4 md:absolute md:inset-auto md:top-14 md:right-0 md:w-[400px] bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-[100] overflow-hidden transform origin-top md:origin-top-right transition-all animate-in fade-in zoom-in-95">
+                     
+                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/90 backdrop-blur-md">
+                       <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Terbaru</h4>
+                       {unreadNotifsCount > 0 && (
+                         <button type="button" onClick={handleReadAllNotifs} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg uppercase tracking-wider transition-colors shadow-sm">
+                           Tandai Semua
+                         </button>
+                       )}
                      </div>
-                     <div className="max-h-[60vh] md:max-h-80 overflow-y-auto custom-scrollbar">
+                     
+                     <div className="max-h-[60vh] md:max-h-[450px] overflow-y-auto custom-scrollbar bg-white">
                        {myNotifications.length === 0 ? (
-                         <div className="p-6 text-center text-slate-400 text-sm">Tidak ada notifikasi baru.</div>
+                         <div className="p-10 flex flex-col items-center justify-center text-center">
+                           <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Bell className="w-6 h-6 text-slate-300" /></div>
+                           <p className="text-slate-500 text-xs md:text-sm font-bold">Belum ada notifikasi baru.</p>
+                         </div>
                        ) : (
                          myNotifications.map(notif => (
-                           <div key={notif.id} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${!notif.read ? 'bg-indigo-50/30' : ''}`} onClick={() => {
-                               setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-                               if (notif.taskId) { const task = tasks.find(t => t.id === notif.taskId); if (task) { setSelectedTask(task); setIsNotifOpen(false); navigateTo('tasks'); } }
-                             }}>
-                             <div className={`p-2 rounded-full h-fit shrink-0 ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>{notif.type === 'chat' ? <MessageSquare className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}</div>
-                             <div><p className={`text-xs md:text-sm ${!notif.read ? 'font-bold text-slate-800' : 'font-medium text-slate-600'}`}>{notif.message}</p><p className="text-[10px] md:text-xs text-slate-400 mt-1 flex items-center gap-1"><Clock className="w-3 h-3"/> {notif.time}</p></div>
-                             {!notif.read && <div className="w-2 h-2 rounded-full bg-indigo-500 mt-1 shrink-0 ml-auto"></div>}
+                           <div key={notif.id} onClick={() => handleReadNotification(notif)} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3.5 ${!notif.read ? 'bg-indigo-50/40' : ''}`}>
+                             <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                               {notif.type === 'chat' ? <MessageSquare className="w-4 h-4 md:w-5 md:h-5" /> : <CheckSquare className="w-4 h-4 md:w-5 md:h-5" />}
+                             </div>
+                             <div className="flex-1 min-w-0">
+                               <p className={`text-xs md:text-sm leading-snug line-clamp-2 pr-2 ${!notif.read ? 'font-black text-slate-800' : 'font-bold text-slate-500'}`}>{notif.message}</p>
+                               <p className="text-[9px] md:text-[10px] text-slate-400 mt-1.5 flex items-center gap-1 font-bold tracking-wide"><Clock className="w-3 h-3"/> {notif.time}</p>
+                             </div>
+                             {!notif.read && (
+                               <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 mt-2 shrink-0 shadow-[0_0_8px_rgba(79,70,229,0.5)]"></div>
+                             )}
                            </div>
                          ))
                        )}
