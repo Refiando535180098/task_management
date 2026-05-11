@@ -525,20 +525,19 @@ export default function App() {
   }, [selectedTask?.comments]);
 
   useEffect(() => {
-    const fetchInitialGlobalData = async () => {
+    // --- FUNGSI AMBIL DATA USER (Di luar useEffect agar bisa dipanggil tombol) ---
+  const fetchInitialGlobalData = async () => {
     try {
-      // Tambahkan .order('name') agar muncul berurutan A-Z
       const { data, error } = await supabase
         .from('initial_users')
         .select('*')
-        .order('name', { ascending: true });
+        .order('name', { ascending: true }); // Urutkan A-Z
 
       if (error) throw error;
 
       if (data) {
         const processedUsers = data.map(u => {
-          // Pengaman jika nama kosong
-          const nameStr = u.name || 'Tanpa Nama';
+          const nameStr = u.name || 'Tanpa Nama'; // Pengaman jika nama kosong
           const nameParts = nameStr.trim().split(/\s+/);
           const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
           return { ...u, name: nameStr, avatar: initials };
@@ -547,10 +546,13 @@ export default function App() {
       }
     } catch (error) {
       console.error('Gagal mengambil data users:', error.message);
-      alert("Gagal memuat daftar pengguna. Silakan segarkan halaman.");
     }
   };
+
+  // Jalankan otomatis saat web pertama kali dimuat
+  useEffect(() => {
     fetchInitialGlobalData();
+  }, []);
   }, []);
 
   useEffect(() => {
@@ -1782,79 +1784,87 @@ export default function App() {
                  </div>
 
                  <div className="overflow-x-auto w-full custom-scrollbar pb-2">
-                   <table className="w-full text-left border-collapse min-w-[500px]">
-                     <thead>
-                       <tr className="bg-slate-50 text-slate-400 text-[9px] md:text-[10px] uppercase tracking-widest font-black border-b border-slate-100">
-                         <th className="p-3 md:p-5 w-10 text-center">
-                           <input 
-                             type="checkbox" 
-                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                             checked={
-                               selectedUsers.length > 0 && 
-                               selectedUsers.length === users.filter(u => 
-                                 (!userSearchQuery || u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.nik?.toLowerCase().includes(userSearchQuery.toLowerCase())) && 
-                                 u.role !== 'admin' 
-                               ).length
-                             }
-                             onChange={(e) => handleSelectAllUsers(e, users)}
-                           />
-                         </th>
-                         <th className="p-3 md:p-5">Pengguna & NIK</th><th className="p-3 md:p-5">Role Sistem</th><th className="p-3 md:p-5">Divisi</th><th className="p-3 md:p-5 text-right">Aksi</th>
-                       </tr>
-                     </thead>
-                     <tbody>
+                    <table className="w-full text-left border-collapse min-w-[500px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-400 text-[9px] md:text-[10px] uppercase tracking-widest font-black border-b border-slate-100">
+                          <th className="p-3 md:p-5 w-10 text-center">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              checked={
+                                selectedUsers.length > 0 && 
+                                selectedUsers.length === users.filter(u => 
+                                  (!userSearchQuery || (u.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.nik || '').toLowerCase().includes(userSearchQuery.toLowerCase())) && 
+                                  u.role !== 'admin' 
+                                ).length
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const selectable = users.filter(u => 
+                                    (!userSearchQuery || (u.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.nik || '').toLowerCase().includes(userSearchQuery.toLowerCase())) && 
+                                    u.role !== 'admin'
+                                  );
+                                  setSelectedUsers(selectable.map(u => u.id));
+                                } else {
+                                  setSelectedUsers([]);
+                                }
+                              }}
+                            />
+                          </th>
+                          <th className="p-3 md:p-5">Pengguna & NIK</th><th className="p-3 md:p-5">Role Sistem</th><th className="p-3 md:p-5">Divisi</th><th className="p-3 md:p-5 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {users
                           .filter(u => {
                             if (!userSearchQuery) return true;
                             const query = userSearchQuery.toLowerCase();
-                            // Gunakan optional chaining (?.) untuk mencegah error jika data null
-                            const matchName = u.name?.toLowerCase().includes(query);
-                            const matchNik = u.nik?.toLowerCase().includes(query);
-                            return matchName || matchNik;
+                            // PENGAMAN: (u.name || '') mencegah error jika data di database kosong
+                            return ((u.name || '').toLowerCase().includes(query) || (u.nik || '').toLowerCase().includes(query));
                           })
                           .map(u => (
-                         <tr key={u.id} className={`border-b hover:bg-slate-50/50 transition-colors ${selectedUsers.includes(u.id) ? 'bg-indigo-50/30 border-indigo-100' : 'border-slate-50'}`}>
-                            <td className="p-3 md:p-5 text-center">
-                              {u.role !== 'admin' && (
-                                <input 
-                                  type="checkbox" 
-                                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                  checked={selectedUsers.includes(u.id)}
-                                  onChange={() => setSelectedUsers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])}
-                                />
-                              )}
+                          <tr key={u.id} className={`border-b hover:bg-slate-50/50 transition-colors ${selectedUsers.includes(u.id) ? 'bg-indigo-50/30 border-indigo-100' : 'border-slate-50'}`}>
+                             <td className="p-3 md:p-5 text-center">
+                               {u.role !== 'admin' && (
+                                 <input 
+                                   type="checkbox" 
+                                   className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                   checked={selectedUsers.includes(u.id)}
+                                   onChange={() => setSelectedUsers(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])}
+                                 />
+                               )}
+                             </td>
+                             <td className="p-3 md:p-5 flex items-center gap-3">
+                               <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-[10px] md:text-xs shrink-0">{u.avatar}</div>
+                               <div>
+                                 <span className="font-bold text-slate-800 block text-xs md:text-sm">{u.name}</span>
+                                 <span className="text-[9px] md:text-[10px] text-slate-500">{u.position} • <span className="font-bold text-indigo-500">{u.nik}</span></span>
+                               </div>
+                             </td>
+                             <td className="p-3 md:p-5"><Badge type={u.role === 'admin' ? 'admin' : u.role === 'direksi' ? 'high' : u.role === 'manager' ? 'low' : 'done'}>{u.role}</Badge></td>
+                             <td className="p-3 md:p-5 font-bold text-slate-600 text-[10px] md:text-xs">{u.division}</td>
+                             
+                             <td className="p-3 md:p-5 text-right">
+                               <div className="flex justify-end gap-1.5 md:gap-2">
+                                   <button type="button" onClick={() => {setEditingUser(u); setIsEditUserModalOpen(true);}} className="p-1.5 md:p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg shadow-sm"><Edit className="w-3.5 h-3.5 md:w-4 md:h-4"/></button>
+                                   
+                                   {u.id !== currentUser.id && u.role !== 'admin' && (
+                                     <button type="button" onClick={() => handleDeleteUser(u.id)} className="p-1.5 md:p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg shadow-sm"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/></button>
+                                   )}
+                               </div>
+                             </td>
+                          </tr>
+                        ))}
+                        {users.filter(u => !userSearchQuery || (u.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.nik || '').toLowerCase().includes(userSearchQuery.toLowerCase())).length === 0 && (
+                          <tr>
+                            <td colSpan="5" className="p-8 text-center text-sm font-bold text-slate-400">
+                              Pengguna tidak ditemukan.
                             </td>
-                            <td className="p-3 md:p-5 flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-[10px] md:text-xs shrink-0">{u.avatar}</div>
-                              <div>
-                                <span className="font-bold text-slate-800 block text-xs md:text-sm">{u.name}</span>
-                                <span className="text-[9px] md:text-[10px] text-slate-500">{u.position} • <span className="font-bold text-indigo-500">{u.nik}</span></span>
-                              </div>
-                            </td>
-                            <td className="p-3 md:p-5"><Badge type={u.role === 'admin' ? 'admin' : u.role === 'direksi' ? 'high' : u.role === 'manager' ? 'low' : 'done'}>{u.role}</Badge></td>
-                            <td className="p-3 md:p-5 font-bold text-slate-600 text-[10px] md:text-xs">{u.division}</td>
-                            
-                            <td className="p-3 md:p-5 text-right">
-                              <div className="flex justify-end gap-1.5 md:gap-2">
-                                  <button type="button" onClick={() => {setEditingUser(u); setIsEditUserModalOpen(true);}} className="p-1.5 md:p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg shadow-sm"><Edit className="w-3.5 h-3.5 md:w-4 md:h-4"/></button>
-                                  
-                                  {u.id !== currentUser.id && u.role !== 'admin' && (
-                                    <button type="button" onClick={() => handleDeleteUser(u.id)} className="p-1.5 md:p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg shadow-sm"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/></button>
-                                  )}
-                              </div>
-                            </td>
-                         </tr>
-                       ))}
-                       {users.filter(u => !userSearchQuery || u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.nik?.toLowerCase().includes(userSearchQuery.toLowerCase())).length === 0 && (
-                         <tr>
-                           <td colSpan="5" className="p-8 text-center text-sm font-bold text-slate-400">
-                             Pengguna tidak ditemukan.
-                           </td>
-                         </tr>
-                       )}
-                     </tbody>
-                   </table>
-                 </div>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
               </Card>
             </div>
           )}
