@@ -261,51 +261,65 @@ export default function App() {
   // --- FUNGSI KIRIM CHAT ---
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || !selectedTask) return;
 
-    const targetTaskId = (activeTab === 'chat' && activeChatId) ? activeChatId : selectedTask?.id;
-    if (!targetTaskId) return;
-
-    const commentObj = { 
-      id: Date.now(), 
-      userId: currentUser?.id, 
-      text: newComment, 
-      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+    // 1. Siapkan objek chat baru
+    const chatMsg = {
+      userId: currentUser.id,
+      text: newComment,
+      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     };
 
-    let updatedCommentsArray = [];
+    const updatedComments = [...(selectedTask.comments || []), chatMsg];
 
-    const targetTask = tasks.find(t => t.id === targetTaskId);
-    if (!targetTask) return;
-
-    const currentComments = Array.isArray(targetTask.comments) ? targetTask.comments : [];
-    updatedCommentsArray = [...currentComments, commentObj];
-
-    // Update state local
-    const updatedTask = { ...targetTask, comments: updatedCommentsArray };
-    setTasks(tasks.map(t => t.id === targetTaskId ? updatedTask : t));
-    setNewComment('');
-
-    if (selectedTask && selectedTask.id === targetTaskId) {
-        setSelectedTask(updatedTask);
-    }
-
-    // Kirim Notifikasi
-    const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
-    relevantUserIds.forEach(targetUserId => {
-      if (targetUserId && targetUserId !== currentUser.id) {
-          addNotification(targetUserId, 'chat', `Pesan baru dari ${currentUser.name} di tugas: "${targetTask.title}"`, targetTask.id);
-      }
-    });
-
-    // Proses ke Supabase
     try {
-      await supabase
-        .from('initial_tasks')
-        .update({ comments: updatedCommentsArray })
-        .eq('id', targetTaskId);
-    } catch (err) {
-      console.error("Koneksi error saat simpan chat", err);
+      // 2. Simpan chat ke dalam database Tugas (Tasks)
+      const { error } = await supabase
+        .from('tasks')
+        .update({ comments: updatedComments })
+        .eq('id', selectedTask.id);
+
+      if (error) throw error;
+
+      // 3. Update tampilan layar lokal agar chat langsung muncul
+      setSelectedTask({ ...selectedTask, comments: updatedComments });
+      setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, comments: updatedComments } : t));
+      setNewComment(''); // Kosongkan kolom input
+
+      // 4. LOGIKA PENTING: TENTUKAN SIAPA YANG DIKIRIMI NOTIFIKASI
+      // Jika yang nge-chat adalah pembuat tugas (Manager), kirim notif ke penerima tugas (Staff)
+      // Jika yang nge-chat adalah penerima tugas (Staff), kirim notif ke pembuat tugas (Manager)
+      let recipientIds = [];
+      
+      if (String(currentUser.id) === String(selectedTask.assignedBy)) {
+        // Manager mengirim pesan, cari tahu siapa saja staff yang ditugaskan
+        recipientIds = selectedTask.assignedTo.includes(',') 
+          ? selectedTask.assignedTo.split(',').map(id => id.trim()) 
+          : [selectedTask.assignedTo];
+      } else {
+        // Staff membalas pesan, kirim ke Manager/Pembuat tugas
+        recipientIds = [selectedTask.assignedBy];
+      }
+
+      // 5. KIRIM NOTIFIKASI KE SUPABASE
+      const notificationsToInsert = recipientIds
+        .filter(id => String(id) !== String(currentUser.id)) // Jangan kirim notif ke diri sendiri
+        .map(recipientId => ({
+          userId: recipientId,
+          type: 'chat',
+          message: `Pesan dari ${currentUser.name}: "${chatMsg.text.substring(0, 30)}${chatMsg.text.length > 30 ? '...' : ''}"`,
+          read_status: false,
+          time: chatMsg.timestamp,
+          taskId: selectedTask.id
+        }));
+
+      if (notificationsToInsert.length > 0) {
+        await supabase.from('notifications').insert(notificationsToInsert);
+      }
+
+    } catch (error) {
+      console.error('Gagal mengirim pesan:', error.message);
+      alert('Pesan gagal dikirim, silakan periksa koneksi Anda.');
     }
   };
 
