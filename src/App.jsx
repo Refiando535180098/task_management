@@ -1263,7 +1263,7 @@ export default function App() {
                
                {/* KOTAK POP-UP NOTIFIKASI (HANYA MENAMPILKAN YANG BELUM DIBACA) */}
                {isNotifOpen && (
-                   <div className="fixed top-20 left-4 right-4 md:absolute md:inset-auto md:top-14 md:right-0 md:w-[400px] bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-[100] overflow-hidden transform origin-top md:origin-top-right transition-all animate-in fade-in zoom-in-95">
+                   <div className="fixed top-50 left-4 right-4 md:absolute md:inset-auto md:top-14 md:right-0 md:w-[400px] bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-[100] overflow-hidden transform origin-top md:origin-top-right transition-all animate-in fade-in zoom-in-95">
                      
                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/90 backdrop-blur-md">
                        <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Baru</h4>
