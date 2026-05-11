@@ -1261,37 +1261,45 @@ export default function App() {
                  </button>
                </div>
                
+               {/* KOTAK POP-UP NOTIFIKASI (HANYA MENAMPILKAN YANG BELUM DIBACA) */}
                {isNotifOpen && (
                    <div className="fixed top-20 left-4 right-4 md:absolute md:inset-auto md:top-14 md:right-0 md:w-[400px] bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-[100] overflow-hidden transform origin-top md:origin-top-right transition-all animate-in fade-in zoom-in-95">
                      
                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/90 backdrop-blur-md">
-                       <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Terbaru</h4>
+                       <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Baru</h4>
+                       {/* Tombol ini akan langsung membersihkan daftar karena semua jadi 'read' */}
                        {unreadNotifsCount > 0 && (
                          <button type="button" onClick={handleReadAllNotifs} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg uppercase tracking-wider transition-colors shadow-sm">
-                           Tandai Semua
+                           Bersihkan Semua
                          </button>
                        )}
                      </div>
                      
                      <div className="max-h-[60vh] md:max-h-[450px] overflow-y-auto custom-scrollbar bg-white">
-                       {myNotifications.length === 0 ? (
+                       {/* FILTER: Hanya tampilkan yang status 'read' nya FALSE */}
+                       {myNotifications.filter(n => !n.read).length === 0 ? (
                          <div className="p-10 flex flex-col items-center justify-center text-center">
-                           <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Bell className="w-6 h-6 text-slate-300" /></div>
-                           <p className="text-slate-500 text-xs md:text-sm font-bold">Belum ada notifikasi baru.</p>
+                           <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                             <BellRing className="w-6 h-6 text-indigo-300 animate-bounce" />
+                           </div>
+                           <p className="text-slate-500 text-xs md:text-sm font-bold">Semua pesan sudah dibaca.</p>
+                           <p className="text-[10px] text-slate-400 mt-1">Daftar ini akan otomatis kosong agar Anda tetap fokus.</p>
                          </div>
                        ) : (
-                         myNotifications.map(notif => (
-                           <div key={notif.id} onClick={() => handleReadNotification(notif)} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3.5 ${!notif.read ? 'bg-indigo-50/40' : ''}`}>
+                         myNotifications
+                          .filter(n => !n.read) // Baris Kunci: Memfilter agar yang sudah dibaca tidak muncul
+                          .map(notif => (
+                           <div key={notif.id} onClick={() => handleReadNotification(notif)} className="p-4 border-b border-slate-50 hover:bg-indigo-50/30 transition-colors cursor-pointer flex gap-3.5 bg-indigo-50/10">
                              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
                                {notif.type === 'chat' ? <MessageSquare className="w-4 h-4 md:w-5 md:h-5" /> : <CheckSquare className="w-4 h-4 md:w-5 md:h-5" />}
                              </div>
                              <div className="flex-1 min-w-0">
-                               <p className={`text-xs md:text-sm leading-snug line-clamp-2 pr-2 ${!notif.read ? 'font-black text-slate-800' : 'font-bold text-slate-500'}`}>{notif.message}</p>
-                               <p className="text-[9px] md:text-[10px] text-slate-400 mt-1.5 flex items-center gap-1 font-bold tracking-wide"><Clock className="w-3 h-3"/> {notif.time}</p>
+                               <p className="text-xs md:text-sm leading-snug line-clamp-2 pr-2 font-black text-slate-800">{notif.message}</p>
+                               <p className="text-[9px] md:text-[10px] text-slate-400 mt-1.5 flex items-center gap-1 font-bold tracking-wide">
+                                 <Clock className="w-3 h-3"/> {notif.time}
+                               </p>
                              </div>
-                             {!notif.read && (
-                               <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 mt-2 shrink-0 shadow-[0_0_8px_rgba(79,70,229,0.5)]"></div>
-                             )}
+                             <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 shrink-0"></div>
                            </div>
                          ))
                        )}
