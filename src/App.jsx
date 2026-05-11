@@ -49,26 +49,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
-
-  // --- STATE UNTUK ROLE SISTEM ---
-  const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']);
-  const [newRoleName, setNewRoleName] = useState('');
-
-  // --- FUNGSI TAMBAH & HAPUS ROLE ---
-  const handleAddRole = () => {
-    const roleClean = newRoleName.trim().toLowerCase();
-    if (roleClean && !roles.includes(roleClean)) {
-      setRoles([...roles, roleClean]);
-      setNewRoleName('');
-    }
-  };
-
-  const handleDeleteRole = (roleToDelete) => {
-    if (['admin', 'staff'].includes(roleToDelete)) {
-      return alert("Role 'admin' dan 'staff' adalah role bawaan inti sistem dan tidak boleh dihapus!");
-    }
-    setRoles(roles.filter(r => r !== roleToDelete));
-  };
+  
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
