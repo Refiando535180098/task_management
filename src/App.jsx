@@ -2332,7 +2332,7 @@ export default function App() {
           )}
 
           {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60]">
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60] print:hidden">
             {/* Tambahan pb-safe untuk iPhone agar tidak menabrak garis bawah layar */}
             <div className="flex justify-between items-center h-[72px] pb-safe px-4">
               
