@@ -128,9 +128,6 @@ export default function App() {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // --- REFERENSI UNTUK SUARA NOTIFIKASI ---
-  const prevUnreadCount = useRef(0);
-
   const [isUploading, setIsUploading] = useState(false);
 
   const [isMassUserModalOpen, setIsMassUserModalOpen] = useState(false);
@@ -258,58 +255,54 @@ export default function App() {
     }
   };
 
-  // --- FUNGSI KIRIM CHAT & TRIGGER NOTIFIKASI ---
+  // --- FUNGSI KIRIM CHAT ---
   const handleAddComment = async (e) => {
     e.preventDefault();
-    // Pengaman ekstra jika data belum siap saat di-refresh
-    if (!newComment || !newComment.trim() || !selectedTask || !currentUser) return;
+    if (!newComment.trim()) return;
 
-    const chatMsg = {
-      userId: currentUser.id,
-      text: newComment,
-      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    const targetTaskId = (activeTab === 'chat' && activeChatId) ? activeChatId : selectedTask?.id;
+    if (!targetTaskId) return;
+
+    const commentObj = { 
+      id: Date.now(), 
+      userId: currentUser?.id, 
+      text: newComment, 
+      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
     };
 
-    const updatedComments = [...(selectedTask.comments || []), chatMsg];
+    let updatedCommentsArray = [];
 
+    const targetTask = tasks.find(t => t.id === targetTaskId);
+    if (!targetTask) return;
+
+    const currentComments = Array.isArray(targetTask.comments) ? targetTask.comments : [];
+    updatedCommentsArray = [...currentComments, commentObj];
+
+    // Update state local
+    const updatedTask = { ...targetTask, comments: updatedCommentsArray };
+    setTasks(tasks.map(t => t.id === targetTaskId ? updatedTask : t));
+    setNewComment('');
+
+    if (selectedTask && selectedTask.id === targetTaskId) {
+        setSelectedTask(updatedTask);
+    }
+
+    // Kirim Notifikasi
+    const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
+    relevantUserIds.forEach(targetUserId => {
+      if (targetUserId && targetUserId !== currentUser.id) {
+          addNotification(targetUserId, 'chat', `Pesan baru dari ${currentUser.name} di tugas: "${targetTask.title}"`, targetTask.id);
+      }
+    });
+
+    // Proses ke Supabase
     try {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ comments: updatedComments })
-        .eq('id', selectedTask.id);
-
-      if (error) throw error;
-
-      setSelectedTask({ ...selectedTask, comments: updatedComments });
-      setTasks(tasks.map(t => t.id === selectedTask.id ? { ...t, comments: updatedComments } : t));
-      setNewComment('');
-
-      let recipientIds = [];
-      if (String(currentUser.id) === String(selectedTask.assignedBy)) {
-        recipientIds = selectedTask.assignedTo.includes(',') 
-          ? selectedTask.assignedTo.split(',').map(id => id.trim()) 
-          : [selectedTask.assignedTo];
-      } else {
-        recipientIds = [selectedTask.assignedBy];
-      }
-
-      const notificationsToInsert = recipientIds
-        .filter(id => String(id) !== String(currentUser.id))
-        .map(recipientId => ({
-          userId: recipientId,
-          type: 'chat',
-          message: `Pesan dari ${currentUser.name}: "${chatMsg.text.substring(0, 30)}${chatMsg.text.length > 30 ? '...' : ''}"`,
-          read_status: false,
-          time: chatMsg.timestamp,
-          taskId: selectedTask.id
-        }));
-
-      if (notificationsToInsert.length > 0) {
-        await supabase.from('notifications').insert(notificationsToInsert);
-      }
-
-    } catch (error) {
-      console.error('Gagal mengirim pesan:', error.message);
+      await supabase
+        .from('initial_tasks')
+        .update({ comments: updatedCommentsArray })
+        .eq('id', targetTaskId);
+    } catch (err) {
+      console.error("Koneksi error saat simpan chat", err);
     }
   };
 
@@ -518,24 +511,6 @@ export default function App() {
   const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
   const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
   const [showMobileChat, setShowMobileChat] = useState(false);
-
-
-  // --- EFEK SUARA NOTIFIKASI BARU ---
-  useEffect(() => {
-    // Cek apakah jumlah notifikasi belum dibaca saat ini LEBIH BANYAK dari sebelumnya
-    if (unreadNotifsCount > prevUnreadCount.current) {
-      // 1. Ambil file suara dari folder public
-      const notifSound = new Audio('/Notif suara.mp3');
-      
-      // 2. Mainkan suara (dilengkapi error handling jika diblokir browser)
-      notifSound.play().catch(err => {
-        console.warn("Browser memblokir suara otomatis karena user belum mengklik layar.");
-      });
-    }
-    
-    // 3. Perbarui memori referensi ke jumlah yang baru
-    prevUnreadCount.current = unreadNotifsCount;
-  }, [unreadNotifsCount]); // Efek ini akan berjalan setiap kali angka unreadNotifsCount berubah
 
   // Otomatis kembalikan layar ke "Info Pekerjaan" setiap kali membuka tugas baru
   useEffect(() => {
