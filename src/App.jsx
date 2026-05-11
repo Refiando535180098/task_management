@@ -796,67 +796,74 @@ export default function App() {
     document.body.removeChild(a);
   };
 
-  const handleSaveMassTable = async () => {
-    const validUsers = massUsersData.filter(u => u.nik.trim() !== '' && u.name.trim() !== '');
-    if (validUsers.length === 0) return alert("Isi minimal 1 data pengguna (NIK & Nama)!");
+  const handleMassUploadCSV = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    // WADAH UNTUK MEMISAHKAN YANG BARU DAN YANG DUPLIKAT
-    const uniqueNewUsers = [];
-    const duplicateNames = [];
-
-    validUsers.forEach(u => {
-      const uNik = u.nik.trim();
-      const uName = u.name.trim();
-
-      // Cek apakah sudah ada di Database ATAU ada duplikat di dalam inputan itu sendiri
-      const isExistInDB = users.some(existing => existing.nik === uNik || existing.name.toLowerCase() === uName.toLowerCase());
-      const isExistInBatch = uniqueNewUsers.some(newU => newU.nik === uNik || newU.name.toLowerCase() === uName.toLowerCase());
-
-      if (isExistInDB || isExistInBatch) {
-        duplicateNames.push(uName); // Catat yang ditolak
-      } else {
-        uniqueNewUsers.push({
-          nik: uNik,
-          password: u.password.trim() || '123456',
-          name: uName,
-          role: u.role || 'staff',
-          division: u.division || 'Pusat',
-          position: u.position.trim() || '-',
-          avatar: uName.substring(0,2).toUpperCase()
-        });
-      }
-    });
-
-    if (uniqueNewUsers.length === 0) {
-      return alert("Upload dibatalkan!\nSemua data yang Anda masukkan (NIK/Nama) sudah terdaftar di sistem.");
+    if (!file.name.endsWith('.csv')) {
+      return alert("Harap unggah file dengan format .csv");
     }
 
-    try {
-      const { data, error } = await supabase.from('initial_users').insert(uniqueNewUsers).select();
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const lines = text.split('\n').filter(line => line.trim() !== ''); 
       
-      if (!error && data) {
-        setUsers([...users, ...data]);
-        setIsMassUserModalOpen(false);
+      const uniqueNewUsers = [];
+      const duplicateNames = [];
+
+      for(let i = 1; i < lines.length; i++) {
+        const [nik, password, name, role, division, position] = lines[i].split(',');
         
-        // Pesan Dinamis jika ada yang diabaikan
-        let msg = `Berhasil menyimpan ${uniqueNewUsers.length} pengguna!`;
-        if (duplicateNames.length > 0) {
-          msg += `\n\nDIABAIKAN (${duplicateNames.length} data duplikat/sudah ada):\n- ${duplicateNames.join('\n- ')}`;
+        if (nik && name) {
+          const uNik = nik.trim();
+          const uName = name.trim();
+          const nameParts = uName.split(/\s+/);
+          const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+          const isExistInDB = users.some(existing => existing.nik === uNik || existing.name.toLowerCase() === uName.toLowerCase());
+          const isExistInBatch = uniqueNewUsers.some(newU => newU.nik === uNik || newU.name.toLowerCase() === uName.toLowerCase());
+
+          if (isExistInDB || isExistInBatch) {
+            duplicateNames.push(uName);
+          } else {
+            uniqueNewUsers.push({
+              nik: uNik,
+              password: password ? password.trim() : '123456',
+              name: uName,
+              role: role ? role.trim().toLowerCase() : 'staff',
+              division: division ? division.trim() : 'Pusat',
+              position: position ? position.trim() : '-',
+              avatar: initials
+            });
+          }
         }
-        alert(msg);
-        
-        // Reset form ke 3 baris kosong
-        setMassUsersData([
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' },
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' },
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
-        ]);
-      } else {
-        alert("Gagal: " + error?.message);
       }
-    } catch (err) {
-      alert("Gagal terhubung ke server database.");
-    }
+
+      if (uniqueNewUsers.length === 0) {
+        return alert("Upload dibatalkan!\nSemua data di dalam CSV (NIK/Nama) sudah terdaftar di sistem.");
+      }
+
+      try {
+        const { data, error } = await supabase.from('initial_users').insert(uniqueNewUsers).select();
+        
+        if (!error && data) {
+          setUsers([...users, ...data]);
+          
+          let msg = `Berhasil mengimpor ${uniqueNewUsers.length} pengguna dari CSV!`;
+          if (duplicateNames.length > 0) {
+            msg += `\n\nDIABAIKAN (${duplicateNames.length} data duplikat/sudah ada):\n- ${duplicateNames.join('\n- ')}`;
+          }
+          alert(msg);
+        } else {
+          alert("Gagal menyimpan ke database: " + error?.message);
+        }
+      } catch (err) { 
+        alert("Gagal terhubung ke server database.");
+      }
+    };
+    reader.readAsText(file); 
+    e.target.value = ''; 
   };
 
   const handleMassChange = (index, field, value) => {
