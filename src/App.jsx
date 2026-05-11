@@ -1228,7 +1228,7 @@ export default function App() {
                </div>
                
                {isNotifOpen && (
-                   <div className="absolute top-20 right-16 md:right-16 md:top-20 md:mt-20 w-[calc(100vw-2rem)] md:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+                   <div className="absolute top-20 right-15 md:right-15 md:top-20 md:mt-20 w-[calc(100vw-2rem)] md:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
                        <h4 className="font-bold text-slate-800">Notifikasi Terbaru</h4>
                        {unreadNotifsCount > 0 && <button type="button" onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))} className="text-[10px] font-bold text-indigo-600 hover:underline uppercase tracking-wider">Tandai Dibaca</button>}
