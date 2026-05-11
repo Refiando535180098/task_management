@@ -1231,11 +1231,11 @@ export default function App() {
           
         </div>
 
-      {/* OVERLAY MOBILE SIDEBAR */}
-      <div className={`fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
+        {/* OVERLAY MOBILE SIDEBAR */}
+        <div className={`fixed inset-0 bg-slate-900/40 z-[70] md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
 
-      {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
-      <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-50 transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
+        {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
+        <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-[80] transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
         
         {/* HEADER SIDEBAR (LOGO SEBAGAI TOMBOL TOGGLE) */}
         <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
@@ -2631,7 +2631,7 @@ export default function App() {
               </Card>
             </div>
           )}
-          
+
           {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60] print:hidden">
             {/* Tambahan pb-safe untuk iPhone agar tidak menabrak garis bawah layar */}
