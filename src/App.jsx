@@ -1916,7 +1916,7 @@ export default function App() {
 
           {/* === MODAL 1: DETAIL TUGAS & APPROVAL === */}
           {selectedTask && activeTab !== 'chat' && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden pb-5">
               <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
                 
                 {/* PANEL KIRI: INFO TUGAS (Sembunyi di Mobile jika Chat Aktif) */}
