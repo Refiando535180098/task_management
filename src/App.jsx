@@ -128,6 +128,9 @@ export default function App() {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  // --- REFERENSI UNTUK SUARA NOTIFIKASI ---
+  const prevUnreadCount = useRef(0);
+
   const [isUploading, setIsUploading] = useState(false);
 
   const [isMassUserModalOpen, setIsMassUserModalOpen] = useState(false);
@@ -511,6 +514,24 @@ export default function App() {
   const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
   const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
   const [showMobileChat, setShowMobileChat] = useState(false);
+
+
+  // --- EFEK SUARA NOTIFIKASI BARU ---
+  useEffect(() => {
+    // Cek apakah jumlah notifikasi belum dibaca saat ini LEBIH BANYAK dari sebelumnya
+    if (unreadNotifsCount > prevUnreadCount.current) {
+      // 1. Ambil file suara dari folder public
+      const notifSound = new Audio('/Notif suara.mp3');
+      
+      // 2. Mainkan suara (dilengkapi error handling jika diblokir browser)
+      notifSound.play().catch(err => {
+        console.warn("Browser memblokir suara otomatis karena user belum mengklik layar.");
+      });
+    }
+    
+    // 3. Perbarui memori referensi ke jumlah yang baru
+    prevUnreadCount.current = unreadNotifsCount;
+  }, [unreadNotifsCount]); // Efek ini akan berjalan setiap kali angka unreadNotifsCount berubah
 
   // Otomatis kembalikan layar ke "Info Pekerjaan" setiap kali membuka tugas baru
   useEffect(() => {
