@@ -1387,11 +1387,11 @@ export default function App() {
 
               {/* Daftar Aktivitas Terkini (ala Recent Transactions) */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
-                <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center mb-10">
+                <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
                   <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600">Lihat Semua</button>
                 </div>
-                <div className="p-2 md:p-4">
+                <div className="p-2 md:p-4 mb-5">
                   {activeTasks.slice(0, 5).map((task) => (
                     <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer border border-transparent">
                       <div className="flex items-center gap-4">
