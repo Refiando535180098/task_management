@@ -1280,14 +1280,15 @@ export default function App() {
                        {myNotifications.filter(n => !n.read).length === 0 ? (
                          <div className="p-10 flex flex-col items-center justify-center text-center">
                            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                             <BellRing className="w-6 h-6 text-indigo-300 animate-bounce" />
+                             {/* Ikon kembali menggunakan Bell biasa agar tidak error */}
+                             <Bell className="w-6 h-6 text-indigo-300 animate-bounce" />
                            </div>
                            <p className="text-slate-500 text-xs md:text-sm font-bold">Semua pesan sudah dibaca.</p>
                            <p className="text-[10px] text-slate-400 mt-1">Daftar ini akan otomatis kosong agar Anda tetap fokus.</p>
                          </div>
                        ) : (
                          myNotifications
-                          .filter(n => !n.read) // Baris Kunci: Memfilter agar yang sudah dibaca tidak muncul
+                          .filter(n => !n.read) 
                           .map(notif => (
                            <div key={notif.id} onClick={() => handleReadNotification(notif)} className="p-4 border-b border-slate-50 hover:bg-indigo-50/30 transition-colors cursor-pointer flex gap-3.5 bg-indigo-50/10">
                              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
