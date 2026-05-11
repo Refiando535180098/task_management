@@ -1114,6 +1114,17 @@ export default function App() {
             <p className="text-center text-[10px] md:text-xs text-slate-400 font-medium pt-2">Hubungi HR / Admin bila lupa akses.</p>
           </form>
         </Card>
+        {/* COPYRIGHT ELEGANT (LOGIN SCREEN) */}
+        <div className="absolute bottom-6 md:bottom-8 left-0 right-0 flex flex-col items-center justify-center opacity-60 hover:opacity-100 transition-opacity duration-300 z-10 cursor-default">
+           <div className="flex items-center gap-2 text-[10px] md:text-xs font-black text-yellow-900/50 uppercase tracking-widest">
+             <span>© {new Date().getFullYear()}</span>
+             <span className="w-1.5 h-1.5 rounded-full bg-yellow-600/40"></span>
+             <span>{sysConfig.brandName}</span>
+           </div>
+           <p className="text-[8px] md:text-[9px] font-bold text-yellow-900/40 mt-1 uppercase tracking-widest flex items-center gap-1">
+             Crafted by <span className="text-yellow-800/60 font-black">Vanda Tech</span>
+           </p>
+        </div>
       </div>
     );
   }
