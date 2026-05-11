@@ -1494,7 +1494,7 @@ export default function App() {
                </div>
 
                {/* Task List (Desain Riwayat) */}
-               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-28">
+               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
                  
                  <div className="space-y-1 overflow-y-auto custom-scrollbar">
