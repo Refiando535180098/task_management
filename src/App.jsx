@@ -1887,112 +1887,138 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: PENGATURAN */}
+          {/* TAB: PENGATURAN (DESAIN ENTERPRISE PREMIUM) */}
           {activeTab === 'admin_settings' && currentUser.role === 'admin' && (
-            <div className="max-w-3xl space-y-4 md:space-y-6 animate-in fade-in duration-300 md:p-10 pb-28 md:pb-0">
-              <Card className="p-5 md:p-8 border-0 shadow-sm bg-white rounded-3xl">
-                <h3 className="font-black text-base md:text-xl text-slate-800 mb-6 border-b border-slate-100 pb-4 flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-indigo-500"/> Konfigurasi Utama Sistem
+            <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-300 pb-32 md:pb-10">
+              
+              {/* HEADER HALAMAN */}
+              <div className="px-2 md:px-0 mb-2 md:mb-6 mt-4 md:mt-0">
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                  <Settings className="w-7 h-7 md:w-8 md:h-8 text-indigo-600" />
+                  Pengaturan Sistem
+                </h2>
+                <p className="text-xs md:text-sm font-bold text-slate-500 mt-1 md:mt-2">Kelola identitas, keamanan, dan kebijakan otomatisasi aplikasi.</p>
+              </div>
+
+              {/* KARTU 1: IDENTITAS & ORGANISASI */}
+              <div className="bg-white p-5 md:p-8 rounded-[2rem] shadow-sm border border-slate-100/80 transition-all hover:shadow-md">
+                <h3 className="font-black text-sm md:text-base text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><Building className="w-4 h-4"/></span>
+                  Identitas & Organisasi
                 </h3>
                 
-                <div className="space-y-6 md:space-y-8">
-                  {/* --- BAGIAN 1: IDENTITAS & ORGANISASI --- */}
-                  <div className="space-y-5">
-                    <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg w-fit">Identitas & Organisasi</h4>
-                    <div>
-                      <label className="block text-[10px] md:text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">Nama Perusahaan (Brand)</label>
-                      <input type="text" className="w-full px-4 py-3 md:py-3.5 border-2 border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:outline-none focus:border-indigo-500 bg-slate-50 focus:bg-white transition-colors" value={configForm.brandName} onChange={(e) => setConfigForm({...configForm, brandName: e.target.value})} />
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-2.5">Nama Perusahaan (Brand)</label>
+                    <input type="text" className="w-full px-5 py-3.5 md:py-4 border-2 border-slate-200 rounded-2xl font-bold text-slate-800 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 bg-slate-50/50 focus:bg-white transition-all" value={configForm.brandName} onChange={(e) => setConfigForm({...configForm, brandName: e.target.value})} placeholder="Masukkan nama perusahaan..." />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-2.5">Manajemen Divisi</label>
+                    <div className="flex flex-col md:flex-row gap-3 mb-5">
+                      <input type="text" value={newDivName} onChange={e => setNewDivName(e.target.value)} placeholder="Ketik divisi baru (misal: IT Support)..." className="flex-1 px-5 py-3.5 border-2 border-slate-200 rounded-2xl font-bold text-sm bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500 transition-all" />
+                      <button onClick={handleAddDivision} className="bg-slate-800 hover:bg-black text-white px-8 py-3.5 rounded-2xl font-black text-sm shadow-md transition-transform active:scale-95 shrink-0">Tambah Divisi</button>
                     </div>
                     
-                    <div className="mb-4">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Daftar Divisi Aktif</label>
-                      <div className="flex gap-2 mb-4">
-                        <input type="text" value={newDivName} onChange={e => setNewDivName(e.target.value)} placeholder="Ketik nama divisi baru..." className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500 transition-colors" />
-                        <button onClick={handleAddDivision} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 rounded-xl font-bold text-sm shadow-sm transition-colors">Tambah</button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        {divisions.map(d => (
-                          <div key={d} className="flex items-center justify-between p-3 bg-white rounded-xl border-2 border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
-                            <span className="font-bold text-xs md:text-sm text-slate-700">{d}</span>
-                            <button onClick={() => handleDeleteDivision(d)} className="text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
-                          </div>
-                        ))}
-                      </div>
+                    {/* Tampilan Divisi ala "Tags/Pills" */}
+                    <div className="flex flex-wrap gap-2.5">
+                      {divisions.map(d => (
+                        <div key={d} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-bold text-xs md:text-sm transition-colors group cursor-default border border-slate-200/50">
+                          <span>{d}</span>
+                          <button onClick={() => handleDeleteDivision(d)} className="text-slate-400 hover:text-red-500 bg-white rounded-full p-1 shadow-sm transition-colors"><X className="w-3 h-3"/></button>
+                        </div>
+                      ))}
+                      {divisions.length === 0 && <span className="text-xs font-bold text-slate-400 italic px-2">Belum ada divisi terdaftar.</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* KARTU 2: KEBIJAKAN & KEAMANAN */}
+              <div className="bg-white p-5 md:p-8 rounded-[2rem] shadow-sm border border-slate-100/80 transition-all hover:shadow-md">
+                <h3 className="font-black text-sm md:text-base text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <span className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><Shield className="w-4 h-4"/></span>
+                  Kebijakan & Keamanan Data
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+                  {/* Batas Upload */}
+                  <div className="p-5 border-2 border-slate-100 rounded-2xl bg-slate-50/30 hover:border-orange-200 transition-colors">
+                     <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Batas Ukuran Lampiran</label>
+                     <select value={configForm.maxUploadSize || '5'} onChange={(e) => setConfigForm({...configForm, maxUploadSize: e.target.value})} className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none cursor-pointer bg-white transition-all appearance-none">
+                       <option value="2">2 MB (Hemat Kuota)</option>
+                       <option value="5">5 MB (Standar Optimal)</option>
+                       <option value="10">10 MB (Kualitas Tinggi)</option>
+                       <option value="20">20 MB (Dokumen Besar)</option>
+                     </select>
+                     <p className="text-[10px] text-slate-400 font-medium mt-3 leading-relaxed">Cegah database penuh dengan membatasi ukuran maksimal file yang diunggah staf.</p>
+                  </div>
+
+                  {/* Batas Sesi */}
+                  <div className="p-5 border-2 border-slate-100 rounded-2xl bg-slate-50/30 hover:border-orange-200 transition-colors">
+                     <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Batas Waktu Sesi (Logout)</label>
+                     <select value={configForm.sessionTimeout || '60'} onChange={(e) => setConfigForm({...configForm, sessionTimeout: e.target.value})} className="w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none cursor-pointer bg-white transition-all appearance-none">
+                       <option value="30">30 Menit (Keamanan Super)</option>
+                       <option value="60">1 Jam (Standar Keamanan)</option>
+                       <option value="720">12 Jam (Satu Shift Kerja)</option>
+                       <option value="0">Tidak Pernah Berakhir</option>
+                     </select>
+                     <p className="text-[10px] text-slate-400 font-medium mt-3 leading-relaxed">Otomatis mengeluarkan akun jika layar dibiarkan tanpa aktivitas untuk mencegah kebocoran data.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* KARTU 3: OTOMASI & SAKLAR SISTEM */}
+              <div className="bg-white p-5 md:p-8 rounded-[2rem] shadow-sm border border-slate-100/80 transition-all hover:shadow-md">
+                <h3 className="font-black text-sm md:text-base text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><Activity className="w-4 h-4"/></span>
+                  Otomasi & Status Sistem
+                </h3>
+                
+                <div className="space-y-3">
+                  {/* Saklar 1: Mode Disiplin */}
+                  <div className="flex items-center justify-between p-4 md:p-5 border-2 border-slate-100 rounded-2xl bg-white cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/30 transition-all" onClick={() => setConfigForm({...configForm, strictMode: !configForm.strictMode})}>
+                    <div className="pr-4">
+                      <h4 className="font-black text-slate-800 text-sm md:text-base">Mode Disiplin (Wajib Bukti)</h4>
+                      <p className="text-[10px] md:text-xs text-slate-500 mt-1 font-medium leading-relaxed">Karyawan tidak bisa menyelesaikan tugas tanpa melampirkan foto/dokumen bukti.</p>
+                    </div>
+                    {/* Toggle Switch ala iOS */}
+                    <div className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors duration-300 shrink-0 ${configForm.strictMode ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                      <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ${configForm.strictMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
                     </div>
                   </div>
 
-                  {/* --- BAGIAN 2: KEBIJAKAN & KEAMANAN (FITUR BARU) --- */}
-                  <div className="space-y-5 pt-6 border-t border-slate-100">
-                    <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg w-fit">Kebijakan & Keamanan Data</h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Batas Upload Baru */}
-                      <div className="p-4 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
-                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Batas Ukuran Lampiran</label>
-                         <select value={configForm.maxUploadSize || '5'} onChange={(e) => setConfigForm({...configForm, maxUploadSize: e.target.value})} className="w-full px-3 py-2 border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 focus:border-indigo-500 outline-none cursor-pointer">
-                           <option value="2">Maksimal 2 MB (Hemat Kuota)</option>
-                           <option value="5">Maksimal 5 MB (Standar)</option>
-                           <option value="10">Maksimal 10 MB (HD Gambar)</option>
-                           <option value="20">Maksimal 20 MB (Dokumen Besar)</option>
-                         </select>
-                         <p className="text-[9px] text-slate-400 font-bold mt-2 leading-tight">Batasi ukuran file bukti tugas agar penyimpanan database tidak cepat penuh.</p>
-                      </div>
-
-                      {/* Batas Waktu Sesi Baru */}
-                      <div className="p-4 border-2 border-slate-100 rounded-2xl bg-white shadow-sm">
-                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Batas Waktu Sesi (Otomatis Keluar)</label>
-                         <select value={configForm.sessionTimeout || '60'} onChange={(e) => setConfigForm({...configForm, sessionTimeout: e.target.value})} className="w-full px-3 py-2 border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 focus:border-indigo-500 outline-none cursor-pointer">
-                           <option value="30">30 Menit (Keamanan Tinggi)</option>
-                           <option value="60">1 Jam (Standar)</option>
-                           <option value="720">12 Jam (Jam Kerja)</option>
-                           <option value="0">Jangan Pernah Logout</option>
-                         </select>
-                         <p className="text-[9px] text-slate-400 font-bold mt-2 leading-tight">Otomatis mengeluarkan akun karyawan jika layar dibiarkan menyala tanpa disentuh.</p>
-                      </div>
+                  {/* Saklar 2: Email Notif */}
+                  <div className="flex items-center justify-between p-4 md:p-5 border-2 border-slate-100 rounded-2xl bg-white cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/30 transition-all" onClick={() => setConfigForm({...configForm, autoEmail: !configForm.autoEmail})}>
+                    <div className="pr-4">
+                      <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Pengingat Otomatis</h4>
+                      <p className="text-[10px] md:text-xs text-slate-500 mt-1 font-medium leading-relaxed">Sistem akan membunyikan alarm/notifikasi ke karyawan jika ada deadline hari ini.</p>
                     </div>
-                  </div>
-
-                  {/* --- BAGIAN 3: SISTEM & OTOMASI (SAKLAR TOGGLE) --- */}
-                  <div className="space-y-4 pt-6 border-t border-slate-100">
-                    <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg w-fit">Otomasi & Status Sistem</h4>
-                    
-                    {/* Saklar 1: Wajib Lampiran (BARU) */}
-                    <div className="flex items-center justify-between p-4 md:p-5 border-2 border-slate-100 rounded-2xl bg-slate-50 cursor-pointer hover:border-indigo-200 transition-colors" onClick={() => setConfigForm({...configForm, strictMode: !configForm.strictMode})}>
-                      <div>
-                        <h4 className="font-black text-slate-800 text-[11px] md:text-sm">Mode Disiplin (Wajib Bukti)</h4>
-                        <p className="text-[9px] md:text-[10px] text-slate-500 mt-1 font-bold">Karyawan wajib mengunggah file lampiran sebelum klik 'Selesai'.</p>
-                      </div>
-                      <div className={`w-12 h-6 ${configForm.strictMode ? 'bg-indigo-600' : 'bg-slate-300'} rounded-full relative transition-colors shrink-0 shadow-inner`}><div className={`w-4 h-4 bg-white rounded-full shadow-md absolute top-1 transition-all ${configForm.strictMode ? 'right-1' : 'left-1'}`}></div></div>
-                    </div>
-
-                    {/* Saklar 2: Email Notif */}
-                    <div className="flex items-center justify-between p-4 md:p-5 border-2 border-slate-100 rounded-2xl bg-slate-50 cursor-pointer hover:border-indigo-200 transition-colors" onClick={() => setConfigForm({...configForm, autoEmail: !configForm.autoEmail})}>
-                      <div>
-                        <h4 className="font-black text-slate-800 text-[11px] md:text-sm">Kirim Notifikasi Tugas Harian</h4>
-                        <p className="text-[9px] md:text-[10px] text-slate-500 mt-1 font-bold">Bot otomatis mengingatkan staf setiap pagi tentang deadline.</p>
-                      </div>
-                      <div className={`w-12 h-6 ${configForm.autoEmail ? 'bg-indigo-600' : 'bg-slate-300'} rounded-full relative transition-colors shrink-0 shadow-inner`}><div className={`w-4 h-4 bg-white rounded-full shadow-md absolute top-1 transition-all ${configForm.autoEmail ? 'right-1' : 'left-1'}`}></div></div>
-                    </div>
-                    
-                    {/* Saklar 3: Maintenance */}
-                    <div className="flex items-center justify-between p-4 md:p-5 border-2 border-red-100 rounded-2xl bg-red-50/50 cursor-pointer hover:border-red-300 transition-colors" onClick={() => setConfigForm({...configForm, maintenanceMode: !configForm.maintenanceMode})}>
-                      <div>
-                        <h4 className="font-black text-red-700 text-[11px] md:text-sm">Mode Perbaikan (Maintenance)</h4>
-                        <p className="text-[9px] md:text-[10px] text-red-500 mt-1 font-bold">Kunci akses sistem untuk semua non-Admin. Gunakan saat update data.</p>
-                      </div>
-                      <div className={`w-12 h-6 ${configForm.maintenanceMode ? 'bg-red-600' : 'bg-slate-300'} rounded-full relative transition-colors shrink-0 shadow-inner`}><div className={`w-4 h-4 bg-white rounded-full shadow-md absolute top-1 transition-all ${configForm.maintenanceMode ? 'right-1' : 'left-1'}`}></div></div>
+                    <div className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors duration-300 shrink-0 ${configForm.autoEmail ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                      <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ${configForm.autoEmail ? 'translate-x-6' : 'translate-x-0'}`}></div>
                     </div>
                   </div>
                   
-                  {/* TOMBOL SIMPAN */}
-                  <div className="pt-6">
-                    <button type="button" onClick={handleSaveConfig} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl hover:bg-black transform hover:-translate-y-1 active:translate-y-0 transition-all text-sm md:text-base flex items-center justify-center gap-2">
-                       <CheckCircle2 className="w-5 h-5"/> Terapkan Pengaturan Sistem
-                    </button>
+                  {/* Saklar 3: Maintenance */}
+                  <div className={`flex items-center justify-between p-4 md:p-5 border-2 rounded-2xl cursor-pointer transition-all ${configForm.maintenanceMode ? 'bg-red-50/80 border-red-200' : 'bg-white border-slate-100 hover:border-red-200'}`} onClick={() => setConfigForm({...configForm, maintenanceMode: !configForm.maintenanceMode})}>
+                    <div className="pr-4">
+                      <h4 className={`font-black text-sm md:text-base ${configForm.maintenanceMode ? 'text-red-700' : 'text-slate-800'}`}>Mode Pemeliharaan (Maintenance)</h4>
+                      <p className={`text-[10px] md:text-xs mt-1 font-medium leading-relaxed ${configForm.maintenanceMode ? 'text-red-500' : 'text-slate-500'}`}>Kunci total akses sistem untuk semua Karyawan. Hanya Admin yang bisa masuk.</p>
+                    </div>
+                    <div className={`w-14 h-8 flex items-center rounded-full p-1 transition-colors duration-300 shrink-0 ${configForm.maintenanceMode ? 'bg-red-600' : 'bg-slate-300'}`}>
+                      <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-300 ${configForm.maintenanceMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                    </div>
                   </div>
-
                 </div>
-              </Card>
+              </div>
+              
+              {/* TOMBOL SIMPAN MELAYANG (FLOATING ACTION) */}
+              <div className="sticky bottom-24 md:bottom-10 z-40 px-2 md:px-0">
+                <button type="button" onClick={handleSaveConfig} className="w-full md:w-auto md:min-w-[300px] md:mx-auto py-4 md:py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-[0_10px_25px_rgba(79,70,229,0.4)] hover:bg-indigo-700 hover:shadow-[0_15px_35px_rgba(79,70,229,0.5)] transform hover:-translate-y-1 active:translate-y-0 transition-all text-sm md:text-base flex items-center justify-center gap-2 border border-indigo-500">
+                   <CheckCircle2 className="w-5 h-5"/> Simpan Pengaturan Sistem
+                </button>
+              </div>
+
             </div>
           )}
 
