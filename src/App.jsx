@@ -1354,6 +1354,18 @@ export default function App() {
           <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
             <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
           </button>
+          {/* COPYRIGHT SIDEBAR (MODERN SAAS STYLE) */}
+          {isSidebarOpen && (
+            <div className="pt-5 pb-1 flex flex-col items-center text-center animate-in fade-in duration-500 cursor-default">
+              <div className="h-px w-8 bg-slate-200 mb-3"></div>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+                © {new Date().getFullYear()} {sysConfig.brandName}
+              </p>
+              <p className="text-[8px] font-bold text-slate-400 mt-1 hover:text-indigo-500 transition-colors">
+                Task Management System v1.0
+              </p>
+            </div>
+          )}
         </div>
       </aside>
 
