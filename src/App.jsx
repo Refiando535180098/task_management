@@ -888,7 +888,7 @@ export default function App() {
         <div className="absolute inset-0 z-0 opacity-5" style={{backgroundImage: `radial-gradient(#4f46e5 1px, transparent 1px)`, backgroundSize: `24px 24px`}}></div>
         <Card className="w-full max-w-md p-6 md:p-8 shadow-2xl shadow-indigo-100 border-0 bg-white/95 backdrop-blur-xl relative z-10">
           <div className="text-center mb-6 md:mb-8">
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 w-8 h-8 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl transform hover:rotate-3 transition-transform">
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl transform hover:rotate-3 transition-transform">
               <img src="/Logo_apps.png" alt="Logo" />
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-yellow-500 tracking-tight uppercase">{sysConfig.brandName}<br/><span className="text-slate-800 text-lg md:text-xl">Task Management</span></h1>
