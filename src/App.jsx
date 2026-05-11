@@ -1012,39 +1012,35 @@ export default function App() {
       {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
       <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-50 transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
         
-        {/* HEADER SIDEBAR (LOGO & TOMBOL TOGGLE) */}
-        <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
-          <div className={`flex items-center gap-3 ${!isSidebarOpen && 'hidden md:flex flex-col'}`}>
+        {/* HEADER SIDEBAR (LOGO SEBAGAI TOMBOL TOGGLE) */}
+        <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
+          
+          {/* LOGO AREA (Bisa diklik untuk Buka/Tutup di PC) */}
+          <div 
+            onClick={() => window.innerWidth >= 768 && setIsSidebarOpen(!isSidebarOpen)}
+            className={`flex items-center gap-3 cursor-pointer group w-full ${!isSidebarOpen ? 'justify-center' : ''}`}
+            title="Klik untuk Buka/Tutup Menu"
+          >
             {/* Ikon Logo */}
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0">
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
               <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
             </div>
             
-            {/* Teks Logo (Dibuat responsif dan otomatis membungkus teks panjang) */}
+            {/* Teks Logo */}
             {isSidebarOpen && (
-              <div className="flex flex-col animate-in fade-in duration-300">
-                <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight">
+              <div className="flex flex-col animate-in fade-in duration-300 overflow-hidden">
+                <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight truncate">
                   {sysConfig.brandName}
                 </span>
-                <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5">
+                <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
                   Task Management
                 </span>
               </div>
             )}
           </div>
           
-          {/* Tombol Buka/Tutup Sidebar khusus Desktop */}
-          <button 
-            type="button" 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-            className={`hidden md:flex p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl transition-colors shadow-sm shrink-0 ${!isSidebarOpen && 'mt-4'}`}
-            title="Buka/Tutup Menu"
-          >
-            <Menu className="w-4 h-4 md:w-5 md:h-5" />
-          </button>
-          
-          {/* Tombol Tutup Khusus Mobile */}
-          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0" onClick={() => setMobileMenuOpen(false)}>
+          {/* Tombol Tutup Khusus Mobile (Tetap ada agar user HP tidak bingung) */}
+          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0 ml-2" onClick={() => setMobileMenuOpen(false)}>
             <X className="w-4 h-4" />
           </button>
         </div>
