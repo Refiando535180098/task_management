@@ -1420,26 +1420,29 @@ export default function App() {
 
                           <h3 className="font-black text-lg text-slate-800 mb-1">{task.title}</h3>
                           
-                          {/* TANGGAL-TANGGAL PENTING */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-black text-slate-400 uppercase">Diberikan</span>
-                              <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
-                                <Calendar className="w-3 h-3"/> {task.created_at ? task.created_at.split('T')[0] : '-'}
-                              </span>
+                          {/* TANGGAL & INFO (DESAIN ALA M-BANKING) */}
+                          <div className="flex flex-col gap-2.5 my-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Diberikan</span>
+                              <span className="text-xs font-black text-slate-800">{task.created_at ? task.created_at.split('T')[0] : '-'}</span>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-black text-slate-400 uppercase">Deadline</span>
-                              <span className={`text-xs font-bold flex items-center gap-1 ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>
-                                <Clock className="w-3 h-3"/> {task.dueDate}
-                              </span>
+                            
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> Deadline</span>
+                              <span className={`text-xs font-black ${isOverdue ? 'text-red-600' : 'text-slate-800'}`}>{task.dueDate}</span>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-black text-slate-400 uppercase">Selesai (Approved)</span>
-                              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3"/> {task.completed_at || '-'}
-                              </span>
+                            
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> Selesai Pada</span>
+                              <span className={`text-xs font-black ${task.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>{task.completed_at || '-'}</span>
                             </div>
+                            
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/> Di-Approve</span>
+                              <span className="text-xs font-black text-indigo-600">{task.approved_by ? getUserName(task.approved_by) : '-'}</span>
+                            </div>
+
                           </div>
 
                           <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
@@ -2307,46 +2310,48 @@ export default function App() {
             </div>
           )}
 
-          {/* BOTTOM NAVIGATION MOBILE */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-40 pb-safe print:hidden">
-            <div className="flex justify-around items-center px-2 py-1.5 relative">
+          {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60]">
+            {/* Tambahan pb-safe untuk iPhone agar tidak menabrak garis bawah layar */}
+            <div className="flex justify-between items-center h-[72px] pb-safe px-4">
               
-              <button type="button" onClick={() => navigateTo('dashboard')} className={`flex flex-col items-center justify-center w-full py-1.5 gap-1 transition-all ${activeTab === 'dashboard' ? 'text-indigo-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
-                <div className={`p-1.5 rounded-full ${activeTab === 'dashboard' ? 'bg-indigo-50' : ''}`}><LayoutDashboard className={`w-5 h-5 ${activeTab === 'dashboard' ? 'fill-indigo-100' : ''}`} /></div>
-                <span className="text-[9px] font-bold tracking-wide">Beranda</span>
+              <button type="button" onClick={() => navigateTo('dashboard')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
+                <LayoutDashboard className={`w-6 h-6 ${activeTab === 'dashboard' ? 'text-indigo-600 fill-indigo-50' : 'text-slate-400'}`} />
+                <span className={`text-[10px] font-black tracking-wide ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`}>Beranda</span>
               </button>
               
-              <button type="button" onClick={() => navigateTo('tasks')} className={`flex flex-col items-center justify-center w-full py-1.5 gap-1 transition-all ${activeTab === 'tasks' ? 'text-indigo-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
-                <div className={`p-1.5 rounded-full ${activeTab === 'tasks' ? 'bg-indigo-50' : ''}`}><CheckSquare className={`w-5 h-5 ${activeTab === 'tasks' ? 'fill-indigo-100' : ''}`} /></div>
-                <span className="text-[9px] font-bold tracking-wide">Tugas</span>
+              <button type="button" onClick={() => navigateTo('tasks')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
+                <CheckSquare className={`w-6 h-6 ${activeTab === 'tasks' ? 'text-indigo-600 fill-indigo-50' : 'text-slate-400'}`} />
+                <span className={`text-[10px] font-black tracking-wide ${activeTab === 'tasks' ? 'text-indigo-600' : 'text-slate-400'}`}>Tugas</span>
               </button>
               
-              <div className="relative -top-6 px-3 flex-shrink-0">
+              {/* TOMBOL TENGAH (FLOATING ACTION BUTTON TULEN) */}
+              <div className="relative -top-5 flex justify-center w-16 shrink-0">
                  <button type="button" 
                    onClick={() => { if(activeTab === 'admin_users') setIsUserModalOpen(true); else setIsModalOpen(true); }} 
-                   className="bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(79,70,229,0.4)] transform transition-transform hover:scale-105 active:scale-95 border-4 border-slate-50">
-                   {activeTab === 'admin_users' ? <UserPlus className="w-6 h-6" /> : <Plus className="w-6 h-6" strokeWidth={3} />}
+                   className="bg-indigo-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(79,70,229,0.35)] border-4 border-slate-50 transform transition-transform hover:scale-105 active:scale-95">
+                   {activeTab === 'admin_users' ? <UserPlus className="w-6 h-6" /> : <Plus className="w-7 h-7" strokeWidth={3} />}
                  </button>
               </div>
 
               {(currentUser.role === 'staff') ? (
-                <button type="button" onClick={() => navigateTo('laporan')} className={`flex flex-col items-center justify-center w-full py-1.5 gap-1 transition-all ${activeTab === 'laporan' ? 'text-indigo-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
-                  <div className={`p-1.5 rounded-full ${activeTab === 'laporan' ? 'bg-indigo-50' : ''}`}><FileText className={`w-5 h-5 ${activeTab === 'laporan' ? 'fill-indigo-100' : ''}`} /></div>
-                  <span className="text-[9px] font-bold tracking-wide">Laporan</span>
+                <button type="button" onClick={() => navigateTo('laporan')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
+                  <FileText className={`w-6 h-6 ${activeTab === 'laporan' ? 'text-indigo-600 fill-indigo-50' : 'text-slate-400'}`} />
+                  <span className={`text-[10px] font-black tracking-wide ${activeTab === 'laporan' ? 'text-indigo-600' : 'text-slate-400'}`}>Laporan</span>
                 </button>
               ) : (
-                <button type="button" onClick={() => navigateTo('division')} className={`flex flex-col items-center justify-center w-full py-1.5 gap-1 transition-all ${activeTab === 'division' ? 'text-indigo-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
-                  <div className={`p-1.5 rounded-full ${activeTab === 'division' ? 'bg-indigo-50' : ''}`}><Users className={`w-5 h-5 ${activeTab === 'division' ? 'fill-indigo-100' : ''}`} /></div>
-                  <span className="text-[9px] font-bold tracking-wide">Tim</span>
+                <button type="button" onClick={() => navigateTo('division')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
+                  <Users className={`w-6 h-6 ${activeTab === 'division' ? 'text-indigo-600 fill-indigo-50' : 'text-slate-400'}`} />
+                  <span className={`text-[10px] font-black tracking-wide ${activeTab === 'division' ? 'text-indigo-600' : 'text-slate-400'}`}>Tim</span>
                 </button>
               )}
               
-              <button type="button" onClick={() => navigateTo('chat')} className={`flex flex-col items-center justify-center w-full py-1.5 gap-1 transition-all ${activeTab === 'chat' ? 'text-indigo-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
-                <div className={`p-1.5 rounded-full ${activeTab === 'chat' ? 'bg-indigo-50 relative' : 'relative'}`}>
-                   <MessageSquare className={`w-5 h-5 ${activeTab === 'chat' ? 'fill-indigo-100' : ''}`} />
-                   {unreadNotifsCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
+              <button type="button" onClick={() => navigateTo('chat')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 relative transition-colors">
+                <div className="relative">
+                   <MessageSquare className={`w-6 h-6 ${activeTab === 'chat' ? 'text-indigo-600 fill-indigo-50' : 'text-slate-400'}`} />
+                   {unreadNotifsCount > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>}
                 </div>
-                <span className="text-[9px] font-bold tracking-wide">Pesan</span>
+                <span className={`text-[10px] font-black tracking-wide ${activeTab === 'chat' ? 'text-indigo-600' : 'text-slate-400'}`}>Pesan</span>
               </button>
             </div>
           </div>
