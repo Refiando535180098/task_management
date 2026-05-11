@@ -960,6 +960,22 @@ export default function App() {
   });
 
   const activeTasks = myTasks;
+  // --- LOGIKA FILTER TUGAS MENDESAK (Urgent) ---
+  const urgentTasks = activeTasks.filter(t => {
+    if (t.status === 'done') return false; // Abaikan yang sudah selesai
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(t.dueDate);
+    
+    // Hitung selisih hari
+    const diffTime = due - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Muncul jika: Sudah lewat deadline (diffDays < 0) ATAU deadline dalam 3 hari ke depan (0-3)
+    return diffDays <= 3;
+  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); // Urutkan dari yang paling telat
+
   const myNotifications = notifications.filter(n => n.userId === currentUser.id);
   const unreadNotifsCount = myNotifications.filter(n => !n.read).length;
 
@@ -993,40 +1009,94 @@ export default function App() {
       {/* OVERLAY MOBILE SIDEBAR */}
       <div className={`fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
 
-      {/* SIDEBAR NAVIGASI */}
-      <aside className={`fixed md:relative top-0 bottom-0 left-0 w-72 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-50 transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 ${isSidebarOpen ? 'md:ml-0' : 'md:-ml-72'}`}>
-        <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2.5 rounded-2xl shadow-md"><img src="/Logo_apps.png" alt="Logo" /></div>
-            <div><span className="font-black text-lg md:text-xl tracking-tight text-yellow-500 leading-none block uppercase">{sysConfig.brandName}<span className="text-xs md:text-sm text-slate-800 block mt-0.5"><br/>Task Management</span></span></div>
+      {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
+      <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-50 transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
+        
+        {/* HEADER SIDEBAR (LOGO & TOMBOL TOGGLE) */}
+        <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
+          <div className={`flex items-center gap-3 overflow-hidden ${!isSidebarOpen && 'hidden md:flex flex-col'}`}>
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2.5 rounded-2xl shadow-md shrink-0">
+              <img src="/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
+            </div>
+            {isSidebarOpen && (
+              <div className="animate-in fade-in duration-300 whitespace-nowrap">
+                <span className="font-black text-lg md:text-xl tracking-tight text-yellow-500 leading-none block uppercase">
+                  {sysConfig.brandName}
+                  <span className="text-xs md:text-sm text-slate-800 block mt-0.5"><br/>Task Management</span>
+                </span>
+              </div>
+            )}
           </div>
-          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full" onClick={() => setMobileMenuOpen(false)}><X className="w-5 h-5" /></button>
+          
+          {/* Tombol Buka/Tutup Sidebar khusus Desktop */}
+          <button 
+            type="button" 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+            className={`hidden md:flex p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl transition-colors shadow-sm shrink-0 ${!isSidebarOpen && 'mt-4'}`}
+            title="Buka/Tutup Menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          
+          {/* Tombol Tutup Khusus Mobile */}
+          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0" onClick={() => setMobileMenuOpen(false)}>
+            <X className="w-5 h-5" />
+          </button>
         </div>
         
-        <nav className="flex-1 p-4 md:p-5 space-y-1.5 overflow-y-auto custom-scrollbar">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2">Menu Navigasi</p>
-            <button type="button" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard className="w-5 h-5" /> Dashboard Kinerja</button>
-            <button type="button" onClick={() => navigateTo('tasks')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><CheckSquare className="w-5 h-5" /> Manajemen Pekerjaan</button>
-            <button type="button" onClick={() => navigateTo('chat')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <MessageSquare className="w-5 h-5" /> Pusat Pesan
+        {/* LIST MENU NAVIGASI */}
+        <nav className="flex-1 p-3 md:p-4 space-y-1.5 overflow-y-auto custom-scrollbar overflow-x-hidden">
+            {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2 whitespace-nowrap">Menu Navigasi</p>}
+            
+            <button type="button" title="Dashboard Kinerja" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <LayoutDashboard className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Dashboard Kinerja</span>}
+            </button>
+            
+            <button type="button" title="Manajemen Pekerjaan" onClick={() => navigateTo('tasks')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <CheckSquare className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Manajemen Pekerjaan</span>}
+            </button>
+            
+            <button type="button" title="Pusat Pesan" onClick={() => navigateTo('chat')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <MessageSquare className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pusat Pesan</span>}
             </button>
 
-            {currentUser.role === 'staff' && <button type="button" onClick={() => navigateTo('laporan')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><FileText className="w-5 h-5" /> Laporan Hasil Saya</button>}
-            
-            {(currentUser.role !== 'staff') && <button type="button" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Printer className="w-5 h-5" /> Laporan & Cetak Global</button>}
+            {currentUser.role === 'staff' && (
+              <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <FileText className="w-5 h-5 shrink-0" /> 
+                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
+              </button>
+            )}
             
             {(currentUser.role !== 'staff') && (
-              <div className="pt-4 border-t border-slate-100 mt-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3">Organisasi</p>
-                <button type="button" onClick={() => setIsDivMenuOpen(!isDivMenuOpen)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <div className="flex items-center gap-3"><Users className="w-5 h-5" /> Pantau Tim Divisi</div>
-                  {isDivMenuOpen ? <ChevronDown className="w-4 h-4"/> : <ChevronRight className="w-4 h-4"/>}
+              <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <Printer className="w-5 h-5 shrink-0" /> 
+                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
+              </button>
+            )}
+            
+            {(currentUser.role !== 'staff') && (
+              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+                {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
+                
+                <button type="button" title="Pantau Tim Divisi" 
+                  onClick={() => { 
+                    if(!isSidebarOpen) setIsSidebarOpen(true); // Otomatis buka sidebar jika tertutup
+                    setIsDivMenuOpen(!isDivMenuOpen); 
+                  }} 
+                  className={`w-full flex items-center ${isSidebarOpen ? 'justify-between px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <div className="flex items-center gap-3"><Users className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Pantau Tim Divisi</span>}</div>
+                  {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
+                
+                {/* Sub Menu Divisi (Hanya muncul jika sidebar terbuka) */}
+                <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
                   <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1">
-                    {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-indigo-700 bg-indigo-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
+                    {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-indigo-700 bg-indigo-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
                     {divisions.filter(div => (currentUser.role === 'direksi' || currentUser.role === 'admin') || div === currentUser.division).map(div => (
-                      <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all ${selectedDivision === div && activeTab === 'division' ? 'text-indigo-700 bg-indigo-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
+                      <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-indigo-700 bg-indigo-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
                     ))}
                   </div>
                 </div>
@@ -1034,24 +1104,29 @@ export default function App() {
             )}
 
             {currentUser.role === 'admin' && (
-              <div className="pt-4 border-t border-slate-100 mt-4">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3">Sistem Super Admin</p>
-                 <button type="button" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5" /> Kelola Pengguna</button>
-                 <button type="button" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5" /> Konfigurasi Sistem</button>
+              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+                 {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
+                 <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
+                 <button type="button" title="Konfigurasi Sistem" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pengaturan Sistem</span>}</button>
               </div>
             )}
         </nav>
 
-        <div className="p-4 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 mb-10 md:mb-0">
-          <div className="flex items-center gap-3 mb-4 md:mb-5 px-2">
-            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
-            <div className="flex-1 overflow-hidden">
-              <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
-              <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
+        {/* AREA PROFIL BAWAH */}
+        <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 mb-10 md:mb-0">
+          <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
+            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+              {currentUser.avatar}
             </div>
+            {isSidebarOpen && (
+              <div className="flex-1 overflow-hidden animate-in fade-in duration-300">
+                <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
+              </div>
+            )}
           </div>
-          <button type="button" onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm">
-            <LogOut className="w-4 h-4" /> Keluar Akun
+          <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
+            <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
           </button>
         </div>
       </aside>
@@ -1215,12 +1290,11 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: DASHBOARD */}
-          {/* TAB: DASHBOARD (DESAIN ALA M-BANKING) */}
+          {/* TAB: DASHBOARD (DESAIN ALA M-BANKING + URGENT TASK) */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0">
               
-              {/* Profil Singkat Mobile (Hanya muncul di HP) */}
+              {/* Profil Singkat Mobile */}
               <div className="md:hidden flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3.5">
                    <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-inner ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
@@ -1232,19 +1306,15 @@ export default function App() {
                 <Badge type="low">{currentUser.role}</Badge>
               </div>
 
-              {/* Main "Balance" Card (Kartu Utama Saldo/Tugas) */}
+              {/* Main "Balance" Card */}
               <div className="bg-indigo-600 rounded-[2rem] p-6 md:p-8 text-white shadow-[0_15px_40px_rgba(79,70,229,0.3)] relative overflow-hidden flex flex-col justify-between min-h-[160px] md:min-h-[200px]">
-                 {/* Ornamen Latar Ala Kartu Kredit */}
                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
-                 <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-900 opacity-20 rounded-full blur-xl"></div>
-                 
                  <div className="relative z-10">
                    <p className="text-indigo-100 text-xs md:text-sm font-bold tracking-wide uppercase mb-1">Total Pekerjaan Anda</p>
                    <h1 className="text-5xl md:text-6xl font-black flex items-baseline gap-2">
                      {activeTasks.length} <span className="text-lg md:text-xl font-medium opacity-80 mb-1 md:mb-2">Tugas</span>
                    </h1>
                  </div>
-
                  <div className="relative z-10 flex items-center justify-between mt-6 pt-4 border-t border-indigo-500/50">
                     <div className="flex flex-col">
                       <span className="text-[10px] md:text-xs font-bold text-indigo-200">Selesai (KPI)</span>
@@ -1257,14 +1327,55 @@ export default function App() {
                  </div>
               </div>
 
-              {/* Grid Status Cepat (Pending, Progress, Selesai) */}
+              {/* FITUR BARU: SECTION PERHATIAN KHUSUS (URGENT TASKS) */}
+              {urgentTasks.length > 0 && (
+                <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
+                  <div className="flex items-center justify-between px-2">
+                    <h3 className="font-black text-sm md:text-base text-red-600 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 animate-pulse" /> Perhatian Khusus ({urgentTasks.length})
+                    </h3>
+                  </div>
+                  
+                  {/* List Horizontal/Scrollable untuk Tugas Mendesak */}
+                  <div className="flex gap-4 overflow-x-auto pb-2 px-1 custom-scrollbar">
+                    {urgentTasks.map(task => {
+                       const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
+                       return (
+                         <div 
+                          key={task.id} 
+                          onClick={() => setSelectedTask(task)}
+                          className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white
+                            ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}
+                         >
+                            <div className="flex justify-between items-start mb-3">
+                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${isOverdue ? 'bg-red-600 text-white' : 'bg-orange-100 text-orange-700'}`}>
+                                {isOverdue ? 'Sudah Lewat Deadline' : 'Mendekati Deadline'}
+                              </span>
+                              <Badge type={task.priority}>{task.priority}</Badge>
+                            </div>
+                            <h4 className="text-sm font-black text-slate-800 line-clamp-1 mb-2">{task.title}</h4>
+                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+                               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                                 <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-orange-500'}`} />
+                                 {task.dueDate}
+                               </div>
+                               <span className="text-[10px] font-bold text-indigo-500">Klik Detail &rarr;</span>
+                            </div>
+                         </div>
+                       )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Grid Status Cepat */}
               <div className="grid grid-cols-3 gap-3 md:gap-6">
                 {[
                   { title: 'Pending', count: activeTasks.filter(t => t.status === 'pending').length, color: 'text-amber-600', bg: 'bg-amber-100' },
                   { title: 'Diproses', count: activeTasks.filter(t => t.status === 'in-progress').length, color: 'text-blue-600', bg: 'bg-blue-100' },
                   { title: 'Selesai', count: activeTasks.filter(t => t.status === 'done').length, color: 'text-emerald-600', bg: 'bg-emerald-100' },
                 ].map((stat, i) => (
-                  <div key={i} className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center justify-center gap-2 hover:-translate-y-1 transition-transform">
+                  <div key={i} className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center text-center justify-center gap-2">
                     <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full ${stat.bg} ${stat.color} flex items-center justify-center font-black text-lg md:text-2xl`}>
                       {stat.count}
                     </div>
@@ -1273,34 +1384,28 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Daftar Log Singkat ala "Recent Transactions" */}
+              {/* Daftar Aktivitas Terkini (ala Recent Transactions) */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
                 <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
-                  <h3 className="font-black text-base md:text-lg text-slate-800">Aktivitas Terkini</h3>
-                  <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600 hover:text-indigo-800">Lihat Semua</button>
+                  <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
+                  <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600">Lihat Semua</button>
                 </div>
                 <div className="p-2 md:p-4">
-                  {activeTasks.slice(0, 5).map((task) => {
-                    const isOverdue = task.dueDate < new Date().toISOString().split('T')[0] && task.status !== 'done';
-                    return (
-                      <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-slate-100">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm
-                            ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : task.status === 'in-progress' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
-                            {task.status === 'done' ? <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7" /> : <Clock className="w-6 h-6 md:w-7 md:h-7" />}
-                          </div>
-                          <div>
-                            <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1">{task.title}</h4>
-                            <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> {task.dueDate}</p>
-                          </div>
+                  {activeTasks.slice(0, 5).map((task) => (
+                    <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer border border-transparent">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm
+                          ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
                         </div>
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          {isOverdue ? <span className="text-[10px] font-black text-white bg-red-600 px-2 py-1 rounded-md uppercase">Terlambat</span> : <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>}
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 line-clamp-1">{task.title}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {task.dueDate}</p>
                         </div>
                       </div>
-                    )
-                  })}
-                  {activeTasks.length === 0 && <div className="p-8 text-center text-sm font-bold text-slate-400">Belum ada aktivitas.</div>}
+                      <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
