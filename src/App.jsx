@@ -267,7 +267,7 @@ export default function App() {
     }
   };
 
-  // --- FUNGSI KIRIM CHAT ---
+  // --- FUNGSI KIRIM CHAT & NOTIF ---
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
@@ -276,66 +276,38 @@ export default function App() {
     if (!targetTaskId) return;
 
     const commentObj = { 
-      id: Date.now(), 
-      userId: currentUser?.id, 
-      text: newComment, 
+      id: Date.now(), userId: currentUser?.id, text: newComment, 
       timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
     };
-
-    let updatedCommentsArray = [];
 
     const targetTask = tasks.find(t => t.id === targetTaskId);
     if (!targetTask) return;
 
     const currentComments = Array.isArray(targetTask.comments) ? targetTask.comments : [];
-    updatedCommentsArray = [...currentComments, commentObj];
+    const updatedCommentsArray = [...currentComments, commentObj];
 
-    // Update state local
     const updatedTask = { ...targetTask, comments: updatedCommentsArray };
     setTasks(tasks.map(t => t.id === targetTaskId ? updatedTask : t));
     setNewComment('');
+    if (selectedTask && selectedTask.id === targetTaskId) setSelectedTask(updatedTask);
 
-    if (selectedTask && selectedTask.id === targetTaskId) {
-        setSelectedTask(updatedTask);
-    }
-
-    // Kirim Notifikasi
-    // Kirim Notifikasi
+    // KIRIM NOTIFIKASI CHAT
     const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
     const notifsToInsert = [];
     
     relevantUserIds.forEach(targetUserId => {
       if (targetUserId && String(targetUserId) !== String(currentUser.id)) {
          notifsToInsert.push({
-            userId: targetUserId,
-            type: 'chat',
+            userId: targetUserId, type: 'chat', read_status: false,
             message: `Pesan dari ${currentUser.name}: "${commentObj.text.substring(0, 30)}..."`,
-            read_status: false,
-            time: commentObj.timestamp,
-            taskId: targetTaskId
+            time: commentObj.timestamp, taskId: targetTaskId
          });
       }
     });
 
-    // Proses ke Supabase
     try {
-      if (notifsToInsert.length > 0) {
-        await supabase.from('notifications').insert(notifsToInsert);
-      }
-      await supabase
-        .from('initial_tasks')
-        .update({ comments: updatedCommentsArray })
-        .eq('id', targetTaskId);
-    } catch (err) {
-      console.error("Koneksi error saat simpan chat", err);
-    }
-
-    // Proses ke Supabase
-    try {
-      await supabase
-        .from('initial_tasks')
-        .update({ comments: updatedCommentsArray })
-        .eq('id', targetTaskId);
+      if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+      await supabase.from('initial_tasks').update({ comments: updatedCommentsArray }).eq('id', targetTaskId);
     } catch (err) {
       console.error("Koneksi error saat simpan chat", err);
     }
@@ -373,38 +345,40 @@ export default function App() {
     if (!task) return;
 
     const assignees = getAssigneesArray(task.assignedTo);
-    
-    // Deteksi Tugas Mandiri: Saya yang buat, saya yang ngerjain sendirian
-    const isSelfTask = assignees.length === 1 && 
-                       String(assignees[0]) === String(currentUser.id) && 
-                       String(task.assignedBy) === String(currentUser.id);
+    const isSelfTask = assignees.length === 1 && String(assignees[0]) === String(currentUser.id) && String(task.assignedBy) === String(currentUser.id);
 
     let statusToSave = newStatus;
+    let needsApproval = false;
     
-    // Jika STAFF klik 'done' tapi ini BUKAN tugas mandiri -> masuk ke approval
     if (newStatus === 'done' && currentUser.role === 'staff' && !isSelfTask) {
       statusToSave = 'waiting-approval';
+      needsApproval = true;
       alert("Tugas dikirim untuk menunggu persetujuan.");
     }
 
     try {
       const updatePayload = { status: statusToSave };
-      
-      // Jika tugas Selesai (karena mandiri atau diubah admin), catat tanggal & siapa yang selesaikan
       if (statusToSave === 'done') {
         updatePayload.completed_at = new Date().toISOString().split('T')[0];
-        updatePayload.approved_by = currentUser.id; // Catat siapa yang klik selesai
+        updatePayload.approved_by = currentUser.id; 
       }
 
-      const { error } = await supabase
-        .from('initial_tasks')
-        .update(updatePayload)
-        .eq('id', taskId);
+      const { error } = await supabase.from('initial_tasks').update(updatePayload).eq('id', taskId);
       
       if (!error) {
         loadTasksFromDB();
+        if (selectedTask && selectedTask.id === taskId) setSelectedTask({ ...selectedTask, ...updatePayload });
+
+        // NOTIFIKASI MINTA APPROVAL KE MANAGER/ADMIN
+        if (needsApproval && String(task.assignedBy) !== String(currentUser.id)) {
+          await supabase.from('notifications').insert([{
+            userId: task.assignedBy, type: 'task', read_status: false,
+            message: `Minta Approval Selesai: "${task.title}" dari ${currentUser.name}`,
+            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), taskId: task.id
+          }]);
+        }
       } else {
-        alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
+        alert("Gagal mengupdate database.");
       }
     } catch (error) {
       console.error(error);
@@ -413,28 +387,37 @@ export default function App() {
 
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
     const finalStatus = isApproved ? 'done' : 'in-progress';
     const today = new Date().toISOString().split('T')[0];
 
     try {
       const updatePayload = { 
-        status: finalStatus,
-        completed_at: isApproved ? today : null,
-        approved_by: isApproved ? currentUser.id : null // Catat ID si pemberi approval
+        status: finalStatus, completed_at: isApproved ? today : null,
+        approved_by: isApproved ? currentUser.id : null
       };
 
-      const { error } = await supabase
-        .from('initial_tasks')
-        .update(updatePayload)
-        .eq('id', taskId);
+      const { error } = await supabase.from('initial_tasks').update(updatePayload).eq('id', taskId);
       
       if (!error) {
         alert(isApproved ? "Berhasil di-approve!" : "Tugas dikembalikan untuk direvisi.");
         loadTasksFromDB();
-        // Update tampilan modal seketika
-        if (selectedTask && selectedTask.id === taskId) {
-          setSelectedTask({ ...selectedTask, ...updatePayload });
-        }
+        if (selectedTask && selectedTask.id === taskId) setSelectedTask({ ...selectedTask, ...updatePayload });
+
+        // NOTIFIKASI HASIL APPROVAL KE STAFF
+        const assignees = getAssigneesArray(task.assignedTo);
+        const notifsToInsert = assignees
+           .filter(id => String(id) !== String(currentUser.id))
+           .map(id => ({
+              userId: id, type: 'task', read_status: false,
+              message: isApproved ? `Tugas di-Approve: "${task.title}"` : `Tugas DITOLAK/Revisi: "${task.title}"`,
+              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), taskId: task.id
+           }));
+           
+        if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+
       } else {
         alert("Gagal memproses: " + error.message);
       }
@@ -517,28 +500,45 @@ export default function App() {
     }
   }
   
+  // --- ENGINE LIVE NOTIFIKASI & TUGAS (AUTO-REFRESH + SUARA) ---
+  const prevUnreadCount = useRef(0);
+
   useEffect(() => {
-    if (currentUser) {
+    if (!currentUser) return;
+
+    const fetchLiveUpdates = async () => {
+      // 1. Refresh Data Tugas Otomatis
       loadTasksFromDB();
       
-      const fetchNotifications = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('userId', currentUser.id)
-            .order('id', { ascending: false });
-            
-          if (data) {
-             // Mapping read_status ke read untuk UI
-            setNotifications(data.map(n => ({...n, read: n.read_status})));
+      // 2. Refresh Data Notifikasi Otomatis
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('userId', currentUser.id)
+          .order('id', { ascending: false });
+          
+        if (data) {
+          const mappedNotifs = data.map(n => ({...n, read: n.read_status}));
+          setNotifications(mappedNotifs);
+          
+          // 3. Logika Suara "Ting!"
+          const currentUnread = mappedNotifs.filter(n => !n.read).length;
+          if (currentUnread > prevUnreadCount.current) {
+            const notifSound = new Audio('/notif.mp3');
+            notifSound.play().catch(() => console.warn("Suara diblokir browser, klik layar minimal 1x."));
           }
-        } catch (error) {
-          console.error("Gagal menarik notifikasi:", error);
+          prevUnreadCount.current = currentUnread;
         }
-      };
-      fetchNotifications();
-    }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchLiveUpdates(); // Panggil saat login
+    const interval = setInterval(fetchLiveUpdates, 5000); // Cek ada pesan/tugas baru SETIAP 5 DETIK
+
+    return () => clearInterval(interval);
   }, [currentUser]);
   
   const [selectedTask, setSelectedTask] = useState(null);
@@ -753,41 +753,47 @@ export default function App() {
   // --- STATE UNTUK ANIMASI LOADING TUGAS BARU ---
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- FUNGSI SIMPAN TUGAS ---
+  // --- FUNGSI SIMPAN TUGAS & NOTIF ---
   const handleCreateTask = async (e) => {
     e.preventDefault();
     const assignedUserIds = currentUser.role === 'staff' ? [currentUser.id] : newTask.assignedTo;
     if (currentUser.role !== 'staff' && assignedUserIds.length === 0) return alert("Pilih minimal satu anggota atau tim!");
 
-    setIsSubmitting(true); // MULAI ANIMASI LOADING
+    setIsSubmitting(true);
 
     const taskData = {
-      title: newTask.title,
-      description: newTask.description,
-      assignedTo: assignedUserIds,
-      assignedBy: currentUser.id,
-      priority: newTask.priority,
-      dueDate: newTask.dueDate,
-      status: 'pending',
-      comments: [],
-      attachments: []
+      title: newTask.title, description: newTask.description, assignedTo: assignedUserIds,
+      assignedBy: currentUser.id, priority: newTask.priority, dueDate: newTask.dueDate,
+      status: 'pending', comments: [], attachments: []
     };
 
     try {
-      const { error } = await supabase.from('initial_tasks').insert([taskData]);
+      const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
       
-      if (!error) {
+      if (!error && newTasks && newTasks.length > 0) {
+        const insertedTask = newTasks[0];
         setIsModalOpen(false);
         setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
         loadTasksFromDB(); 
+
+        // KIRIM NOTIFIKASI TUGAS BARU
+        const notifsToInsert = assignedUserIds
+           .filter(id => String(id) !== String(currentUser.id))
+           .map(id => ({
+              userId: id, type: 'task', read_status: false,
+              message: `Tugas Baru: "${insertedTask.title}" (${insertedTask.priority.toUpperCase()})`,
+              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+              taskId: insertedTask.id
+           }));
+        
+        if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
       } else {
-        alert("Gagal menyimpan: " + error.message);
+        alert("Gagal menyimpan: " + error?.message);
       }
     } catch (error) {
       alert("Error gagal terhubung ke server.");
-      console.error(error);
     } finally {
-      setIsSubmitting(false); // MATIKAN ANIMASI LOADING (baik sukses maupun gagal)
+      setIsSubmitting(false);
     }
   };
 
