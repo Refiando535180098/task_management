@@ -1354,16 +1354,6 @@ export default function App() {
           <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
             <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
           </button>
-          {/* COPYRIGHT KHUSUS MOBILE (MUNCUL SAAT SCROLL PALING BAWAH) */}
-          <div className="md:hidden mt-auto pt-8 pb-8 flex flex-col items-center text-center print:hidden cursor-default opacity-80">
-            <div className="h-px w-10 bg-slate-200 mb-3"></div>
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
-              © {new Date().getFullYear()} {sysConfig.brandName}
-            </p>
-            <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
-              Crafted by <span className="font-black text-slate-500">Vanda Tech</span>
-            </p>
-          </div>
         </div>
       </aside>
 
@@ -2641,6 +2631,17 @@ export default function App() {
               </Card>
             </div>
           )}
+
+          {/* COPYRIGHT KHUSUS MOBILE (MUNCUL SAAT SCROLL PALING BAWAH) */}
+          <div className="md:hidden mt-auto pt-8 pb-8 flex flex-col items-center text-center print:hidden cursor-default opacity-80">
+            <div className="h-px w-10 bg-slate-200 mb-3"></div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+              © {new Date().getFullYear()} {sysConfig.brandName}
+            </p>
+            <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
+              Crafted by <span className="font-black text-slate-500">Vanda Tech</span>
+            </p>
+          </div>
 
           {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60] print:hidden">
