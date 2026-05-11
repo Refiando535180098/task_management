@@ -1293,7 +1293,7 @@ export default function App() {
 
           {/* TAB: DASHBOARD (DESAIN ALA M-BANKING + URGENT TASK) */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0">
+            <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0 mb-5">
               
               {/* Profil Singkat Mobile */}
               <div className="md:hidden flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
@@ -1386,7 +1386,7 @@ export default function App() {
               </div>
 
               {/* Daftar Aktivitas Terkini (ala Recent Transactions) */}
-              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full mb-5">
+              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
                 <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
                   <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-indigo-600">Lihat Semua</button>
