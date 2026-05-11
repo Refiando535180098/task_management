@@ -1744,7 +1744,66 @@ export default function App() {
 
           {/* TAB: LAPORAN */}
           {activeTab === 'laporan' && (
-            {/* HEADER KOP SURAT LAPORAN (SUDAH DIPERBAIKI PRESISI MOBILE & PC) */}
+            <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 print:space-y-0">
+              <Card className="p-3 md:p-4 mb-3 md:mb-4 bg-white border-blue-200 border-2 shadow-sm print:hidden">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-end justify-between">
+                  <div className="w-full md:w-1/2">
+                    <h3 className="font-black text-sm md:text-base text-slate-800 mb-3 md:mb-4 flex items-center gap-2"><Filter className="w-4 h-4 md:w-5 md:h-5 text-blue-500"/> Filter Periode Laporan</h3>
+                    <div className="flex items-center gap-3">
+                      <input type="month" value={reportFilterMonth} onChange={(e) => setReportFilterMonth(e.target.value)} className="w-full md:w-2/3 px-3 py-2 md:px-4 md:py-3 border border-slate-300 rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                      {reportFilterMonth && <button type="button" onClick={() => setReportFilterMonth('')} className="text-xs md:text-sm font-bold text-red-500 hover:text-red-700 bg-red-50 px-3 py-2 rounded-xl">Reset</button>}
+                    </div>
+                  </div>
+
+                  {(currentUser.role !== 'staff') && (
+                    <div className="w-full md:w-1/2">
+                      <h3 className="font-black text-sm md:text-base text-slate-800 mb-3 md:mb-4 flex items-center gap-2"><Users className="w-4 h-4 md:w-5 md:h-5 text-blue-500"/> Pilih Laporan Karyawan</h3>
+                      <select value={reportTargetUserId} onChange={(e) => setReportTargetUserId(e.target.value)} className="w-full px-3 py-2 md:px-4 md:py-3 border border-slate-300 flex items-center rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
+                         <option value="ALL">-- CETAK LAPORAN SEMUA KARYAWAN --</option>
+                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.role === 'direksi' || u.division === currentUser.division)).map(u => (
+                           <option key={u.id} value={u.id}>{u.name} - {u.role.toUpperCase()} (Divisi {u.division})</option>
+                         ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {(() => {
+                const isGlobalMode = (currentUser.role !== 'staff') && (reportTargetUserId === 'ALL');
+                let targetUser = null;
+
+                if (isGlobalMode) {
+                  targetUser = { id: 'ALL', name: 'Semua Karyawan & Staff', position: 'Berbagai Posisi', division: 'Seluruh Divisi' };
+                } else if (currentUser.role === 'staff') {
+                  targetUser = currentUser; 
+                } else {
+                  targetUser = users.find(u => String(u.id) === String(reportTargetUserId));
+                }
+                
+                if (!targetUser) return (
+                   <div className="p-6 text-center bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden">
+                      <p className="text-slate-500 font-bold text-sm">Silakan pilih karyawan di atas.</p>
+                   </div>
+                );
+
+                let targetTasks = isGlobalMode ? tasks : tasks.filter(t => getAssigneesArray(t.assignedTo).includes(targetUser.id));
+                if (reportFilterMonth) {
+                  targetTasks = targetTasks.filter(t => t.dueDate.startsWith(reportFilterMonth));
+                }
+
+                const tDone = targetTasks.filter(t => t.status === 'done').length;
+                const tTotal = targetTasks.length;
+                const tRate = tTotal === 0 ? 0 : Math.round((tDone / tTotal) * 100);
+
+                const periodeCetak = reportFilterMonth 
+                  ? new Date(reportFilterMonth + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) 
+                  : new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+                return (
+                  <div className="max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar print:max-h-none print:overflow-visible pb-10 print:pb-0">
+                    <Card className="p-0 border-0 shadow-sm bg-white print:shadow-none print:border-none print:w-full overflow-hidden print-page">
+                      {/* HEADER KOP SURAT LAPORAN (SUDAH DIPERBAIKI PRESISI MOBILE & PC) */}
                       <div className="p-3 md:p-5 print:p-0 print:pb-2 border-b-2 md:border-b-4 border-amber-600 bg-white print:border-b-2 print:border-black flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
                         
                         {/* Area Kiri: Logo dan Teks */}
@@ -1767,6 +1826,100 @@ export default function App() {
                         </div>
                         
                       </div>
+
+                      <div className="text-center py-3 md:py-4 print:py-2 bg-white">
+                        <h2 className="text-base md:text-lg font-black text-slate-800 uppercase tracking-widest print:text-black print:text-base underline underline-offset-2 decoration-2">
+                          {isGlobalMode ? 'Laporan Kinerja Global' : 'Laporan Kinerja Karyawan'}
+                        </h2>
+                        <p className="text-[10px] md:text-xs text-slate-500 font-bold mt-1 print:text-black print:text-[10px]">Periode: {periodeCetak}</p>
+                      </div>
+
+                      <div className="px-3 md:px-5 print:px-0 pb-3 print:pb-2 bg-white">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] md:text-xs border border-slate-200 print:border print:border-black rounded-xl print:rounded-none p-2.5 md:p-3 print:p-2">
+                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Karyawan / Target</span><span className="font-black text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.name}</span></div>
+                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Posisi Jabatan</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.position}</span></div>
+                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Departemen</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.division}</span></div>
+                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Penyelesaian (KPI)</span><span className="font-black text-emerald-600 text-sm md:text-base print:text-black print:text-sm">{tRate}% ({tDone}/{tTotal})</span></div>
+                        </div>
+                      </div>
+
+                      <div className="px-3 md:px-5 print:px-0 pb-4 md:pb-6 bg-white">
+                        <h3 className="text-xs md:text-sm font-black text-slate-800 mb-2 print:text-black flex items-center gap-2 print:text-xs"><FileText className="w-3.5 h-3.5 print:w-3 print:h-3"/> Rincian Aktivitas Pekerjaan</h3>
+                        <div className="overflow-x-auto print:overflow-visible w-full custom-scrollbar">
+                          <table className="w-full text-left border-collapse border border-slate-200 print:border-black min-w-[650px]">
+                            <thead>
+                              <tr className="bg-slate-50 print:bg-gray-100 text-slate-800 print:text-black text-[8px] md:text-[9px] uppercase tracking-widest font-black border-b border-slate-200 print:border-black print:text-[8px]">
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black w-6 text-center print:p-1">No</th>
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Deskripsi Tugas & Pekerjaan</th>
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Dikerjakan Oleh</th>
+                                {/* KOLOM BARU: TIMELINE (TGL DIBUAT + DEADLINE + OVERDUE) */}
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Timeline Pekerjaan</th>
+                                {/* KOLOM BARU: APPROVAL (TGL SELESAI + SIAPA YANG APPROVE) */}
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Data Approval</th>
+                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-slate-200 print:border-black text-center print:p-1 w-16">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {targetTasks.map((task, index) => { 
+                                 // LOGIKA DETEKSI OVERDUE (TERLAMBAT)
+                                 const today = new Date().toISOString().split('T')[0];
+                                 const isOverdue = task.dueDate < today && task.status !== 'done';
+
+                                 return (
+                                  <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
+                                    
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight align-top">{task.title}</td>
+                                    
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold text-blue-600 border-r border-slate-200 print:border-black print:text-black print:p-1 align-top whitespace-nowrap">{getAssigneesNames(task.assignedTo)}</td>
+                                    
+                                    {/* DATA TIMELINE */}
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? task.created_at.split('T')[0] : '-'}</span></span>
+                                        <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
+                                          Deadline: <span className="font-bold">{task.dueDate}</span>
+                                        </span>
+                                        {/* LABEL TERLAMBAT MUNCUL JIKA OVERDUE */}
+                                        {isOverdue && <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded border border-red-200 w-fit font-bold mt-0.5 print:border-none print:p-0 print:text-red-600">TERLAMBAT</span>}
+                                      </div>
+                                    </td>
+
+                                    {/* DATA APPROVAL */}
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at || '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1 align-top">
+                                        <span className="print:hidden"><Badge type={task.status}>{String(task.status).toUpperCase()}</Badge></span>
+                                        <span className="hidden print:inline">{task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}</span>
+                                    </td>
+                                  </tr>
+                                 )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        
+                        <div className="hidden print:flex justify-between mt-12 pt-4">
+                          <div className="text-center w-48">
+                             <p className="mb-16 font-bold text-black text-[10px] md:text-xs">Mengetahui,<br/>{isGlobalMode ? 'Direktur Utama' : 'Manager Divisi'}</p>
+                             <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px] md:text-xs"></p>
+                          </div>
+                          <div className="text-center w-48">
+                             <p className="mb-16 font-bold text-black text-[10px] md:text-xs">Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}<br/>{isGlobalMode ? 'System Admin' : 'Pembuat Laporan'}</p>
+                             <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px] md:text-xs">{isGlobalMode ? currentUser.name : targetUser.name}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                )
+              })()}
+            </div>
           )}
 
           {/* TAB: TIM DIVISI */}
