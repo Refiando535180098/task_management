@@ -526,20 +526,30 @@ export default function App() {
 
   useEffect(() => {
     const fetchInitialGlobalData = async () => {
-      try {
-        const { data, error } = await supabase.from('initial_users').select('*');
-        if (data) {
-          const processedUsers = data.map(u => {
-            const nameParts = (u.name || 'User').trim().split(/\s+/);
-            const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            return { ...u, avatar: initials };
-          });
-          setUsers(processedUsers);
-        }
-      } catch (error) {
-        console.error('Gagal mengambil data users:', error);
+    try {
+      // Tambahkan .order('name') agar muncul berurutan A-Z
+      const { data, error } = await supabase
+        .from('initial_users')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      if (data) {
+        const processedUsers = data.map(u => {
+          // Pengaman jika nama kosong
+          const nameStr = u.name || 'Tanpa Nama';
+          const nameParts = nameStr.trim().split(/\s+/);
+          const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
+          return { ...u, name: nameStr, avatar: initials };
+        });
+        setUsers(processedUsers);
       }
-    };
+    } catch (error) {
+      console.error('Gagal mengambil data users:', error.message);
+      alert("Gagal memuat daftar pengguna. Silakan segarkan halaman.");
+    }
+  };
     fetchInitialGlobalData();
   }, []);
 
@@ -1792,13 +1802,16 @@ export default function App() {
                        </tr>
                      </thead>
                      <tbody>
-                       {users
-                         .filter(u => {
-                           if (!userSearchQuery) return true;
-                           const query = userSearchQuery.toLowerCase();
-                           return (u.name?.toLowerCase().includes(query) || u.nik?.toLowerCase().includes(query));
-                         })
-                         .map(u => (
+                        {users
+                          .filter(u => {
+                            if (!userSearchQuery) return true;
+                            const query = userSearchQuery.toLowerCase();
+                            // Gunakan optional chaining (?.) untuk mencegah error jika data null
+                            const matchName = u.name?.toLowerCase().includes(query);
+                            const matchNik = u.nik?.toLowerCase().includes(query);
+                            return matchName || matchNik;
+                          })
+                          .map(u => (
                          <tr key={u.id} className={`border-b hover:bg-slate-50/50 transition-colors ${selectedUsers.includes(u.id) ? 'bg-indigo-50/30 border-indigo-100' : 'border-slate-50'}`}>
                             <td className="p-3 md:p-5 text-center">
                               {u.role !== 'admin' && (
