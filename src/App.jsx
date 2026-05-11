@@ -49,6 +49,26 @@ export default function App() {
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
+
+  // --- STATE UNTUK ROLE SISTEM ---
+  const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']);
+  const [newRoleName, setNewRoleName] = useState('');
+
+  // --- FUNGSI TAMBAH & HAPUS ROLE ---
+  const handleAddRole = () => {
+    const roleClean = newRoleName.trim().toLowerCase();
+    if (roleClean && !roles.includes(roleClean)) {
+      setRoles([...roles, roleClean]);
+      setNewRoleName('');
+    }
+  };
+
+  const handleDeleteRole = (roleToDelete) => {
+    if (['admin', 'staff'].includes(roleToDelete)) {
+      return alert("Role 'admin' dan 'staff' adalah role bawaan inti sistem dan tidak boleh dihapus!");
+    }
+    setRoles(roles.filter(r => r !== roleToDelete));
+  };
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
@@ -1934,26 +1954,31 @@ export default function App() {
                     />
                   </div>
                   
-                  {/* Input Divisi (Gaya Tag/Pill) */}
-                  <div className="pt-2">
-                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Struktur Divisi</label>
+                  {/* Input Role / Akses Sistem (Gaya Tag/Pill) */}
+                  <div className="pt-6 mt-6 border-t border-slate-100">
+                    <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Manajemen Role / Akses Sistem</label>
                     <div className="flex gap-2 mb-4">
-                      <input type="text" value={newDivName} onChange={e => setNewDivName(e.target.value)} placeholder="Ketik nama divisi baru..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                      <button onClick={handleAddDivision} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
+                      <input type="text" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="Ketik nama role baru (misal: supervisor)..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all" />
+                      <button onClick={handleAddRole} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
                     </div>
                     
-                    {/* Daftar Divisi gaya Badge/Pill */}
+                    {/* Daftar Role gaya Badge/Pill (Warna Emerald) */}
                     <div className="flex flex-wrap gap-2.5">
-                      {divisions.map(d => (
-                        <div key={d} className="group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50/50 border border-indigo-100 text-indigo-700 rounded-full transition-all hover:bg-indigo-100 hover:shadow-sm">
-                          <span className="font-bold text-xs md:text-sm">{d}</span>
-                          <button onClick={() => handleDeleteDivision(d)} className="text-indigo-400 hover:text-red-500 p-0.5 rounded-full transition-colors" title="Hapus Divisi">
-                            <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/>
-                          </button>
+                      {roles.map(r => (
+                        <div key={r} className="group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50/50 border border-emerald-100 text-emerald-700 rounded-full transition-all hover:bg-emerald-100 hover:shadow-sm capitalize">
+                          <span className="font-bold text-xs md:text-sm">{r}</span>
+                          
+                          {/* Sembunyikan tombol hapus khusus untuk admin & staff */}
+                          {!['admin', 'staff'].includes(r) && (
+                            <button onClick={() => handleDeleteRole(r)} className="text-emerald-400 hover:text-red-500 p-0.5 rounded-full transition-colors" title="Hapus Role">
+                              <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/>
+                            </button>
+                          )}
                         </div>
                       ))}
-                      {divisions.length === 0 && <span className="text-xs font-bold text-slate-400 italic py-2">Belum ada divisi yang ditambahkan.</span>}
+                      {roles.length === 0 && <span className="text-xs font-bold text-slate-400 italic py-2">Belum ada role.</span>}
                     </div>
+                    <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-4 leading-relaxed">*Catatan: Role <span className="text-indigo-500">admin</span> dan <span className="text-indigo-500">staff</span> dikunci oleh sistem karena digunakan untuk membedakan tampilan menu aplikasi.</p>
                   </div>
                 </div>
               </div>
