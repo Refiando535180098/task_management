@@ -2266,18 +2266,24 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* TOMBOL UPDATE STATUS (KHUSUS PENERIMA TUGAS) */}
-                      {getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) && (selectedTask.status === 'pending' || selectedTask.status === 'in-progress') && (
-                        <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                          {selectedTask.status === 'pending' && (
-                            <button onClick={() => handleStatusUpdate(selectedTask.id, 'in-progress')} className="bg-blue-600 text-white px-4 py-3.5 rounded-xl font-bold text-xs md:text-sm shadow-md hover:bg-blue-700 flex-1 flex items-center justify-center gap-2 transform hover:-translate-y-0.5 transition-all">
-                              <Activity className="w-4 h-4" /> Mulai Kerjakan
-                            </button>
-                          )}
-                          {(selectedTask.status === 'pending' || selectedTask.status === 'in-progress') && (
-                            <button onClick={() => handleStatusUpdate(selectedTask.id, 'done')} className="bg-emerald-600 text-white px-4 py-3.5 rounded-xl font-bold text-xs md:text-sm shadow-md hover:bg-emerald-700 flex-1 flex items-center justify-center gap-2 transform hover:-translate-y-0.5 transition-all">
-                              <CheckCircle2 className="w-4 h-4" /> Tandai Selesai
-                            </button>
+                    {/* DROPDOWN UPDATE STATUS PEKERJAAN (KEMBALI SEPERTI SEMULA) */}
+                      {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || currentUser?.role === 'admin') && (
+                        <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
+                          <select 
+                            value={selectedTask.status} 
+                            onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
+                            disabled={selectedTask.status === 'waiting-approval'}
+                            className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
+                          >
+                            <option value="pending">Pending (Belum Dikerjakan)</option>
+                            <option value="in-progress">In Progress (Sedang Diproses)</option>
+                            <option value="done">Done (Selesai)</option>
+                          </select>
+                          {selectedTask.status === 'waiting-approval' && (
+                            <p className="text-[9px] md:text-[10px] text-orange-500 mt-2 font-bold uppercase tracking-wider">
+                              * Status terkunci: Menunggu persetujuan (Approval).
+                            </p>
                           )}
                         </div>
                       )}
