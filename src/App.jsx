@@ -49,6 +49,18 @@ export default function App() {
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
+  const prevUnreadCount = useRef(0); // Memori untuk suara notifikasi
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const currentUnread = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
+    if (currentUnread > prevUnreadCount.current) {
+      const notifSound = new Audio('/notif.mp3');
+      notifSound.play().catch(err => console.warn("Suara diblokir browser"));
+    }
+    prevUnreadCount.current = currentUnread;
+  }, [notifications, currentUser]);
+
   // --- STATE & FUNGSI UNTUK MANAJEMEN ROLE ---
   const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']); // Default role
   const [newRoleName, setNewRoleName] = useState('');
@@ -288,12 +300,35 @@ export default function App() {
     }
 
     // Kirim Notifikasi
+    // Kirim Notifikasi
     const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
+    const notifsToInsert = [];
+    
     relevantUserIds.forEach(targetUserId => {
-      if (targetUserId && targetUserId !== currentUser.id) {
-          addNotification(targetUserId, 'chat', `Pesan baru dari ${currentUser.name} di tugas: "${targetTask.title}"`, targetTask.id);
+      if (targetUserId && String(targetUserId) !== String(currentUser.id)) {
+         notifsToInsert.push({
+            userId: targetUserId,
+            type: 'chat',
+            message: `Pesan dari ${currentUser.name}: "${commentObj.text.substring(0, 30)}..."`,
+            read_status: false,
+            time: commentObj.timestamp,
+            taskId: targetTaskId
+         });
       }
     });
+
+    // Proses ke Supabase
+    try {
+      if (notifsToInsert.length > 0) {
+        await supabase.from('notifications').insert(notifsToInsert);
+      }
+      await supabase
+        .from('initial_tasks')
+        .update({ comments: updatedCommentsArray })
+        .eq('id', targetTaskId);
+    } catch (err) {
+      console.error("Koneksi error saat simpan chat", err);
+    }
 
     // Proses ke Supabase
     try {
@@ -759,15 +794,38 @@ export default function App() {
   const handleAddDivision = async () => {
     if(!newDivName.trim()) return;
     try {
-      const { error } = await supabase.from('initial_divisions').insert([{ name: newDivName.trim() }]);
-      if (!error) {
-        setDivisions([...divisions, newDivName.trim()]);
-        setNewDivName('');
+      // PERBAIKAN: Gunakan .select() agar kita tahu ID tugas yang baru dibuat
+      const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
+      
+      if (!error && newTasks && newTasks.length > 0) {
+        const insertedTask = newTasks[0];
+        setIsModalOpen(false);
+        setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
+        loadTasksFromDB(); 
+
+        // NOTIFIKASI TUGAS BARU KE PENERIMA
+        const notifsToInsert = assignedUserIds
+           .filter(id => String(id) !== String(currentUser.id))
+           .map(id => ({
+              userId: id,
+              type: 'task',
+              message: `Tugas Baru: "${insertedTask.title}" (${insertedTask.priority.toUpperCase()})`,
+              read_status: false,
+              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+              taskId: insertedTask.id
+           }));
+        
+        if (notifsToInsert.length > 0) {
+           await supabase.from('notifications').insert(notifsToInsert);
+        }
       } else {
-        alert("Gagal tambah divisi: " + error.message);
+        alert("Gagal menyimpan: " + error?.message);
       }
     } catch (error) {
-      alert("Koneksi server terputus.");
+      alert("Error gagal terhubung ke server.");
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1150,7 +1208,7 @@ export default function App() {
           <div className="flex items-center gap-2 shrink-0">
             <button 
               type="button" 
-              onClick={() => setIsNotifOpen(!isNotifOpen)} 
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
               className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
             >
               <Bell className="w-5 h-5" />
@@ -2207,6 +2265,22 @@ export default function App() {
                         {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
                       </div>
                     </div>
+
+                    {/* TOMBOL UPDATE STATUS (KHUSUS PENERIMA TUGAS) */}
+                      {getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) && (selectedTask.status === 'pending' || selectedTask.status === 'in-progress') && (
+                        <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                          {selectedTask.status === 'pending' && (
+                            <button onClick={() => handleStatusUpdate(selectedTask.id, 'in-progress')} className="bg-blue-600 text-white px-4 py-3.5 rounded-xl font-bold text-xs md:text-sm shadow-md hover:bg-blue-700 flex-1 flex items-center justify-center gap-2 transform hover:-translate-y-0.5 transition-all">
+                              <Activity className="w-4 h-4" /> Mulai Kerjakan
+                            </button>
+                          )}
+                          {(selectedTask.status === 'pending' || selectedTask.status === 'in-progress') && (
+                            <button onClick={() => handleStatusUpdate(selectedTask.id, 'done')} className="bg-emerald-600 text-white px-4 py-3.5 rounded-xl font-bold text-xs md:text-sm shadow-md hover:bg-emerald-700 flex-1 flex items-center justify-center gap-2 transform hover:-translate-y-0.5 transition-all">
+                              <CheckCircle2 className="w-4 h-4" /> Tandai Selesai
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                     {/* AREA APPROVAL */}
                     {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
