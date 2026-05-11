@@ -463,6 +463,12 @@ export default function App() {
   const [newComment, setNewComment] = useState(''); 
   const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
   const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
+  const [showMobileChat, setShowMobileChat] = useState(false);
+
+  // Otomatis kembalikan layar ke "Info Pekerjaan" setiap kali membuka tugas baru
+  useEffect(() => {
+    setShowMobileChat(false);
+  }, [selectedTask]);
 
   const chatEndRef = useRef(null);
 
@@ -1913,28 +1919,33 @@ export default function App() {
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
               <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
                 
-                {/* PANEL KIRI: INFO TUGAS */}
-                <div className="w-full md:w-1/2 flex flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-[50%] md:h-full">
+                {/* PANEL KIRI: INFO TUGAS (Sembunyi di Mobile jika Chat Aktif) */}
+                <div className={`w-full md:w-1/2 flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-full md:h-full ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+                  
+                  {/* HEADER PANEL KIRI */}
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight">Informasi Pekerjaan</h3>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <h3 className="font-black text-sm md:text-xl text-slate-800 tracking-tight">Info Pekerjaan</h3>
                       
-                      {/* FITUR BARU: TOMBOL HAPUS DI DALAM MODAL DETAIL (KHUSUS ADMIN) */}
                       {currentUser?.role === 'admin' && (
-                        <button 
-                          type="button" 
-                          onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} 
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg border border-red-200 text-[10px] font-black transition-colors shadow-sm"
-                        >
-                          <Trash2 className="w-3 h-3" /> Hapus
+                        <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm">
+                          <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus</span>
                         </button>
                       )}
                     </div>
-                    {/* Tombol exit khusus Mobile/HP */}
-                    <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shadow-sm"><X className="w-4 h-4" /></button>
+                    
+                    {/* TOMBOL AKSI MOBILE */}
+                    <div className="flex items-center gap-2">
+                       {/* Tombol Buka Chat Khusus Mobile */}
+                       <button type="button" onClick={() => setShowMobileChat(true)} className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 rounded-xl font-bold text-[10px] shadow-sm transition-colors">
+                         <MessageSquare className="w-3.5 h-3.5"/> Diskusi
+                       </button>
+                       
+                       <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-500 rounded-full shadow-sm transition-colors"><X className="w-4 h-4" /></button>
+                    </div>
                   </div>
 
-                  <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30">
+                  <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-4">
                         {selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' && (
@@ -1971,7 +1982,7 @@ export default function App() {
                         </div>
                         
                         <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve Oleh</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
                           <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-indigo-600' : 'text-slate-400'}`}>
                             <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
                           </span>
@@ -1984,21 +1995,15 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* AREA APPROVAL KHUSUS PEMBERI TUGAS / ADMIN */}
+                    {/* AREA APPROVAL */}
                     {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
                       <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                         <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
                         <div className="grid grid-cols-2 gap-3">
-                          <button 
-                            onClick={() => handleApproveTask(selectedTask.id, true)}
-                            className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md"
-                          >
+                          <button onClick={() => handleApproveTask(selectedTask.id, true)} className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md">
                             <Check className="w-4 h-4"/> Approve Selesai
                           </button>
-                          <button 
-                            onClick={() => handleApproveTask(selectedTask.id, false)}
-                            className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm"
-                          >
+                          <button onClick={() => handleApproveTask(selectedTask.id, false)} className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm">
                             <X className="w-4 h-4"/> Tolak & Revisi
                           </button>
                         </div>
@@ -2009,30 +2014,16 @@ export default function App() {
                     <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
                         <div>
-                          <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base">
-                            <Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti
-                          </h4>
+                          <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base"><Paperclip className="w-4 h-4 text-indigo-500"/> Lampiran Bukti</h4>
                           <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max 5MB</p>
                         </div>
                         
                         <div className="flex gap-2">
-                          {/* 1. TOMBOL UPLOAD FILE/GALERI */}
                           <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
                           <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 cursor-pointer hover:bg-indigo-100 border border-indigo-200'}`}>
-                            {isUploading ? (
-                              <>
-                                <svg className="w-3.5 h-3.5 animate-spin text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Proses...
-                              </>
-                            ) : (
-                              <><Plus className="w-3.5 h-3.5"/> Galeri</>
-                            )}
+                            {isUploading ? (<><svg className="w-3.5 h-3.5 animate-spin text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Proses...</>) : (<><Plus className="w-3.5 h-3.5"/> Galeri</>)}
                           </label>
 
-                          {/* 2. TOMBOL KAMERA KHUSUS HP (Otomatis buka kamera) */}
                           <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
                           <label htmlFor={isUploading ? "" : "upload-kamera"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-slate-800 text-white cursor-pointer hover:bg-black border border-slate-900'}`}>
                             <Camera className="w-3.5 h-3.5"/> Kamera
@@ -2040,44 +2031,50 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* DAFTAR FILE LAMPIRAN */}
                       <div className="space-y-2">
-                          {(selectedTask.attachments || []).map(file => (
-                            <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
-                              <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
-                                  <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
-                                  <div className="min-w-0">
-                                    <span className="text-xs font-bold text-slate-700 truncate block hover:text-indigo-600">{file.name}</span>
-                                    <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
-                                  </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
-                                {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
-                                  <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                          {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
-                            <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
-                          )}
-                        </div>
+                        {(selectedTask.attachments || []).map(file => (
+                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
+                             <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
+                                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-700 truncate block hover:text-indigo-600">{file.name}</span>
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
+                                </div>
+                             </div>
+                             <div className="flex gap-2">
+                               <button onClick={() => window.open(file.url, '_blank')} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
+                               {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
+                                 <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                               )}
+                             </div>
+                          </div>
+                        ))}
+                        {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
+                          <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
+                        )}
                       </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* PANEL KANAN: CHAT & TOMBOL EXIT */}
-                <div className="w-full md:w-1/2 flex flex-col bg-slate-100 h-[50%] md:h-full relative border-t md:border-t-0 md:border-l border-slate-200">
+                {/* PANEL KANAN: CHAT & TOMBOL EXIT (Mundur jika Info Aktif di Mobile) */}
+                <div className={`w-full md:w-1/2 flex-col bg-slate-100 h-full md:h-full relative border-t md:border-t-0 md:border-l border-slate-200 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
                   
-                  {/* Header Chat & Tombol Exit (Desktop) */}
-                  <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
-                    <h3 className="font-black text-base md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" /> Kolom Diskusi</h3>
-                    {/* Tombol exit khusus Desktop/PC */}
-                    <button type="button" onClick={() => setSelectedTask(null)} className="hidden md:flex text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 p-2 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-5 h-5" /></button>
+                  {/* HEADER CHAT */}
+                  <div className="px-4 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                    <div className="flex items-center gap-3">
+                       {/* Tombol Back Khusus Mobile */}
+                       <button type="button" onClick={() => setShowMobileChat(false)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                          <ChevronRight className="w-5 h-5 rotate-180"/>
+                       </button>
+                       <h3 className="font-black text-sm md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" /> Kolom Diskusi</h3>
+                    </div>
+                    
+                    {/* Tombol Exit */}
+                    <button type="button" onClick={() => setSelectedTask(null)} className="p-1.5 md:p-2 bg-slate-100 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                   </div>
 
-                  {/* Isi Chat */}
+                  {/* ISI CHAT */}
                   <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-4 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-95">
                     {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
                       const isMe = String(chat?.userId) === String(currentUser?.id);
@@ -2093,9 +2090,9 @@ export default function App() {
                     <div ref={chatEndRef} />
                   </div>
 
-                  {/* Input form untuk Chat */}
-                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-10 md:pb-safe shrink-0">
-                    <form onSubmit={handleAddComment} className="flex gap-2 items-center pb-2 md:pb-0">
+                  {/* INPUT FORM CHAT */}
+                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-safe shrink-0">
+                    <form onSubmit={handleAddComment} className="flex gap-2 items-center">
                       <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik pesan..." className="flex-1 px-3 py-2.5 md:px-4 md:py-3.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 text-xs md:text-sm bg-slate-50 focus:bg-white font-bold transition-colors" />
                       <button type="submit" disabled={!newComment.trim()} className="bg-indigo-600 text-white p-2.5 md:p-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transform hover:-translate-y-0.5 shadow-sm shrink-0 transition-transform"><Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" /></button>
                     </form>
