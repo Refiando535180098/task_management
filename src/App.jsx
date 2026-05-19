@@ -11,6 +11,25 @@ import {
 const supabaseUrl = 'https://vkqrbcyowakcnnqhceyi.supabase.co';
 const supabaseKey = 'sb_publishable_aeI9Lp8G41z7jikyJ3MOcw_2peTH6w5';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ==========================================
+// FORMATTER WAKTU DETAIL (TANGGAL + JAM)
+// ==========================================
+const formatDateTime = (isoString) => {
+  if (!isoString) return '-';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return isoString;
+  
+  // Jika formatnya murni YYYY-MM-DD tanpa jam (seperti dueDate)
+  if (isoString.length === 10) {
+    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  
+  // Format lengkap: 19 Mei 2026 14:30
+  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + 
+         date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+};
+
 // ==========================================
 // 2. KOMPONEN UI PENDUKUNG
 // ==========================================
@@ -300,7 +319,6 @@ export default function App() {
     }
 
     // Kirim Notifikasi
-    // Kirim Notifikasi
     const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
     const notifsToInsert = [];
     
@@ -322,16 +340,6 @@ export default function App() {
       if (notifsToInsert.length > 0) {
         await supabase.from('notifications').insert(notifsToInsert);
       }
-      await supabase
-        .from('initial_tasks')
-        .update({ comments: updatedCommentsArray })
-        .eq('id', targetTaskId);
-    } catch (err) {
-      console.error("Koneksi error saat simpan chat", err);
-    }
-
-    // Proses ke Supabase
-    try {
       await supabase
         .from('initial_tasks')
         .update({ comments: updatedCommentsArray })
@@ -367,7 +375,7 @@ export default function App() {
     }
   };
 
-  // --- LOGIKA UPDATE STATUS (SISI STAFF) ---
+  // --- LOGIKA UPDATE STATUS (SISI STAFF & MANAGER) ---
   const handleStatusUpdate = async (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -390,10 +398,14 @@ export default function App() {
     try {
       const updatePayload = { status: statusToSave };
       
-      // Jika tugas Selesai (karena mandiri atau diubah admin), catat tanggal & siapa yang selesaikan
+      // Jika tugas Selesai, catat FULL TANGGAL + WAKTU & siapa yang selesaikan
       if (statusToSave === 'done') {
-        updatePayload.completed_at = new Date().toISOString().split('T')[0];
-        updatePayload.approved_by = currentUser.id; // Catat siapa yang klik selesai
+        updatePayload.completed_at = new Date().toISOString(); 
+        updatePayload.approved_by = currentUser.id; 
+      } else {
+        // Jika tugas ditarik kembali ke pending/in-progress, hapus jejak selesai
+        updatePayload.completed_at = null;
+        updatePayload.approved_by = null;
       }
 
       const { error } = await supabase
@@ -403,6 +415,10 @@ export default function App() {
       
       if (!error) {
         loadTasksFromDB();
+        // Update tampilan modal seketika
+        if (selectedTask && selectedTask.id === taskId) {
+          setSelectedTask({ ...selectedTask, ...updatePayload });
+        }
       } else {
         alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
       }
@@ -414,13 +430,13 @@ export default function App() {
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
-    const today = new Date().toISOString().split('T')[0];
+    const nowFull = new Date().toISOString(); // Simpan dengan Jam dan Menit
 
     try {
       const updatePayload = { 
         status: finalStatus,
-        completed_at: isApproved ? today : null,
-        approved_by: isApproved ? currentUser.id : null // Catat ID si pemberi approval
+        completed_at: isApproved ? nowFull : null,
+        approved_by: isApproved ? currentUser.id : null 
       };
 
       const { error } = await supabase
@@ -544,7 +560,8 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [newComment, setNewComment] = useState(''); 
   const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
-  const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
+  // PERBAIKAN: Tambah field crossDivision untuk admin saat nambah Direksi/Manager baru
+  const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '', crossDivision: false });
   const [showMobileChat, setShowMobileChat] = useState(false);
 
   // Otomatis kembalikan layar ke "Info Pekerjaan" setiap kali membuka tugas baru
@@ -774,27 +791,6 @@ export default function App() {
     };
 
     try {
-      const { error } = await supabase.from('initial_tasks').insert([taskData]);
-      
-      if (!error) {
-        setIsModalOpen(false);
-        setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
-        loadTasksFromDB(); 
-      } else {
-        alert("Gagal menyimpan: " + error.message);
-      }
-    } catch (error) {
-      alert("Error gagal terhubung ke server.");
-      console.error(error);
-    } finally {
-      setIsSubmitting(false); // MATIKAN ANIMASI LOADING (baik sukses maupun gagal)
-    }
-  };
-
-  const handleAddDivision = async () => {
-    if(!newDivName.trim()) return;
-    try {
-      // PERBAIKAN: Gunakan .select() agar kita tahu ID tugas yang baru dibuat
       const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
       
       if (!error && newTasks && newTasks.length > 0) {
@@ -826,6 +822,21 @@ export default function App() {
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAddDivision = async () => {
+    if(!newDivName.trim()) return;
+    try {
+      const { error } = await supabase.from('initial_divisions').insert([{ name: newDivName.trim() }]);
+      if (!error) {
+        setDivisions([...divisions, newDivName.trim()]);
+        setNewDivName('');
+      } else {
+        alert("Gagal tambah divisi: " + error.message);
+      }
+    } catch (error) {
+      alert("Koneksi server terputus.");
     }
   };
 
@@ -865,7 +876,7 @@ export default function App() {
       if (!error && data) {
         setUsers([...users, data[0]]);
         setIsUserModalOpen(false);
-        setNewUser({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
+        setNewUser({ nik: '', password: '', name: '', role: 'staff', division: '', position: '', crossDivision: false });
         alert('Pengguna baru berhasil ditambahkan!');
       } else {
         alert('Gagal: ' + error?.message);
@@ -1145,7 +1156,15 @@ export default function App() {
 
     if (currentUser.role === 'direksi') {
       const isTaskAdmin = creator.role === 'admin' || assigneesData.some(u => u.role === 'admin');
-      return !isTaskAdmin; 
+      if (isTaskAdmin) return false;
+      
+      // Jika Direksi diberikan izin pantau lintas divisi, bisa lihat semua
+      if (currentUser.crossDivision) return true;
+      
+      // Jika tidak, hanya bisa lihat divisi dia sendiri atau tugas yang berhubungan dengannya
+      const isMyDivision = creator.division === currentUser.division || assigneesData.some(u => u.division === currentUser.division);
+      const isMyOwnTask = assignees.includes(currentUser.id) || t.assignedBy === currentUser.id;
+      return isMyDivision || isMyOwnTask; 
     }
 
     if (currentUser.role === 'manager') {
@@ -1231,130 +1250,139 @@ export default function App() {
           
         </div>
 
-        {/* OVERLAY MOBILE SIDEBAR */}
-        <div className={`fixed inset-0 bg-slate-900/40 z-[70] md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
+      {/* OVERLAY MOBILE SIDEBAR */}
+      <div className={`fixed inset-0 bg-slate-900/40 z-[70] md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
 
-        {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
-        <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-[80] transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
+      {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
+      <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-[80] transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
+      
+      {/* HEADER SIDEBAR (LOGO SEBAGAI TOMBOL TOGGLE) */}
+      <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
         
-        {/* HEADER SIDEBAR (LOGO SEBAGAI TOMBOL TOGGLE) */}
-        <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
-          
-          {/* LOGO AREA (Bisa diklik untuk Buka/Tutup di PC) */}
-          <div 
-            onClick={() => window.innerWidth >= 768 && setIsSidebarOpen(!isSidebarOpen)}
-            className={`flex items-center gap-3 cursor-pointer group w-full ${!isSidebarOpen ? 'justify-center' : ''}`}
-            title="Klik untuk Buka/Tutup Menu"
-          >
-            {/* Ikon Logo */}
-            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
-              <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
-            </div>
-            
-            {/* Teks Logo */}
-            {isSidebarOpen && (
-              <div className="flex flex-col animate-in fade-in duration-300 overflow-hidden">
-                <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight truncate">
-                  {sysConfig.brandName}
-                </span>
-                <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
-                  Task Management
-                </span>
-              </div>
-            )}
+        {/* LOGO AREA (Bisa diklik untuk Buka/Tutup di PC) */}
+        <div 
+          onClick={() => window.innerWidth >= 768 && setIsSidebarOpen(!isSidebarOpen)}
+          className={`flex items-center gap-3 cursor-pointer group w-full ${!isSidebarOpen ? 'justify-center' : ''}`}
+          title="Klik untuk Buka/Tutup Menu"
+        >
+          {/* Ikon Logo */}
+          <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
+            <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
           </div>
           
-          {/* Tombol Tutup Khusus Mobile (Tetap ada agar user HP tidak bingung) */}
-          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0 ml-2" onClick={() => setMobileMenuOpen(false)}>
-            <X className="w-4 h-4" />
-          </button>
+          {/* Teks Logo */}
+          {isSidebarOpen && (
+            <div className="flex flex-col animate-in fade-in duration-300 overflow-hidden">
+              <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight truncate">
+                {sysConfig.brandName}
+              </span>
+              <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
+                Task Management
+              </span>
+            </div>
+          )}
         </div>
         
-        {/* LIST MENU NAVIGASI */}
-        <nav className="flex-1 p-3 md:p-4 space-y-1.5 overflow-y-auto custom-scrollbar overflow-x-hidden">
-            {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2 whitespace-nowrap">Menu Navigasi</p>}
-            
-            <button type="button" title="Dashboard Kinerja" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <LayoutDashboard className="w-5 h-5 shrink-0" /> 
-              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Dashboard Kinerja</span>}
-            </button>
-            
-            <button type="button" title="Manajemen Pekerjaan" onClick={() => navigateTo('tasks')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <CheckSquare className="w-5 h-5 shrink-0" /> 
-              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Manajemen Pekerjaan</span>}
-            </button>
-            
-            <button type="button" title="Pusat Pesan" onClick={() => navigateTo('chat')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <MessageSquare className="w-5 h-5 shrink-0" /> 
-              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pusat Pesan</span>}
-            </button>
+        {/* Tombol Tutup Khusus Mobile (Tetap ada agar user HP tidak bingung) */}
+        <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0 ml-2" onClick={() => setMobileMenuOpen(false)}>
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      
+      {/* LIST MENU NAVIGASI */}
+      <nav className="flex-1 p-3 md:p-4 space-y-1.5 overflow-y-auto custom-scrollbar overflow-x-hidden">
+          {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2 whitespace-nowrap">Menu Navigasi</p>}
+          
+          <button type="button" title="Dashboard Kinerja" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <LayoutDashboard className="w-5 h-5 shrink-0" /> 
+            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Dashboard Kinerja</span>}
+          </button>
+          
+          <button type="button" title="Manajemen Pekerjaan" onClick={() => navigateTo('tasks')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <CheckSquare className="w-5 h-5 shrink-0" /> 
+            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Manajemen Pekerjaan</span>}
+          </button>
+          
+          <button type="button" title="Pusat Pesan" onClick={() => navigateTo('chat')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <MessageSquare className="w-5 h-5 shrink-0" /> 
+            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pusat Pesan</span>}
+          </button>
 
-            {currentUser.role === 'staff' && (
-              <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-                <FileText className="w-5 h-5 shrink-0" /> 
-                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
+          {currentUser.role === 'staff' && (
+            <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <FileText className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
+            </button>
+          )}
+          
+          {(currentUser.role !== 'staff') && (
+            <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <Printer className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
+            </button>
+          )}
+          
+          {(currentUser.role !== 'staff') && (
+            <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+              {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
+              
+              <button type="button" title="Pantau Tim Divisi" 
+                onClick={() => { 
+                  if(!isSidebarOpen) setIsSidebarOpen(true); // Otomatis buka sidebar jika tertutup
+                  setIsDivMenuOpen(!isDivMenuOpen); 
+                }} 
+                className={`w-full flex items-center ${isSidebarOpen ? 'justify-between px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <div className="flex items-center gap-3"><Users className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Pantau Tim Divisi</span>}</div>
+                {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
               </button>
-            )}
-            
-            {(currentUser.role !== 'staff') && (
-              <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-                <Printer className="w-5 h-5 shrink-0" /> 
-                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
-              </button>
-            )}
-            
-            {(currentUser.role !== 'staff') && (
-              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
-                {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
-                
-                <button type="button" title="Pantau Tim Divisi" 
-                  onClick={() => { 
-                    if(!isSidebarOpen) setIsSidebarOpen(true); // Otomatis buka sidebar jika tertutup
-                    setIsDivMenuOpen(!isDivMenuOpen); 
-                  }} 
-                  className={`w-full flex items-center ${isSidebarOpen ? 'justify-between px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <div className="flex items-center gap-3"><Users className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Pantau Tim Divisi</span>}</div>
-                  {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
-                </button>
-                
-                {/* Sub Menu Divisi (Hanya muncul jika sidebar terbuka) */}
-                <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
-                  <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1">
-                    {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
-                    {divisions.filter(div => (currentUser.role === 'direksi' || currentUser.role === 'admin') || div === currentUser.division).map(div => (
-                      <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
-                    ))}
-                  </div>
+              
+              {/* Sub Menu Divisi (Hanya muncul jika sidebar terbuka) */}
+              <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
+                <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1">
+                  {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
+                  {divisions.filter(div => (currentUser.role === 'direksi' || currentUser.role === 'admin') || div === currentUser.division).map(div => (
+                    <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
+                  ))}
                 </div>
               </div>
-            )}
-
-            {currentUser.role === 'admin' && (
-              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
-                 {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
-                 <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
-                 <button type="button" title="Konfigurasi Sistem" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pengaturan Sistem</span>}</button>
-              </div>
-            )}
-        </nav>
-
-        {/* AREA PROFIL BAWAH */}
-        <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 mb-10 md:mb-0">
-          <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
-            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-              {currentUser.avatar}
             </div>
-            {isSidebarOpen && (
-              <div className="flex-1 overflow-hidden animate-in fade-in duration-300">
-                <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
-                <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
-              </div>
-            )}
+          )}
+
+          {currentUser.role === 'admin' && (
+            <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+               {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
+               <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
+               <button type="button" title="Konfigurasi Sistem" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pengaturan Sistem</span>}</button>
+            </div>
+          )}
+      </nav>
+
+      {/* AREA PROFIL BAWAH */}
+      <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 pb-8 md:pb-5">
+        <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
+          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+            {currentUser.avatar}
           </div>
-          <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
-            <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
-          </button>
+          {isSidebarOpen && (
+            <div className="flex-1 overflow-hidden animate-in fade-in duration-300">
+              <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
+              <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
+            </div>
+          )}
         </div>
+        <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
+          <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
+        </button>
+      </div>
+      
+      {/* COPYRIGHT SIDEBAR (MODERN SAAS STYLE) */}
+      {isSidebarOpen && (
+        <div className="pt-2 pb-4 flex flex-col items-center text-center animate-in fade-in duration-500 cursor-default">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
+            © {new Date().getFullYear()} {sysConfig.brandName}
+          </p>
+        </div>
+      )}
       </aside>
 
       {/* KONTEN UTAMA */}
@@ -1439,11 +1467,9 @@ export default function App() {
 
                {/* TOMBOL TAMBAH TUGAS (HEADER) */}
                {activeTab !== 'laporan' && activeTab !== 'admin_users' && activeTab !== 'admin_settings' && (
-                  // PERBAIKAN: Tambahkan "hidden md:flex" agar tombol ini HILANG di HP
-                  // karena di HP sudah ada tombol (+) bundar di navigasi bawah.
-                  <button type="button" onClick={() => setIsModalOpen(true)} className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
-                    <Plus className="w-4 h-4 md:w-5 md:h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
-                  </button>
+                 <button type="button" onClick={() => setIsModalOpen(true)} className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
+                   <Plus className="w-4 h-4 md:w-5 md:h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
+                 </button>
                )}
                {activeTab === 'admin_users' && (
                 <div className="flex flex-wrap items-center gap-2 flex-1 justify-end md:flex-none">
@@ -1803,10 +1829,9 @@ export default function App() {
                 return (
                   <div className="max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar print:max-h-none print:overflow-visible pb-10 print:pb-0">
                     <Card className="p-0 border-0 shadow-sm bg-white print:shadow-none print:border-none print:w-full overflow-hidden print-page">
-                      {/* HEADER KOP SURAT LAPORAN (SUDAH DIPERBAIKI PRESISI MOBILE & PC) */}
+                      {/* HEADER KOP SURAT LAPORAN */}
                       <div className="p-3 md:p-5 print:p-0 print:pb-2 border-b-2 md:border-b-4 border-amber-600 bg-white print:border-b-2 print:border-black flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
                         
-                        {/* Area Kiri: Logo dan Teks */}
                         <div className="flex items-start md:items-center gap-3 w-full md:w-auto">
                           <div className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center text-white print:shadow-none shrink-0 print:rounded-none mt-1 md:mt-0">
                             <img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" />
@@ -1818,7 +1843,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Area Kanan: Tombol Cetak PDF */}
                         <div className="flex w-full md:w-auto justify-end print:hidden shrink-0 border-t border-slate-100 md:border-0 pt-3 md:pt-0">
                           <button type="button" onClick={handleDownloadPDF} className="flex items-center justify-center gap-2 px-4 py-2.5 w-full md:w-auto bg-amber-600 text-white hover:bg-amber-700 rounded-xl font-bold text-xs md:text-sm transition-colors shadow-sm active:scale-95">
                             <Printer className="w-4 h-4 md:w-4 md:h-4"/> Cetak PDF
@@ -1876,7 +1900,7 @@ export default function App() {
                                     {/* DATA TIMELINE */}
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? task.created_at.split('T')[0] : '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{formatDateTime(task.created_at)}</span></span>
                                         <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
                                           Deadline: <span className="font-bold">{task.dueDate}</span>
                                         </span>
@@ -1888,7 +1912,7 @@ export default function App() {
                                     {/* DATA APPROVAL */}
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at || '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{formatDateTime(task.completed_at)}</span></span>
                                         <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
                                       </div>
                                     </td>
@@ -1967,10 +1991,8 @@ export default function App() {
                    </div>
                  </div>
 
-                 {/* PERBAIKAN 2: Tambahkan overflow-auto dan max-h-[65vh] agar tabel bisa di-scroll vertikal */}
                  <div className="overflow-auto w-full max-h-[65vh] md:max-h-[75vh] custom-scrollbar pb-2 relative">
                     <table className="w-full text-left border-collapse min-w-[500px]">
-                      {/* PERBAIKAN 3: Jadikan header tabel 'sticky' agar tidak ikut tergulung */}
                       <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
                         <tr className="text-slate-400 text-[9px] md:text-[10px] uppercase tracking-widest font-black border-b border-slate-200">
                           <th className="p-3 md:p-5 w-10 text-center bg-slate-50">
@@ -2255,7 +2277,7 @@ export default function App() {
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
                           <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
-                            {selectedTask.created_at ? selectedTask.created_at.split('T')[0] : '-'}
+                            {formatDateTime(selectedTask.created_at)}
                           </span>
                         </div>
                         
@@ -2269,7 +2291,7 @@ export default function App() {
                         <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
                           <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
+                            <CheckCircle2 className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.completed_at)}
                           </span>
                         </div>
                         
@@ -2287,30 +2309,31 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* DROPDOWN UPDATE STATUS PEKERJAAN (KEMBALI SEPERTI SEMULA) */}
-                      {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || currentUser?.role === 'admin') && (
+                    {/* DROPDOWN UPDATE STATUS PEKERJAAN */}
+                      { (getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || currentUser?.role === 'admin' || currentUser?.role === 'direksi' || currentUser?.role === 'manager') && (
                         <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
                           <select 
                             value={selectedTask.status} 
                             onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
-                            disabled={selectedTask.status === 'waiting-approval'}
+                            disabled={selectedTask.status === 'waiting-approval' && currentUser?.role === 'staff'}
                             className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
                           >
                             <option value="pending">Pending (Belum Dikerjakan)</option>
                             <option value="in-progress">In Progress (Sedang Diproses)</option>
+                            <option value="waiting-approval" disabled>Waiting Approval (Menunggu)</option>
                             <option value="done">Done (Selesai)</option>
                           </select>
-                          {selectedTask.status === 'waiting-approval' && (
+                          {selectedTask.status === 'waiting-approval' && currentUser?.role === 'staff' && (
                             <p className="text-[9px] md:text-[10px] text-orange-500 mt-2 font-bold uppercase tracking-wider">
-                              * Status terkunci: Menunggu persetujuan (Approval).
+                              * Status terkunci: Menunggu persetujuan (Approval) dari Atasan.
                             </p>
                           )}
                         </div>
                       )}
 
                     {/* AREA APPROVAL */}
-                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
+                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'direksi') && selectedTask.status === 'waiting-approval' && (
                       <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                         <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
                         <div className="grid grid-cols-2 gap-3">
@@ -2502,6 +2525,23 @@ export default function App() {
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi</label>
                         <select required className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.division} onChange={e => setNewUser({...newUser, division: e.target.value})}><option value="">-- Pilih Divisi --</option>{divisions.map(div => <option key={div} value={div}>{div}</option>)}</select>
                       </div>
+                      
+                      {/* FITUR BARU: Izinkan Admin mencentang akses global saat bikin akun baru */}
+                      {(newUser.role === 'manager' || newUser.role === 'direksi') && (
+                        <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors col-span-2">
+                          <input 
+                            type="checkbox" 
+                            checked={newUser.crossDivision || false} 
+                            onChange={(e) => setNewUser({...newUser, crossDivision: e.target.checked})}
+                            className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
+                          />
+                          <div>
+                            <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Lintas Divisi (Akses Global)</span>
+                            <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses untuk melihat tugas seluruh staf di luar divisinya.</span>
+                          </div>
+                        </label>
+                      )}
+
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
@@ -2545,7 +2585,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {editingUser.role === 'manager' && (
+                    {/* FITUR BARU: Opsi ini sekarang terbuka untuk Direksi juga */}
+                    {(editingUser.role === 'manager' || editingUser.role === 'direksi') && (
                       <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors">
                         <input 
                           type="checkbox" 
@@ -2554,11 +2595,12 @@ export default function App() {
                           className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
                         />
                         <div>
-                          <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Lintas Divisi</span>
-                          <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke manager ini untuk melihat tugas seluruh staf di luar divisinya.</span>
+                          <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Lintas Divisi (Akses Global)</span>
+                          <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke pengguna ini untuk melihat tugas seluruh staf di luar divisinya.</span>
                         </div>
                       </label>
                     )}
+                    
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
                       <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.position} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
