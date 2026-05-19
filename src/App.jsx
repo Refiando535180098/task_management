@@ -189,7 +189,7 @@ export default function App() {
       // 3. Ambil waktu lokal secara eksplisit
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } catch(e) { 
-      return val; 
+      return val.replace('T', ' ');return val; 
     }
   };
 
