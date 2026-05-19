@@ -156,27 +156,16 @@ export default function App() {
   const formatDateTime = (val) => {
     if (!val) return '-';
     
-    try {
-      // 1. Jika data dari Supabase mengandung 'Z' (ISO String), 
-      // kita hilangkan 'Z' agar tidak dianggap UTC oleh browser
-      let dateStr = val;
-      if (typeof val === 'string' && val.endsWith('Z')) {
-        dateStr = val.replace('Z', ''); 
-      }
-      
-      // 2. Gunakan 'T' sebagai pemisah standar. 
-      // Jika ada 'T', kita pecah untuk mendapatkan bagian tanggal dan jam
-      const d = new Date(dateStr);
-      
-      if (isNaN(d.getTime())) return val; 
-      
-      const pad = (n) => String(n).padStart(2, '0');
-      
-      // 3. Ambil waktu lokal secara eksplisit
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch(e) { 
-      return val; 
+    // Jika data dari database sudah dalam format "YYYY-MM-DD HH:mm" atau "YYYY-MM-DDTHH:mm"
+    // Kita cukup memastikan formatnya rapi untuk ditampilkan.
+    let cleanVal = val.replace('T', ' '); // Ganti T dengan spasi
+    
+    // Jika formatnya sudah mengandung detik (misal dari ISO string lama), ambil 16 karakter awal saja
+    if (cleanVal.length > 16) {
+      cleanVal = cleanVal.substring(0, 16);
     }
+    
+    return cleanVal;
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
@@ -690,8 +679,7 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      // PERBAIKAN: Ubah format input lokal jadi UTC absolut sebelum masuk ke Supabase
-      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : '',
+      dueDate: newTask.dueDate.replace('T', ' '), // Simpan sebagai "YYYY-MM-DD HH:mm"
       status: 'pending',
       comments: [],
       attachments: []
