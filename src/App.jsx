@@ -154,13 +154,27 @@ export default function App() {
 
   const formatDateTime = (val) => {
     if (!val) return '-';
+    
+    // 1. Jika data lama di database hanya berbentuk "YYYY-MM-DD" tanpa jam
+    // Kita tambahkan default "00:00" agar tampilannya seragam dan tidak error
+    if (val.length === 10 && !val.includes('T') && !val.includes(' ')) {
+      return `${val} 00:00`;
+    }
+
     try {
-      if (val.includes('T')) {
-          const [date, time] = val.split('T');
-          return `${date} ${time.substring(0,5)}`;
-      }
-      return val;
-    } catch(e) { return val; }
+      // 2. Parse menggunakan Date() bawaan JavaScript.
+      // Ini akan OTOMATIS mengkonversi waktu UTC (Z) dari Supabase ke Waktu Lokal (WIB) komputer Anda.
+      const d = new Date(val);
+      
+      // 3. Validasi jika parsing gagal (kembalikan teks asli)
+      if (isNaN(d.getTime())) return val; 
+      
+      // 4. Format rapi ke YYYY-MM-DD HH:mm
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch(e) { 
+      return val; 
+    }
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
