@@ -13,24 +13,6 @@ const supabaseKey = 'sb_publishable_aeI9Lp8G41z7jikyJ3MOcw_2peTH6w5';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==========================================
-// FORMATTER WAKTU DETAIL (TANGGAL + JAM)
-// ==========================================
-const formatDateTime = (isoString) => {
-  if (!isoString) return '-';
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return isoString;
-  
-  // Jika formatnya murni YYYY-MM-DD tanpa jam (seperti dueDate)
-  if (isoString.length === 10) {
-    return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-  }
-  
-  // Format lengkap: 19 Mei 2026 14:30
-  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + 
-         date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-};
-
-// ==========================================
 // 2. KOMPONEN UI PENDUKUNG
 // ==========================================
 const Card = ({ children, className = '' }) => (
@@ -46,9 +28,9 @@ const Badge = ({ children, type }) => {
     low: 'bg-blue-50 text-blue-600 border-blue-200',
     pending: 'bg-slate-100 text-slate-600 border-slate-200',
     'in-progress': 'bg-blue-50 text-blue-600 border-blue-200',
-    'waiting-approval': 'bg-orange-100 text-orange-700 border-orange-300 animate-pulse', // Animasi berkedip
+    'waiting-approval': 'bg-orange-100 text-orange-700 border-orange-300 animate-pulse', 
     done: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    overdue: 'bg-red-600 text-white border-red-700 font-bold', // Merah pekat
+    overdue: 'bg-red-600 text-white border-red-700 font-bold',
     admin: 'bg-slate-800 text-white border-slate-900',
   };
   return (
@@ -68,7 +50,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
-  const prevUnreadCount = useRef(0); // Memori untuk suara notifikasi
+  const prevUnreadCount = useRef(0); 
 
   useEffect(() => {
     if (!currentUser) return;
@@ -80,16 +62,13 @@ export default function App() {
     prevUnreadCount.current = currentUnread;
   }, [notifications, currentUser]);
 
-  // --- STATE & FUNGSI UNTUK MANAJEMEN ROLE ---
-  const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']); // Default role
+  const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']);
   const [newRoleName, setNewRoleName] = useState('');
 
   const handleAddRole = () => {
     if (!newRoleName.trim()) return;
     const cleanRole = newRoleName.trim().toLowerCase();
-    if (roles.includes(cleanRole)) {
-      return alert('Role ini sudah ada!');
-    }
+    if (roles.includes(cleanRole)) return alert('Role ini sudah ada!');
     setRoles([...roles, cleanRole]);
     setNewRoleName('');
   };
@@ -110,21 +89,18 @@ export default function App() {
     const newRole = window.prompt(`Ubah nama role "${oldRole}" menjadi:`, oldRole);
     if (newRole && newRole.trim() !== '' && newRole.trim() !== oldRole) {
        const cleanNewRole = newRole.trim().toLowerCase();
-       if (roles.includes(cleanNewRole)) {
-          return alert('Nama role tersebut sudah digunakan!');
-       }
+       if (roles.includes(cleanNewRole)) return alert('Nama role tersebut sudah digunakan!');
        setRoles(roles.map(r => r === oldRole ? cleanNewRole : r));
     }
   };
-  
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
     autoEmail: false, 
     maintenanceMode: false,
-    maxUploadSize: '5',    // FITUR BARU
-    sessionTimeout: '60',  // FITUR BARU
-    strictMode: false      // FITUR BARU
+    maxUploadSize: '5',
+    sessionTimeout: '60',
+    strictMode: false
   });
   const [configForm, setConfigForm] = useState(sysConfig); 
 
@@ -168,6 +144,21 @@ export default function App() {
     { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
   ]);
 
+  // Fungsi Pembantu Waktu & Format
+  const getNowStr = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const formatDateTime = (val) => {
+    if (!val) return '-';
+    if (val.includes('T')) {
+        const [date, time] = val.split('T');
+        return `${date} ${time.substring(0,5)}`;
+    }
+    return val;
+  };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
   const handleFileUpload = async (e) => {
@@ -178,21 +169,18 @@ export default function App() {
       return alert('Format file ditolak! Mohon hanya unggah file JPG, PNG, atau PDF.');
     }
 
-    // NYALAKAN LOADING
     setIsUploading(true);
 
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${currentUser.id}.${fileExt}`;
 
-      // Upload ke bucket 'task-attachments' di Supabase
       const { error: uploadError } = await supabase.storage
         .from('task-attachments')
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Ambil URL Publik
       const { data: publicUrlData } = supabase.storage
         .from('task-attachments')
         .getPublicUrl(fileName);
@@ -208,7 +196,6 @@ export default function App() {
       const currentAttachments = Array.isArray(selectedTask.attachments) ? selectedTask.attachments : [];
       const updatedAttachments = [...currentAttachments, newAttachment];
 
-      // Update tabel tasks
       const { error: updateError } = await supabase
         .from('initial_tasks')
         .update({ attachments: updatedAttachments })
@@ -224,23 +211,17 @@ export default function App() {
       alert('Error terhubung ke server saat upload: ' + err.message);
       console.error(err);
     } finally {
-      // MATIKAN LOADING (Baik saat berhasil maupun gagal)
       setIsUploading(false);
       e.target.value = ''; 
     }
   };
 
-  // --- FUNGSI HAPUS MASSAL ---
   const handleBulkDeleteUsers = async () => {
     if (selectedUsers.length === 0) return;
     if (!window.confirm(`Yakin ingin menghapus ${selectedUsers.length} pengguna secara massal? Data tidak dapat dikembalikan.`)) return;
 
     try {
-      const { error } = await supabase
-        .from('initial_users')
-        .delete()
-        .in('id', selectedUsers);
-      
+      const { error } = await supabase.from('initial_users').delete().in('id', selectedUsers);
       if (!error) {
         setUsers(users.filter(u => !selectedUsers.includes(u.id)));
         setSelectedUsers([]); 
@@ -250,30 +231,15 @@ export default function App() {
       }
     } catch (error) {
       alert('Gagal terhubung ke server database.');
-      console.error(error);
     }
   };
 
-  const handleSelectAllUsers = (e, filteredUsers) => {
-    if (e.target.checked) {
-      setSelectedUsers(filteredUsers.filter(u => u.role !== 'admin').map(u => u.id));
-    } else {
-      setSelectedUsers([]);
-    }
-  };
-
-  // --- FUNGSI HAPUS LAMPIRAN DARI DATABASE ---
   const handleDeleteAttachment = async (attachmentId, fileName) => {
     if (!window.confirm(`Yakin ingin menghapus dokumen "${fileName}"?`)) return;
 
     try {
       const filtered = (selectedTask.attachments || []).filter(a => a.id !== attachmentId);
-      
-      const { error } = await supabase
-        .from('initial_tasks')
-        .update({ attachments: filtered })
-        .eq('id', selectedTask.id);
-      
+      const { error } = await supabase.from('initial_tasks').update({ attachments: filtered }).eq('id', selectedTask.id);
       if(!error) {
         const updatedTask = { ...selectedTask, attachments: filtered };
         setSelectedTask(updatedTask);
@@ -286,7 +252,6 @@ export default function App() {
     }
   };
 
-  // --- FUNGSI KIRIM CHAT ---
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
@@ -302,14 +267,12 @@ export default function App() {
     };
 
     let updatedCommentsArray = [];
-
     const targetTask = tasks.find(t => t.id === targetTaskId);
     if (!targetTask) return;
 
     const currentComments = Array.isArray(targetTask.comments) ? targetTask.comments : [];
     updatedCommentsArray = [...currentComments, commentObj];
 
-    // Update state local
     const updatedTask = { ...targetTask, comments: updatedCommentsArray };
     setTasks(tasks.map(t => t.id === targetTaskId ? updatedTask : t));
     setNewComment('');
@@ -318,7 +281,6 @@ export default function App() {
         setSelectedTask(updatedTask);
     }
 
-    // Kirim Notifikasi
     const relevantUserIds = new Set([...getAssigneesArray(targetTask.assignedTo), targetTask.assignedBy]);
     const notifsToInsert = [];
     
@@ -335,21 +297,14 @@ export default function App() {
       }
     });
 
-    // Proses ke Supabase
     try {
-      if (notifsToInsert.length > 0) {
-        await supabase.from('notifications').insert(notifsToInsert);
-      }
-      await supabase
-        .from('initial_tasks')
-        .update({ comments: updatedCommentsArray })
-        .eq('id', targetTaskId);
+      if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+      await supabase.from('initial_tasks').update({ comments: updatedCommentsArray }).eq('id', targetTaskId);
     } catch (err) {
       console.error("Koneksi error saat simpan chat", err);
     }
   };
 
-  // --- FUNGSI SIMPAN PENGATURAN KE DATABASE ---
   const handleSaveConfig = async () => {
     try {
       const { error } = await supabase
@@ -358,9 +313,9 @@ export default function App() {
            brand_name: configForm.brandName,
            auto_email: configForm.autoEmail,
            maintenance_mode: configForm.maintenanceMode,
-           max_upload_size: configForm.maxUploadSize, // Kolom DB Baru
-           session_timeout: configForm.sessionTimeout, // Kolom DB Baru
-           strict_mode: configForm.strictMode         // Kolom DB Baru
+           max_upload_size: configForm.maxUploadSize, 
+           session_timeout: configForm.sessionTimeout, 
+           strict_mode: configForm.strictMode         
         })
         .eq('id', 1);
       
@@ -368,28 +323,24 @@ export default function App() {
         setSysConfig(configForm); 
         alert('Pengaturan sistem berhasil disimpan permanen!');
       } else {
-        alert('Gagal menyimpan pengaturan: Pastikan Anda sudah menambah kolom baru di tabel settings Supabase.');
+        alert('Gagal menyimpan pengaturan.');
       }
     } catch (error) {
       alert('Error gagal terhubung ke server saat menyimpan pengaturan.');
     }
   };
 
-  // --- LOGIKA UPDATE STATUS (SISI STAFF & MANAGER) ---
+  // --- LOGIKA UPDATE STATUS ---
   const handleStatusUpdate = async (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
     const assignees = getAssigneesArray(task.assignedTo);
-    
-    // Deteksi Tugas Mandiri: Saya yang buat, saya yang ngerjain sendirian
-    const isSelfTask = assignees.length === 1 && 
-                       String(assignees[0]) === String(currentUser.id) && 
-                       String(task.assignedBy) === String(currentUser.id);
+    const isSelfTask = assignees.length === 1 && String(assignees[0]) === String(currentUser.id) && String(task.assignedBy) === String(currentUser.id);
 
     let statusToSave = newStatus;
     
-    // Jika STAFF klik 'done' tapi ini BUKAN tugas mandiri -> masuk ke approval
+    // Approval otomatis hanya untuk staff (Selain mandiri)
     if (newStatus === 'done' && currentUser.role === 'staff' && !isSelfTask) {
       statusToSave = 'waiting-approval';
       alert("Tugas dikirim untuk menunggu persetujuan.");
@@ -398,29 +349,24 @@ export default function App() {
     try {
       const updatePayload = { status: statusToSave };
       
-      // Jika tugas Selesai, catat FULL TANGGAL + WAKTU & siapa yang selesaikan
       if (statusToSave === 'done') {
-        updatePayload.completed_at = new Date().toISOString(); 
+        updatePayload.completed_at = getNowStr();
         updatePayload.approved_by = currentUser.id; 
-      } else {
-        // Jika tugas ditarik kembali ke pending/in-progress, hapus jejak selesai
+      } else if (statusToSave !== 'waiting-approval') {
+        // Jika dibalikkan ke in-progress / pending, reset data penyelesaian
         updatePayload.completed_at = null;
         updatePayload.approved_by = null;
       }
 
-      const { error } = await supabase
-        .from('initial_tasks')
-        .update(updatePayload)
-        .eq('id', taskId);
+      const { error } = await supabase.from('initial_tasks').update(updatePayload).eq('id', taskId);
       
       if (!error) {
         loadTasksFromDB();
-        // Update tampilan modal seketika
         if (selectedTask && selectedTask.id === taskId) {
           setSelectedTask({ ...selectedTask, ...updatePayload });
         }
       } else {
-        alert("Gagal mengupdate database: Cek apakah Supabase mengizinkan status baru ini.");
+        alert("Gagal mengupdate database.");
       }
     } catch (error) {
       console.error(error);
@@ -430,24 +376,17 @@ export default function App() {
   // --- LOGIKA APPROVAL (SISI PEMBERI TUGAS / ADMIN) ---
   const handleApproveTask = async (taskId, isApproved) => {
     const finalStatus = isApproved ? 'done' : 'in-progress';
-    const nowFull = new Date().toISOString(); // Simpan dengan Jam dan Menit
-
     try {
       const updatePayload = { 
         status: finalStatus,
-        completed_at: isApproved ? nowFull : null,
+        completed_at: isApproved ? getNowStr() : null,
         approved_by: isApproved ? currentUser.id : null 
       };
 
-      const { error } = await supabase
-        .from('initial_tasks')
-        .update(updatePayload)
-        .eq('id', taskId);
-      
+      const { error } = await supabase.from('initial_tasks').update(updatePayload).eq('id', taskId);
       if (!error) {
         alert(isApproved ? "Berhasil di-approve!" : "Tugas dikembalikan untuk direvisi.");
         loadTasksFromDB();
-        // Update tampilan modal seketika
         if (selectedTask && selectedTask.id === taskId) {
           setSelectedTask({ ...selectedTask, ...updatePayload });
         }
@@ -459,39 +398,21 @@ export default function App() {
     }
   };
 
-  // --- FUNGSI HAPUS TUGAS (KHUSUS ADMIN) ---
   const handleDeleteTask = async (taskId, taskTitle) => {
-    if (currentUser.role !== 'admin') {
-      return alert("Akses ditolak. Hanya Admin yang dapat menghapus tugas.");
-    }
-    
-    // Popup Konfirmasi sebelum menghapus
-    if (!window.confirm(`PERINGATAN: Yakin ingin menghapus tugas "${taskTitle}"?\n\nData tugas, riwayat chat, dan lampiran tidak dapat dikembalikan jika sudah dihapus.`)) {
-      return;
-    }
+    if (currentUser.role !== 'admin') return alert("Akses ditolak. Hanya Admin yang dapat menghapus tugas.");
+    if (!window.confirm(`PERINGATAN: Yakin ingin menghapus tugas "${taskTitle}"?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('initial_tasks')
-        .delete()
-        .eq('id', taskId);
-
+      const { error } = await supabase.from('initial_tasks').delete().eq('id', taskId);
       if (!error) {
         alert("Tugas berhasil dihapus permanen!");
-        
-        // Hilangkan tugas dari layar secara otomatis tanpa harus refresh halaman
         setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-        
-        // Tutup modal pop-up secara otomatis jika sedang dibuka
-        if (selectedTask && selectedTask.id === taskId) {
-          setSelectedTask(null);
-        }
+        if (selectedTask && selectedTask.id === taskId) setSelectedTask(null);
       } else {
         alert("Gagal menghapus tugas: " + error.message);
       }
     } catch (err) {
       alert("Gagal terhubung ke database saat menghapus tugas.");
-      console.error(err);
     }
   };
 
@@ -501,10 +422,7 @@ export default function App() {
       if (data) {
         setTasks(data);
         if (currentUser) {
-          const myUnfinishedTasks = data.filter(t => 
-            t.status !== 'done' && getAssigneesArray(t.assignedTo).includes(currentUser.id)
-          );
-
+          const myUnfinishedTasks = data.filter(t => t.status !== 'done' && getAssigneesArray(t.assignedTo).includes(currentUser.id));
           if (myUnfinishedTasks.length > 0) {
             setNotifications(prev => {
               let currentNotifs = [...prev];
@@ -528,7 +446,6 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Gagal mengambil data tasks:', error);
       setTasks([]);
     }
   }
@@ -536,19 +453,10 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       loadTasksFromDB();
-      
       const fetchNotifications = async () => {
         try {
-          const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('userId', currentUser.id)
-            .order('id', { ascending: false });
-            
-          if (data) {
-             // Mapping read_status ke read untuk UI
-            setNotifications(data.map(n => ({...n, read: n.read_status})));
-          }
+          const { data, error } = await supabase.from('notifications').select('*').eq('userId', currentUser.id).order('id', { ascending: false });
+          if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
         } catch (error) {
           console.error("Gagal menarik notifikasi:", error);
         }
@@ -560,11 +468,9 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [newComment, setNewComment] = useState(''); 
   const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
-  // PERBAIKAN: Tambah field crossDivision untuk admin saat nambah Direksi/Manager baru
-  const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '', crossDivision: false });
+  const [newUser, setNewUser] = useState({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
   const [showMobileChat, setShowMobileChat] = useState(false);
 
-  // Otomatis kembalikan layar ke "Info Pekerjaan" setiap kali membuka tugas baru
   useEffect(() => {
     setShowMobileChat(false);
   }, [selectedTask]);
@@ -573,10 +479,7 @@ export default function App() {
 
   useEffect(() => {
     const activeSession = localStorage.getItem('syntegra_user_session');
-    if (activeSession) {
-      setCurrentUser(JSON.parse(activeSession)); 
-    }
-
+    if (activeSession) setCurrentUser(JSON.parse(activeSession)); 
     const savedNik = localStorage.getItem('syntegra_saved_nik');
     const savedPassword = localStorage.getItem('syntegra_saved_password');
     
@@ -591,9 +494,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedTask) {
-      setNotifications(prev => prev.filter(n => n.taskId !== selectedTask.id));
-    }
+    if (selectedTask) setNotifications(prev => prev.filter(n => n.taskId !== selectedTask.id));
   }, [selectedTask]);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -610,11 +511,7 @@ export default function App() {
       try {
         const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single();
         if (data) {
-          const mappedSettings = {
-            brandName: data.brand_name,
-            autoEmail: data.auto_email,
-            maintenanceMode: data.maintenance_mode
-          };
+          const mappedSettings = { brandName: data.brand_name, autoEmail: data.auto_email, maintenanceMode: data.maintenance_mode };
           setSysConfig(mappedSettings);
           setConfigForm(mappedSettings); 
         }
@@ -671,29 +568,21 @@ export default function App() {
     }
     return Array.isArray(assignedTo) ? assignedTo.map(Number) : [Number(assignedTo)];
   };
-  const getUserName = (id) => users.find(u => u.id === id)?.name || 'Unknown';
-  const getAvatar = (id) => users.find(u => u.id === id)?.avatar || '??';
+  const getUserName = (id) => users.find(u => String(u.id) === String(id))?.name || 'Unknown';
+  const getAvatar = (id) => users.find(u => String(u.id) === String(id))?.avatar || '??';
   const getAssigneesNames = (assignedTo) => getAssigneesArray(assignedTo).map(id => getUserName(id)).filter(name => name !== 'Unknown').join(', ') || 'Belum Ada';
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     try {
-      const { data: user, error } = await supabase
-        .from('initial_users')
-        .select('*')
-        .eq('nik', loginNik)
-        .eq('password', loginPassword)
-        .single();
-
+      const { data: user, error } = await supabase.from('initial_users').select('*').eq('nik', loginNik).eq('password', loginPassword).single();
       if (error || !user) {
         setLoginError('NIK atau Password yang Anda masukkan salah!');
         return;
       }
-
       if (sysConfig.maintenanceMode && user.role !== 'admin') {
         return setLoginError('Sistem sedang maintenance. Akses ditolak.');
       }
-      
       localStorage.setItem('syntegra_user_session', JSON.stringify(user));
       if(rememberMe) {
         localStorage.setItem('syntegra_saved_nik', loginNik);
@@ -702,14 +591,11 @@ export default function App() {
         localStorage.removeItem('syntegra_saved_nik');
         localStorage.removeItem('syntegra_saved_password');
       }
-
       setCurrentUser(user);
       setActiveTab('dashboard');
       setLoginError('');
-      
     } catch (error) {
       setLoginError('Gagal terhubung ke database.');
-      console.error(error);
     }
   };
 
@@ -728,56 +614,37 @@ export default function App() {
     if (customAction) customAction();
   };
 
-  // --- FUNGSI KLIK NOTIFIKASI SATUAN ---
   const handleReadNotification = async (notif) => {
-    // 1. Hilangkan titik merah seketika di layar
     setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-    
-    // 2. Simpan status "Sudah Dibaca" ke Supabase agar permanen
-    try {
-      await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id);
-    } catch (err) {
-      console.error("Gagal update status notif", err);
-    }
-
-    // 3. SMART ROUTING (Mengarahkan layar sesuai tipe notifikasi)
+    try { await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id); } catch (err) {}
     if (notif.taskId) {
       const task = tasks.find(t => t.id === notif.taskId);
       if (task) {
         setSelectedTask(task);
-        setIsNotifOpen(false); // Tutup pop-up notifikasi
-        
+        setIsNotifOpen(false); 
         if (notif.type === 'chat') {
-          navigateTo('chat');       // Pindah ke tab Pusat Pesan
-          setShowMobileChat(true);  // Langsung buka layar chat penuh (khusus HP)
+          navigateTo('chat');       
+          setShowMobileChat(true);  
         } else {
-          navigateTo('tasks');      // Pindah ke tab Daftar Tugas
+          navigateTo('tasks');      
         }
       }
     }
   };
 
-  // --- FUNGSI KLIK "TANDAI SEMUA DIBACA" ---
   const handleReadAllNotifs = async () => {
     setNotifications(notifications.map(n => ({ ...n, read: true })));
-    try {
-      await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id);
-    } catch (err) {
-      console.error("Gagal update semua notif", err);
-    }
+    try { await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id); } catch (err) {}
   };
 
-  // --- STATE UNTUK ANIMASI LOADING TUGAS BARU ---
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- FUNGSI SIMPAN TUGAS ---
   const handleCreateTask = async (e) => {
     e.preventDefault();
     const assignedUserIds = currentUser.role === 'staff' ? [currentUser.id] : newTask.assignedTo;
     if (currentUser.role !== 'staff' && assignedUserIds.length === 0) return alert("Pilih minimal satu anggota atau tim!");
 
-    setIsSubmitting(true); // MULAI ANIMASI LOADING
-
+    setIsSubmitting(true);
     const taskData = {
       title: newTask.title,
       description: newTask.description,
@@ -792,14 +659,12 @@ export default function App() {
 
     try {
       const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
-      
       if (!error && newTasks && newTasks.length > 0) {
         const insertedTask = newTasks[0];
         setIsModalOpen(false);
         setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
         loadTasksFromDB(); 
 
-        // NOTIFIKASI TUGAS BARU KE PENERIMA
         const notifsToInsert = assignedUserIds
            .filter(id => String(id) !== String(currentUser.id))
            .map(id => ({
@@ -811,15 +676,12 @@ export default function App() {
               taskId: insertedTask.id
            }));
         
-        if (notifsToInsert.length > 0) {
-           await supabase.from('notifications').insert(notifsToInsert);
-        }
+        if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
       } else {
         alert("Gagal menyimpan: " + error?.message);
       }
     } catch (error) {
       alert("Error gagal terhubung ke server.");
-      console.error(error);
     } finally {
       setIsSubmitting(false);
     }
@@ -832,58 +694,38 @@ export default function App() {
       if (!error) {
         setDivisions([...divisions, newDivName.trim()]);
         setNewDivName('');
-      } else {
-        alert("Gagal tambah divisi: " + error.message);
-      }
-    } catch (error) {
-      alert("Koneksi server terputus.");
-    }
+      } else alert("Gagal menambah divisi.");
+    } catch (error) {}
   };
 
   const handleDeleteDivision = async (divName) => {
     if(!window.confirm(`Hapus divisi ${divName}?`)) return;
     try {
       const { error } = await supabase.from('initial_divisions').delete().eq('name', divName);
-      if (!error) {
-        setDivisions(divisions.filter(d => d !== divName));
-      }
-    } catch (error) {
-      alert("Gagal menghapus.");
-    }
+      if (!error) setDivisions(divisions.filter(d => d !== divName));
+    } catch (error) {}
   };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    
-    // VALIDASI CEK DUPLIKAT (NIK atau Nama tidak boleh sama)
-    const isExist = users.some(u => 
-      u.nik === newUser.nik.trim() || 
-      u.name.toLowerCase() === newUser.name.trim().toLowerCase()
-    );
-
-    if (isExist) {
-      return alert(`Pendaftaran Dibatalkan!\nNIK atau Nama Karyawan "${newUser.name}" sudah terdaftar di sistem.`);
-    }
+    const isExist = users.some(u => u.nik === newUser.nik.trim() || u.name.toLowerCase() === newUser.name.trim().toLowerCase());
+    if (isExist) return alert(`Pendaftaran Dibatalkan!\nNIK atau Nama Karyawan "${newUser.name}" sudah terdaftar.`);
 
     try {
       const nameParts = (newUser.name || 'User').trim().split(/\s+/);
       const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-      
       const userToInsert = { ...newUser, avatar: initials };
-      
       const { data, error } = await supabase.from('initial_users').insert([userToInsert]).select();
       
       if (!error && data) {
         setUsers([...users, data[0]]);
         setIsUserModalOpen(false);
-        setNewUser({ nik: '', password: '', name: '', role: 'staff', division: '', position: '', crossDivision: false });
+        setNewUser({ nik: '', password: '', name: '', role: 'staff', division: '', position: '' });
         alert('Pengguna baru berhasil ditambahkan!');
       } else {
         alert('Gagal: ' + error?.message);
       }
-    } catch (err) {
-      alert('Gagal terhubung ke database.');
-    }
+    } catch (err) { alert('Gagal terhubung ke database.'); }
   };
 
   const handleUpdateUser = async (e) => {
@@ -891,10 +733,11 @@ export default function App() {
     try {
       const nameParts = (editingUser.name || 'User').trim().split(/\s+/);
       const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-      
       const userToUpdate = { 
         name: editingUser.name, role: editingUser.role, division: editingUser.division, 
-        position: editingUser.position, crossDivision: editingUser.crossDivision, avatar: initials
+        position: editingUser.position, crossDivision: editingUser.crossDivision,
+        accessible_divisions: editingUser.accessible_divisions, // Atribut Hak Akses Divisi (Direktur)
+        avatar: initials
       };
 
       const { error } = await supabase.from('initial_users').update(userToUpdate).eq('id', editingUser.id);
@@ -906,9 +749,7 @@ export default function App() {
       } else {
         alert('Gagal mengupdate: ' + error.message);
       }
-    } catch (err) {
-      alert('Gagal terhubung ke server database.');
-    }
+    } catch (err) { alert('Gagal terhubung ke server database.'); }
   }; 
 
   const handleDeleteUser = async (userId) => {
@@ -919,11 +760,9 @@ export default function App() {
           setUsers(users.filter(u => u.id !== userId));
           alert('User berhasil dihapus!');
         } else {
-          alert('Gagal menghapus user: ' + error.message);
+          alert('Gagal menghapus user.');
         }
-      } catch (error) {
-        alert('Gagal terhubung ke database.');
-      }
+      } catch (error) { alert('Gagal terhubung ke database.'); }
     }
   };
   
@@ -945,22 +784,17 @@ export default function App() {
   const handleMassUploadCSV = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    if (!file.name.endsWith('.csv')) {
-      return alert("Harap unggah file dengan format .csv");
-    }
+    if (!file.name.endsWith('.csv')) return alert("Harap unggah file dengan format .csv");
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split('\n').filter(line => line.trim() !== ''); 
-      
       const uniqueNewUsers = [];
       const duplicateNames = [];
 
       for(let i = 1; i < lines.length; i++) {
         const [nik, password, name, role, division, position] = lines[i].split(',');
-        
         if (nik && name) {
           const uNik = nik.trim();
           const uName = name.trim();
@@ -970,43 +804,28 @@ export default function App() {
           const isExistInDB = users.some(existing => existing.nik === uNik || existing.name.toLowerCase() === uName.toLowerCase());
           const isExistInBatch = uniqueNewUsers.some(newU => newU.nik === uNik || newU.name.toLowerCase() === uName.toLowerCase());
 
-          if (isExistInDB || isExistInBatch) {
-            duplicateNames.push(uName);
-          } else {
+          if (isExistInDB || isExistInBatch) duplicateNames.push(uName);
+          else {
             uniqueNewUsers.push({
-              nik: uNik,
-              password: password ? password.trim() : '123456',
-              name: uName,
-              role: role ? role.trim().toLowerCase() : 'staff',
-              division: division ? division.trim() : 'Pusat',
-              position: position ? position.trim() : '-',
-              avatar: initials
+              nik: uNik, password: password ? password.trim() : '123456', name: uName,
+              role: role ? role.trim().toLowerCase() : 'staff', division: division ? division.trim() : 'Pusat',
+              position: position ? position.trim() : '-', avatar: initials
             });
           }
         }
       }
 
-      if (uniqueNewUsers.length === 0) {
-        return alert("Upload dibatalkan!\nSemua data di dalam CSV (NIK/Nama) sudah terdaftar di sistem.");
-      }
+      if (uniqueNewUsers.length === 0) return alert("Upload dibatalkan!\nSemua data di dalam CSV (NIK/Nama) sudah terdaftar di sistem.");
 
       try {
         const { data, error } = await supabase.from('initial_users').insert(uniqueNewUsers).select();
-        
         if (!error && data) {
           setUsers([...users, ...data]);
-          
           let msg = `Berhasil mengimpor ${uniqueNewUsers.length} pengguna dari CSV!`;
-          if (duplicateNames.length > 0) {
-            msg += `\n\nDIABAIKAN (${duplicateNames.length} data duplikat/sudah ada):\n- ${duplicateNames.join('\n- ')}`;
-          }
+          if (duplicateNames.length > 0) msg += `\n\nDIABAIKAN (${duplicateNames.length} data duplikat):\n- ${duplicateNames.join('\n- ')}`;
           alert(msg);
-        } else {
-          alert("Gagal menyimpan ke database: " + error?.message);
-        }
-      } catch (err) { 
-        alert("Gagal terhubung ke server database.");
-      }
+        } else alert("Gagal menyimpan ke database: " + error?.message);
+      } catch (err) { alert("Gagal terhubung ke server database."); }
     };
     reader.readAsText(file); 
     e.target.value = ''; 
@@ -1018,78 +837,47 @@ export default function App() {
     setMassUsersData(newData);
   };
 
-  const addMassRow = () => {
-    setMassUsersData([...massUsersData, { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }]);
-  };
-
-  const removeMassRow = (index) => {
-    setMassUsersData(massUsersData.filter((_, i) => i !== index));
-  };
+  const addMassRow = () => setMassUsersData([...massUsersData, { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }]);
+  const removeMassRow = (index) => setMassUsersData(massUsersData.filter((_, i) => i !== index));
 
   const handleSaveMassTable = async () => {
     const validUsers = massUsersData.filter(u => u.nik.trim() !== '' && u.name.trim() !== '');
     if (validUsers.length === 0) return alert("Isi minimal 1 data pengguna (NIK & Nama)!");
 
-    // WADAH UNTUK MEMISAHKAN YANG BARU DAN YANG DUPLIKAT
     const uniqueNewUsers = [];
     const duplicateNames = [];
 
     validUsers.forEach(u => {
       const uNik = u.nik.trim();
       const uName = u.name.trim();
-
-      // Cek apakah sudah ada di Database ATAU ada duplikat di dalam inputan itu sendiri
       const isExistInDB = users.some(existing => existing.nik === uNik || existing.name.toLowerCase() === uName.toLowerCase());
       const isExistInBatch = uniqueNewUsers.some(newU => newU.nik === uNik || newU.name.toLowerCase() === uName.toLowerCase());
 
-      if (isExistInDB || isExistInBatch) {
-        duplicateNames.push(uName); // Catat yang ditolak
-      } else {
+      if (isExistInDB || isExistInBatch) duplicateNames.push(uName); 
+      else {
         uniqueNewUsers.push({
-          nik: uNik,
-          password: u.password.trim() || '123456',
-          name: uName,
-          role: u.role || 'staff',
-          division: u.division || 'Pusat',
-          position: u.position.trim() || '-',
-          avatar: uName.substring(0,2).toUpperCase()
+          nik: uNik, password: u.password.trim() || '123456', name: uName,
+          role: u.role || 'staff', division: u.division || 'Pusat',
+          position: u.position.trim() || '-', avatar: uName.substring(0,2).toUpperCase()
         });
       }
     });
 
-    if (uniqueNewUsers.length === 0) {
-      return alert("Upload dibatalkan!\nSemua data yang Anda masukkan (NIK/Nama) sudah terdaftar di sistem.");
-    }
+    if (uniqueNewUsers.length === 0) return alert("Upload dibatalkan!\nSemua data sudah terdaftar.");
 
     try {
       const { data, error } = await supabase.from('initial_users').insert(uniqueNewUsers).select();
-      
       if (!error && data) {
         setUsers([...users, ...data]);
         setIsMassUserModalOpen(false);
-        
-        // Pesan Dinamis jika ada yang diabaikan
         let msg = `Berhasil menyimpan ${uniqueNewUsers.length} pengguna!`;
-        if (duplicateNames.length > 0) {
-          msg += `\n\nDIABAIKAN (${duplicateNames.length} data duplikat/sudah ada):\n- ${duplicateNames.join('\n- ')}`;
-        }
+        if (duplicateNames.length > 0) msg += `\n\nDIABAIKAN (${duplicateNames.length} duplikat):\n- ${duplicateNames.join('\n- ')}`;
         alert(msg);
-        
-        // Reset form ke 3 baris kosong
-        setMassUsersData([
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' },
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' },
-          { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
-        ]);
-      } else {
-        alert("Gagal: " + error?.message);
-      }
-    } catch (err) {
-      alert("Gagal terhubung ke server database.");
-    }
+        setMassUsersData([{ nik: '', password: '', name: '', role: 'staff', division: '', position: '' }]);
+      } else alert("Gagal: " + error?.message);
+    } catch (err) { alert("Gagal terhubung ke server database."); }
   };
 
-  // --- RENDER LOGIN ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-500 to-yellow-400 flex items-center justify-center p-4">
@@ -1125,7 +913,6 @@ export default function App() {
             <p className="text-center text-[10px] md:text-xs text-slate-400 font-medium pt-2">Hubungi HR / Admin bila lupa akses.</p>
           </form>
         </Card>
-        {/* COPYRIGHT ELEGANT (LOGIN SCREEN) */}
         <div className="absolute bottom-6 md:bottom-8 left-0 right-0 flex flex-col items-center justify-center opacity-60 hover:opacity-100 transition-opacity duration-300 z-10 cursor-default">
            <div className="flex items-center gap-2 text-[10px] md:text-xs font-black text-yellow-900/50 uppercase tracking-widest">
              <span>© {new Date().getFullYear()}</span>
@@ -1147,242 +934,179 @@ export default function App() {
   
   const myTasks = safeTasks.filter(t => {
     if (!t) return false;
-    
     const assignees = getAssigneesArray(t.assignedTo);
-    const creator = users.find(u => u.id === t.assignedBy) || {};
-    const assigneesData = assignees.map(id => users.find(u => u.id === id) || {});
+    const creator = users.find(u => String(u.id) === String(t.assignedBy)) || {};
+    const assigneesData = assignees.map(id => users.find(u => String(u.id) === String(id)) || {});
 
     if (currentUser.role === 'admin') return true;
 
     if (currentUser.role === 'direksi') {
       const isTaskAdmin = creator.role === 'admin' || assigneesData.some(u => u.role === 'admin');
-      if (isTaskAdmin) return false;
-      
-      // Jika Direksi diberikan izin pantau lintas divisi, bisa lihat semua
-      if (currentUser.crossDivision) return true;
-      
-      // Jika tidak, hanya bisa lihat divisi dia sendiri atau tugas yang berhubungan dengannya
-      const isMyDivision = creator.division === currentUser.division || assigneesData.some(u => u.division === currentUser.division);
-      const isMyOwnTask = assignees.includes(currentUser.id) || t.assignedBy === currentUser.id;
-      return isMyDivision || isMyOwnTask; 
+      if (isTaskAdmin) return false; 
+      if (currentUser.crossDivision) return true; // Akses semua divisi
+
+      const allowedDivs = currentUser.accessible_divisions || [];
+      const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
+      const isAllowedDivision = allowedDivs.includes(creator.division) || assigneesData.some(u => allowedDivs.includes(u.division));
+      return isMyOwnTask || isAllowedDivision;
     }
 
     if (currentUser.role === 'manager') {
-      const isMyOwnTask = assignees.includes(currentUser.id) || t.assignedBy === currentUser.id;
+      const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
       const isMyDivision = creator.division === currentUser.division || assigneesData.some(u => u.division === currentUser.division);
-
       if (currentUser.crossDivision) {
         const isStaffTask = assigneesData.some(u => u.role === 'staff');
         return isMyOwnTask || isMyDivision || isStaffTask;
       }
-      
       return isMyOwnTask || isMyDivision;
     }
 
     if (currentUser.role === 'staff') {
-      return assignees.includes(currentUser.id) || t.assignedBy === currentUser.id;
+      return assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
     }
-
     return false;
   });
 
   const activeTasks = myTasks;
-  // --- LOGIKA FILTER TUGAS MENDESAK (Urgent) ---
   const urgentTasks = activeTasks.filter(t => {
-    if (t.status === 'done') return false; // Abaikan yang sudah selesai
+    if (t.status === 'done') return false; 
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const due = new Date(t.dueDate);
-    
-    // Hitung selisih hari
     const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    // Muncul jika: Sudah lewat deadline (diffDays < 0) ATAU deadline dalam 3 hari ke depan (0-3)
     return diffDays <= 3;
-  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); // Urutkan dari yang paling telat
+  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); 
 
-  const myNotifications = notifications.filter(n => n.userId === currentUser.id);
+  const myNotifications = notifications.filter(n => String(n.userId) === String(currentUser.id));
   const unreadNotifsCount = myNotifications.filter(n => !n.read).length;
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 font-sans text-slate-800 flex flex-col md:flex-row print:bg-white print:block">
       
-      {/* HEADER MOBILE GLOBAL (LOGO SEBAGAI TOMBOL MENU) */}
+      {/* HEADER MOBILE GLOBAL */}
         <div className="md:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-xl border-b border-slate-100 px-4 py-3 flex justify-between items-center shadow-sm print:hidden">
-          
-          {/* TOMBOL BUKA MENU (LOGO PERUSAHAAN) */}
-          <button 
-            type="button" 
-            onClick={() => setMobileMenuOpen(true)}
-            className="flex items-center gap-2.5 active:scale-95 transition-transform text-left"
-          >
-            {/* Ikon Logo */}
+          <button type="button" onClick={() => setMobileMenuOpen(true)} className="flex items-center gap-2.5 active:scale-95 transition-transform text-left">
             <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 rounded-xl shadow-sm shrink-0">
               <img src="/Logo_apps.png" alt="Logo" className="w-4 h-4 object-contain" />
             </div>
-            
-            {/* Teks Nama Perusahaan */}
             <div className="flex flex-col overflow-hidden">
-              <span className="font-black text-xs tracking-tight text-yellow-500 uppercase leading-none truncate">
-                {sysConfig.brandName}
-              </span>
-              <span className="text-[8px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
-                Task Management
-              </span>
+              <span className="font-black text-xs tracking-tight text-yellow-500 uppercase leading-none truncate">{sysConfig.brandName}</span>
+              <span className="text-[8px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">Task Management</span>
             </div>
           </button>
-          
-          {/* TOMBOL NOTIFIKASI DI KANAN */}
           <div className="flex items-center gap-2 shrink-0">
-            <button 
-              type="button" 
-              onClick={() => setIsNotifOpen(!isNotifOpen)}
-              className="relative p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-            >
+            <button type="button" onClick={() => setIsNotifOpen(!isNotifOpen)} className="relative p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors">
               <Bell className="w-5 h-5" />
-              {unreadNotifsCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
-              )}
+              {unreadNotifsCount > 0 && <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>}
             </button>
           </div>
-          
         </div>
 
-      {/* OVERLAY MOBILE SIDEBAR */}
-      <div className={`fixed inset-0 bg-slate-900/40 z-[70] md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
+        <div className={`fixed inset-0 bg-slate-900/40 z-[70] md:hidden backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={() => setMobileMenuOpen(false)}></div>
 
-      {/* SIDEBAR NAVIGASI (DENGAN FITUR BUKA-TUTUP MINI) */}
-      <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-[80] transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
-      
-      {/* HEADER SIDEBAR (LOGO SEBAGAI TOMBOL TOGGLE) */}
-      <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
+        {/* SIDEBAR NAVIGASI */}
+        <aside className={`fixed md:relative top-0 bottom-0 left-0 bg-white/95 md:bg-white backdrop-blur-xl border-r border-slate-200/60 flex flex-col z-[80] transition-all duration-300 ease-in-out print:hidden ${mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full w-72'} ${isSidebarOpen ? 'md:w-72 md:translate-x-0' : 'md:w-20 md:translate-x-0'}`}>
         
-        {/* LOGO AREA (Bisa diklik untuk Buka/Tutup di PC) */}
-        <div 
-          onClick={() => window.innerWidth >= 768 && setIsSidebarOpen(!isSidebarOpen)}
-          className={`flex items-center gap-3 cursor-pointer group w-full ${!isSidebarOpen ? 'justify-center' : ''}`}
-          title="Klik untuk Buka/Tutup Menu"
-        >
-          {/* Ikon Logo */}
-          <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
-            <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
-          </div>
-          
-          {/* Teks Logo */}
-          {isSidebarOpen && (
-            <div className="flex flex-col animate-in fade-in duration-300 overflow-hidden">
-              <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight truncate">
-                {sysConfig.brandName}
-              </span>
-              <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">
-                Task Management
-              </span>
+        <div className={`p-4 md:p-6 border-b border-slate-100 flex items-center justify-between`}>
+          <div onClick={() => window.innerWidth >= 768 && setIsSidebarOpen(!isSidebarOpen)} className={`flex items-center gap-3 cursor-pointer group w-full ${!isSidebarOpen ? 'justify-center' : ''}`} title="Klik untuk Buka/Tutup Menu">
+            <div className="bg-gradient-to-br from-yellow-500 to-yellow-400 p-2 md:p-2.5 rounded-xl md:rounded-2xl shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110 group-active:scale-95">
+              <img src="/Logo_apps.png" alt="Logo" className="w-5 h-5 md:w-6 md:h-6 object-contain" />
             </div>
-          )}
+            {isSidebarOpen && (
+              <div className="flex flex-col animate-in fade-in duration-300 overflow-hidden">
+                <span className="font-black text-sm md:text-base tracking-tight text-yellow-500 uppercase leading-tight truncate">{sysConfig.brandName}</span>
+                <span className="text-[9px] md:text-[10px] font-black text-slate-800 uppercase tracking-widest mt-0.5 truncate">Task Management</span>
+              </div>
+            )}
+          </div>
+          <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0 ml-2" onClick={() => setMobileMenuOpen(false)}><X className="w-4 h-4" /></button>
         </div>
         
-        {/* Tombol Tutup Khusus Mobile (Tetap ada agar user HP tidak bingung) */}
-        <button type="button" className="md:hidden p-2 bg-slate-100 text-slate-600 rounded-full shrink-0 ml-2" onClick={() => setMobileMenuOpen(false)}>
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      
-      {/* LIST MENU NAVIGASI */}
-      <nav className="flex-1 p-3 md:p-4 space-y-1.5 overflow-y-auto custom-scrollbar overflow-x-hidden">
-          {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2 whitespace-nowrap">Menu Navigasi</p>}
-          
-          <button type="button" title="Dashboard Kinerja" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <LayoutDashboard className="w-5 h-5 shrink-0" /> 
-            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Dashboard Kinerja</span>}
-          </button>
-          
-          <button type="button" title="Manajemen Pekerjaan" onClick={() => navigateTo('tasks')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <CheckSquare className="w-5 h-5 shrink-0" /> 
-            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Manajemen Pekerjaan</span>}
-          </button>
-          
-          <button type="button" title="Pusat Pesan" onClick={() => navigateTo('chat')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <MessageSquare className="w-5 h-5 shrink-0" /> 
-            {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pusat Pesan</span>}
-          </button>
+        <nav className="flex-1 p-3 md:p-4 space-y-1.5 overflow-y-auto custom-scrollbar overflow-x-hidden">
+            {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 mt-2 whitespace-nowrap">Menu Navigasi</p>}
+            
+            <button type="button" title="Dashboard Kinerja" onClick={() => navigateTo('dashboard')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <LayoutDashboard className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Dashboard Kinerja</span>}
+            </button>
+            
+            <button type="button" title="Manajemen Pekerjaan" onClick={() => navigateTo('tasks')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <CheckSquare className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Manajemen Pekerjaan</span>}
+            </button>
+            
+            <button type="button" title="Pusat Pesan" onClick={() => navigateTo('chat')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <MessageSquare className="w-5 h-5 shrink-0" /> 
+              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pusat Pesan</span>}
+            </button>
 
-          {currentUser.role === 'staff' && (
-            <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <FileText className="w-5 h-5 shrink-0" /> 
-              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
-            </button>
-          )}
-          
-          {(currentUser.role !== 'staff') && (
-            <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <Printer className="w-5 h-5 shrink-0" /> 
-              {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
-            </button>
-          )}
-          
-          {(currentUser.role !== 'staff') && (
-            <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
-              {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
-              
-              <button type="button" title="Pantau Tim Divisi" 
-                onClick={() => { 
-                  if(!isSidebarOpen) setIsSidebarOpen(true); // Otomatis buka sidebar jika tertutup
-                  setIsDivMenuOpen(!isDivMenuOpen); 
-                }} 
-                className={`w-full flex items-center ${isSidebarOpen ? 'justify-between px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-3"><Users className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Pantau Tim Divisi</span>}</div>
-                {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
+            {currentUser.role === 'staff' && (
+              <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <FileText className="w-5 h-5 shrink-0" /> 
+                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
               </button>
-              
-              {/* Sub Menu Divisi (Hanya muncul jika sidebar terbuka) */}
-              <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
-                <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1">
-                  {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
-                  {divisions.filter(div => (currentUser.role === 'direksi' || currentUser.role === 'admin') || div === currentUser.division).map(div => (
-                    <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
-                  ))}
+            )}
+            
+            {(currentUser.role !== 'staff') && (
+              <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <Printer className="w-5 h-5 shrink-0" /> 
+                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
+              </button>
+            )}
+            
+            {(currentUser.role !== 'staff') && (
+              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+                {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
+                
+                <button type="button" title="Pantau Tim Divisi" 
+                  onClick={() => { 
+                    if(!isSidebarOpen) setIsSidebarOpen(true); 
+                    setIsDivMenuOpen(!isDivMenuOpen); 
+                  }} 
+                  className={`w-full flex items-center ${isSidebarOpen ? 'justify-between px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'division' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <div className="flex items-center gap-3"><Users className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Pantau Tim Divisi</span>}</div>
+                  {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
+                </button>
+                
+                {/* LIST DIVISI */}
+                <div className={`overflow-hidden transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-64 mt-2' : 'max-h-0'}`}>
+                  <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1">
+                    {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
+                    {divisions.filter(div => currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(div)) || div === currentUser.division).map(div => (
+                      <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {currentUser.role === 'admin' && (
-            <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
-               {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
-               <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
-               <button type="button" title="Konfigurasi Sistem" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pengaturan Sistem</span>}</button>
-            </div>
-          )}
-      </nav>
+            {currentUser.role === 'admin' && (
+              <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
+                 {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
+                 <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
+                 <button type="button" title="Konfigurasi Sistem" onClick={() => navigateTo('admin_settings')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_settings' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Settings className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Pengaturan Sistem</span>}</button>
+              </div>
+            )}
+        </nav>
 
-      {/* AREA PROFIL BAWAH */}
-      <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 pb-8 md:pb-5">
-        <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
-          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-            {currentUser.avatar}
+        <div className="p-3 md:p-5 border-t border-slate-200 bg-slate-50/50 shrink-0 mb-10 md:mb-0">
+          <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-2' : 'justify-center px-0'} mb-4`}>
+            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-white text-sm md:text-lg shadow-md shrink-0 ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+              {currentUser.avatar}
+            </div>
+            {isSidebarOpen && (
+              <div className="flex-1 overflow-hidden animate-in fade-in duration-300">
+                <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
+              </div>
+            )}
           </div>
-          {isSidebarOpen && (
-            <div className="flex-1 overflow-hidden animate-in fade-in duration-300">
-              <p className="font-extrabold text-xs md:text-sm text-slate-800 truncate">{currentUser.name}</p>
-              <p className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">{currentUser.role} • {currentUser.division}</p>
-            </div>
-          )}
+          <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
+            <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
+          </button>
         </div>
-        <button type="button" title="Keluar Akun" onClick={handleLogout} className={`w-full flex items-center justify-center ${isSidebarOpen ? 'gap-2 px-4' : 'px-0'} text-red-600 bg-white border border-red-100 hover:bg-red-50 py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-sm`}>
-          <LogOut className="w-4 h-4 shrink-0" /> {isSidebarOpen && <span className="whitespace-nowrap">Keluar</span>}
-        </button>
-      </div>
-      
-      {/* COPYRIGHT SIDEBAR (MODERN SAAS STYLE) */}
-      {isSidebarOpen && (
-        <div className="pt-2 pb-4 flex flex-col items-center text-center animate-in fade-in duration-500 cursor-default">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
-            © {new Date().getFullYear()} {sysConfig.brandName}
-          </p>
-        </div>
-      )}
       </aside>
 
       {/* KONTEN UTAMA */}
@@ -1412,18 +1136,13 @@ export default function App() {
                  </button>
                </div>
                
-               {/* KOTAK POP-UP NOTIFIKASI (HANYA MENAMPILKAN YANG BELUM DIBACA) */}
                {isNotifOpen && (
-                    <>
-                    <div 
-                     className="fixed inset-0 z-[90] cursor-default" 
-                     onClick={() => setIsNotifOpen(false)}
-                   ></div>
+                   <>
+                   <div className="fixed inset-0 z-[90] cursor-default" onClick={() => setIsNotifOpen(false)}></div>
                    <div className="fixed top-20 left-4 right-4 md:absolute md:inset-auto md:top-14 md:right-0 md:w-[400px] bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-[100] overflow-hidden transform origin-top md:origin-top-right transition-all animate-in fade-in zoom-in-95">
                      
                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/90 backdrop-blur-md">
                        <h4 className="font-black text-slate-800 text-sm md:text-base">Notifikasi Baru</h4>
-                       {/* Tombol ini akan langsung membersihkan daftar karena semua jadi 'read' */}
                        {unreadNotifsCount > 0 && (
                          <button type="button" onClick={handleReadAllNotifs} className="text-[10px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg uppercase tracking-wider transition-colors shadow-sm">
                            Bersihkan Semua
@@ -1432,20 +1151,15 @@ export default function App() {
                      </div>
                      
                      <div className="max-h-[60vh] md:max-h-[450px] overflow-y-auto custom-scrollbar bg-white">
-                       {/* FILTER: Hanya tampilkan yang status 'read' nya FALSE */}
                        {myNotifications.filter(n => !n.read).length === 0 ? (
                          <div className="p-10 flex flex-col items-center justify-center text-center">
                            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-                             {/* Ikon kembali menggunakan Bell biasa agar tidak error */}
                              <Bell className="w-6 h-6 text-blue-300 animate-bounce" />
                            </div>
                            <p className="text-slate-500 text-xs md:text-sm font-bold">Semua pesan sudah dibaca.</p>
-                           <p className="text-[10px] text-slate-400 mt-1">Daftar ini akan otomatis kosong agar Anda tetap fokus.</p>
                          </div>
                        ) : (
-                         myNotifications
-                          .filter(n => !n.read) 
-                          .map(notif => (
+                         myNotifications.filter(n => !n.read).map(notif => (
                            <div key={notif.id} onClick={() => handleReadNotification(notif)} className="p-4 border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-pointer flex gap-3.5 bg-blue-50/10">
                              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full shrink-0 shadow-sm border-2 border-white flex items-center justify-center ${notif.type === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
                                {notif.type === 'chat' ? <MessageSquare className="w-4 h-4 md:w-5 md:h-5" /> : <CheckSquare className="w-4 h-4 md:w-5 md:h-5" />}
@@ -1465,7 +1179,6 @@ export default function App() {
                   </>
                )}
 
-               {/* TOMBOL TAMBAH TUGAS (HEADER) */}
                {activeTab !== 'laporan' && activeTab !== 'admin_users' && activeTab !== 'admin_settings' && (
                  <button type="button" onClick={() => setIsModalOpen(true)} className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
                    <Plus className="w-4 h-4 md:w-5 md:h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
@@ -1508,15 +1221,11 @@ export default function App() {
                     .sort((a, b) => b.comments[b.comments.length - 1].id - a.comments[a.comments.length - 1].id) 
                     .map(task => {
                       const latestChat = task.comments[task.comments.length - 1];
-                      const isMe = latestChat.userId === currentUser.id;
+                      const isMe = String(latestChat.userId) === String(currentUser.id);
                       const isActive = selectedTask?.id === task.id; 
                       
                       return (
-                        <div 
-                          key={task.id} 
-                          onClick={() => isActive ? setSelectedTask(null) : setSelectedTask(task)} 
-                          className={`p-3 md:p-4 border-b border-slate-100 cursor-pointer transition-colors ${isActive ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'bg-white hover:bg-slate-50 border-l-4 border-l-transparent'}`}
-                        >
+                        <div key={task.id} onClick={() => isActive ? setSelectedTask(null) : setSelectedTask(task)} className={`p-3 md:p-4 border-b border-slate-100 cursor-pointer transition-colors ${isActive ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'bg-white hover:bg-slate-50 border-l-4 border-l-transparent'}`}>
                           <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1">{task.title}</h4>
                           <p className="text-[10px] md:text-xs text-slate-500 mt-1 font-medium line-clamp-1 md:line-clamp-2">
                             <span className="font-black text-slate-700">{isMe ? 'Anda' : getUserName(latestChat.userId)}:</span> {latestChat.text}
@@ -1542,7 +1251,7 @@ export default function App() {
                     
                     <div className="flex-1 p-3 md:p-6 overflow-y-auto space-y-3 md:space-y-4 custom-scrollbar bg-slate-100/50">
                       {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
-                        const isMe = chat?.userId === currentUser?.id;
+                        const isMe = String(chat?.userId) === String(currentUser?.id);
                         return (
                           <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                             <div className={`p-2.5 md:p-4 rounded-2xl shadow-sm max-w-[85%] ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'}`}>
@@ -1573,11 +1282,10 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: DASHBOARD (DESAIN ALA M-BANKING + URGENT TASK) */}
+          {/* TAB: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6 md:space-y-8 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0 mb-5">
               
-              {/* Profil Singkat Mobile */}
               <div className="md:hidden flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3.5">
                    <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-inner ${currentUser.role === 'admin' ? 'bg-slate-800' : currentUser.role === 'direksi' ? 'bg-purple-600' : currentUser.role === 'manager' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{currentUser.avatar}</div>
@@ -1589,7 +1297,6 @@ export default function App() {
                 <Badge type="low">{currentUser.role}</Badge>
               </div>
 
-              {/* Main "Balance" Card */}
               <div className="bg-blue-600 rounded-[2rem] p-6 md:p-8 text-white shadow-[0_15px_40px_rgba(79,70,229,0.3)] relative overflow-hidden flex flex-col justify-between min-h-[160px] md:min-h-[200px]">
                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
                  <div className="relative z-10">
@@ -1610,7 +1317,6 @@ export default function App() {
                  </div>
               </div>
 
-              {/* FITUR BARU: SECTION PERHATIAN KHUSUS (URGENT TASKS) */}
               {urgentTasks.length > 0 && (
                 <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
                   <div className="flex items-center justify-between px-2">
@@ -1618,18 +1324,12 @@ export default function App() {
                       <AlertCircle className="w-5 h-5 animate-pulse" /> Perhatian Khusus ({urgentTasks.length})
                     </h3>
                   </div>
-                  
-                  {/* List Horizontal/Scrollable untuk Tugas Mendesak */}
                   <div className="flex gap-4 overflow-x-auto pb-2 px-1 custom-scrollbar">
                     {urgentTasks.map(task => {
-                       const isOverdue = task.dueDate < new Date().toISOString().split('T')[0];
+                       const nowISO = new Date().toISOString().slice(0, 16);
+                       const isOverdue = task.dueDate < nowISO && task.status !== 'done';
                        return (
-                         <div 
-                          key={task.id} 
-                          onClick={() => setSelectedTask(task)}
-                          className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white
-                            ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}
-                         >
+                         <div key={task.id} onClick={() => setSelectedTask(task)} className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}>
                             <div className="flex justify-between items-start mb-3">
                               <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${isOverdue ? 'bg-red-600 text-white' : 'bg-orange-100 text-orange-700'}`}>
                                 {isOverdue ? 'Sudah Lewat Deadline' : 'Mendekati Deadline'}
@@ -1640,7 +1340,7 @@ export default function App() {
                             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                                  <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-orange-500'}`} />
-                                 {task.dueDate}
+                                 {formatDateTime(task.dueDate)}
                                </div>
                                <span className="text-[10px] font-bold text-blue-500">Klik Detail &rarr;</span>
                             </div>
@@ -1651,7 +1351,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Grid Status Cepat */}
               <div className="grid grid-cols-3 gap-3 md:gap-6">
                 {[
                   { title: 'Pending', count: activeTasks.filter(t => t.status === 'pending').length, color: 'text-blue-600', bg: 'bg-blue-100' },
@@ -1667,7 +1366,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Daftar Aktivitas Terkini (ala Recent Transactions) */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
                 <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
@@ -1677,13 +1375,12 @@ export default function App() {
                   {activeTasks.slice(0, 5).map((task) => (
                     <div key={task.id} onClick={() => setSelectedTask(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer border border-transparent">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm
-                          ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
                           {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
                         </div>
                         <div>
                           <h4 className="text-sm font-black text-slate-800 line-clamp-1">{task.title}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {task.dueDate}</p>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {formatDateTime(task.dueDate)}</p>
                         </div>
                       </div>
                       <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
@@ -1694,11 +1391,9 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: TASKS (DESAIN ALA M-BANKING) */}
+          {/* TAB: TASKS */}
           {activeTab === 'tasks' && (
             <div className="space-y-4 print:hidden animate-in fade-in duration-300 pb-20 md:pb-0">
-               
-               {/* Search Bar Ala Kolom Pencarian Transaksi */}
                <div className="bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col md:flex-row items-center gap-2">
                  <div className="flex w-full items-center bg-slate-50 rounded-xl px-4 py-2 border border-slate-100 focus-within:border-blue-300 focus-within:bg-white transition-colors">
                    <Search className="w-5 h-5 text-slate-400 shrink-0" />
@@ -1713,52 +1408,43 @@ export default function App() {
                  </div>
                </div>
 
-               {/* Task List (Desain Riwayat) */}
                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
-                 
                  <div className="space-y-1 overflow-y-auto custom-scrollbar">
                   {myTasks.filter(t => {
                     if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
-                    if (taskFilterDate && t.dueDate !== taskFilterDate) return false;
+                    if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
                     return true;
                   }).map(task => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const isOverdue = task.dueDate < today && task.status !== 'done';
+                    const nowISO = new Date().toISOString().slice(0, 16);
+                    const isOverdue = task.dueDate < nowISO && task.status !== 'done';
                     const assigneesArr = getAssigneesArray(task.assignedTo);
                     
                     return (  
                       <div key={task.id} onClick={() => setSelectedTask(task)} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-slate-100 gap-4">
-                        
                         <div className="flex items-center gap-4 min-w-0">
-                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white
-                            ${isOverdue ? 'bg-red-100 text-red-600' : task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : task.status === 'waiting-approval' ? 'bg-orange-100 text-orange-600' : 'bg-blue-50 text-blue-500'}`}>
+                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white ${isOverdue ? 'bg-red-100 text-red-600' : task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : task.status === 'waiting-approval' ? 'bg-orange-100 text-orange-600' : 'bg-blue-50 text-blue-500'}`}>
                             {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : isOverdue ? <AlertCircle className="w-6 h-6"/> : <FileText className="w-6 h-6" />}
                           </div>
-                          
                           <div className="min-w-0 flex-1">
                             <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1 mb-1">{task.title}</h4>
                             <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-400">
-                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {task.dueDate}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatDateTime(task.dueDate)}</span>
                               <span>•</span>
                               <span className="truncate">Oleh: {getUserName(task.assignedBy)}</span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Status Badges di Kanan */}
                         <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0 pl-16 sm:pl-0">
                           {isOverdue && <span className="text-[9px] font-black text-white bg-red-600 px-2 py-1 rounded-md uppercase tracking-wider shadow-sm">Overdue</span>}
                           {!isOverdue && <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>}
-                          
-                          {/* Avatar tumpuk pembuat/penerima (Hanya Desktop) */}
                           <div className="hidden sm:flex -space-x-2 mt-1">
                             {assigneesArr.slice(0,3).map(id => <div key={id} title={getUserName(id)} className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-10">{getAvatar(id)}</div>)}
                             {assigneesArr.length > 3 && <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-0">+{assigneesArr.length - 3}</div>}
                           </div>
                         </div>
-
                       </div>
                     )
                   })}
@@ -1786,7 +1472,7 @@ export default function App() {
                       <h3 className="font-black text-sm md:text-base text-slate-800 mb-3 md:mb-4 flex items-center gap-2"><Users className="w-4 h-4 md:w-5 md:h-5 text-blue-500"/> Pilih Laporan Karyawan</h3>
                       <select value={reportTargetUserId} onChange={(e) => setReportTargetUserId(e.target.value)} className="w-full px-3 py-2 md:px-4 md:py-3 border border-slate-300 flex items-center rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
                          <option value="ALL">-- CETAK LAPORAN SEMUA KARYAWAN --</option>
-                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.role === 'direksi' || u.division === currentUser.division)).map(u => (
+                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division)).map(u => (
                            <option key={u.id} value={u.id}>{u.name} - {u.role.toUpperCase()} (Divisi {u.division})</option>
                          ))}
                       </select>
@@ -1821,7 +1507,6 @@ export default function App() {
                 const tDone = targetTasks.filter(t => t.status === 'done').length;
                 const tTotal = targetTasks.length;
                 const tRate = tTotal === 0 ? 0 : Math.round((tDone / tTotal) * 100);
-
                 const periodeCetak = reportFilterMonth 
                   ? new Date(reportFilterMonth + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) 
                   : new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -1829,9 +1514,7 @@ export default function App() {
                 return (
                   <div className="max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar print:max-h-none print:overflow-visible pb-10 print:pb-0">
                     <Card className="p-0 border-0 shadow-sm bg-white print:shadow-none print:border-none print:w-full overflow-hidden print-page">
-                      {/* HEADER KOP SURAT LAPORAN */}
                       <div className="p-3 md:p-5 print:p-0 print:pb-2 border-b-2 md:border-b-4 border-amber-600 bg-white print:border-b-2 print:border-black flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
-                        
                         <div className="flex items-start md:items-center gap-3 w-full md:w-auto">
                           <div className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center text-white print:shadow-none shrink-0 print:rounded-none mt-1 md:mt-0">
                             <img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" />
@@ -1848,7 +1531,6 @@ export default function App() {
                             <Printer className="w-4 h-4 md:w-4 md:h-4"/> Cetak PDF
                           </button>
                         </div>
-                        
                       </div>
 
                       <div className="text-center py-3 md:py-4 print:py-2 bg-white">
@@ -1876,43 +1558,34 @@ export default function App() {
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black w-6 text-center print:p-1">No</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Deskripsi Tugas & Pekerjaan</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Dikerjakan Oleh</th>
-                                {/* KOLOM BARU: TIMELINE (TGL DIBUAT + DEADLINE + OVERDUE) */}
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Timeline Pekerjaan</th>
-                                {/* KOLOM BARU: APPROVAL (TGL SELESAI + SIAPA YANG APPROVE) */}
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Data Approval</th>
                                 <th className="px-2 py-1.5 md:px-3 md:py-2 border-slate-200 print:border-black text-center print:p-1 w-16">Status</th>
                               </tr>
                             </thead>
                             <tbody>
                               {targetTasks.map((task, index) => { 
-                                 // LOGIKA DETEKSI OVERDUE (TERLAMBAT)
-                                 const today = new Date().toISOString().split('T')[0];
-                                 const isOverdue = task.dueDate < today && task.status !== 'done';
-
+                                 const nowISO = new Date().toISOString().slice(0, 16);
+                                 const isOverdue = task.dueDate < nowISO && task.status !== 'done';
                                  return (
                                   <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
-                                    
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight align-top">{task.title}</td>
-                                    
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold text-blue-600 border-r border-slate-200 print:border-black print:text-black print:p-1 align-top whitespace-nowrap">{getAssigneesNames(task.assignedTo)}</td>
                                     
-                                    {/* DATA TIMELINE */}
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{formatDateTime(task.created_at)}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
                                         <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
-                                          Deadline: <span className="font-bold">{task.dueDate}</span>
+                                          Deadline: <span className="font-bold">{formatDateTime(task.dueDate)}</span>
                                         </span>
-                                        {/* LABEL TERLAMBAT MUNCUL JIKA OVERDUE */}
                                         {isOverdue && <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded border border-red-200 w-fit font-bold mt-0.5 print:border-none print:p-0 print:text-red-600">TERLAMBAT</span>}
                                       </div>
                                     </td>
 
-                                    {/* DATA APPROVAL */}
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{formatDateTime(task.completed_at)}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at || '-'}</span></span>
                                         <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
                                       </div>
                                     </td>
@@ -1949,7 +1622,13 @@ export default function App() {
           {/* TAB: TIM DIVISI */}
           {activeTab === 'division' && (currentUser.role !== 'staff') && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 print:hidden animate-in fade-in duration-300 md:p-10">
-              {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (selectedDivision === 'Semua Divisi' || u.division === selectedDivision)).map(staff => {
+              {users.filter(u => 
+                 (u.role === 'staff' || u.role === 'manager') && 
+                 (selectedDivision === 'Semua Divisi' ? 
+                     (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division) : 
+                     u.division === selectedDivision
+                 )
+              ).map(staff => {
                   const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
                   return (
                     <Card key={staff.id} className="p-0 flex flex-col items-center text-center hover:-translate-y-1 transition-transform border border-slate-200 shadow-sm relative overflow-hidden bg-white">
@@ -2057,11 +1736,9 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: PENGATURAN (DESAIN PREMIUM) */}
+          {/* TAB: PENGATURAN */}
           {activeTab === 'admin_settings' && currentUser.role === 'admin' && (
             <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300 md:p-8 pb-32 md:pb-10">
-              
-              {/* Header Halaman */}
               <div className="px-2 md:px-0 mb-2">
                 <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
                   <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><Settings className="w-5 h-5 md:w-6 md:h-6"/></div>
@@ -2070,7 +1747,6 @@ export default function App() {
                 <p className="text-xs md:text-sm text-slate-500 font-medium mt-1.5">Atur identitas, keamanan, dan kebijakan aplikasi secara global.</p>
               </div>
 
-              {/* --- BAGIAN 1: IDENTITAS & ORGANISASI --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -2079,7 +1755,6 @@ export default function App() {
                 </div>
                 
                 <div className="p-5 md:p-7 space-y-6">
-                  {/* Input Brand */}
                   <div>
                     <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Nama Perusahaan (Brand)</label>
                     <input type="text" 
@@ -2089,47 +1764,35 @@ export default function App() {
                     />
                   </div>
                   
-                  {/* Input Divisi (Gaya Tag/Pill) */}
                   <div className="pt-2">
                     <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Daftar Divisi Aktif</label>
                     <div className="flex gap-2 mb-4">
                       <input type="text" value={newDivName} onChange={e => setNewDivName(e.target.value)} placeholder="Ketik nama divisi baru..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all" />
                       <button onClick={handleAddDivision} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
                     </div>
-                    
-                    {/* Daftar Divisi */}
                     <div className="flex flex-wrap gap-2.5">
                       {divisions.map(d => (
                         <div key={d} className="group flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50/50 border border-blue-100 text-blue-700 rounded-full transition-all hover:bg-blue-100 hover:shadow-sm">
                           <span className="font-bold text-xs md:text-sm">{d}</span>
-                          <button onClick={() => handleDeleteDivision(d)} className="text-blue-400 hover:text-red-500 p-0.5 rounded-full transition-colors" title="Hapus Divisi">
-                            <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/>
-                          </button>
+                          <button onClick={() => handleDeleteDivision(d)} className="text-blue-400 hover:text-red-500 p-0.5 rounded-full transition-colors" title="Hapus Divisi"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4"/></button>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* FITUR BARU: MANAJEMEN ROLE SISTEM */}
                   <div className="pt-6 border-t border-slate-100">
                     <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Role & Jabatan Sistem</label>
                     <div className="flex gap-2 mb-4">
                       <input type="text" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="Contoh: supervisor, direktur..." className="flex-1 px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all" />
                       <button onClick={handleAddRole} className="bg-slate-900 hover:bg-black text-white px-6 rounded-2xl font-black text-sm shadow-md transition-all active:scale-95">Tambah</button>
                     </div>
-                    
-                    {/* Daftar Role */}
                     <div className="flex flex-wrap gap-2.5">
                       {roles.map(r => (
                         <div key={r} className="group flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50/50 border border-emerald-100 text-emerald-700 rounded-full transition-all hover:bg-emerald-100 hover:shadow-sm">
                           <span className="font-bold text-xs md:text-sm capitalize">{r}</span>
                           <div className="flex items-center border-l border-emerald-200 pl-1.5 ml-1">
-                            <button onClick={() => handleEditRole(r)} className="text-emerald-500 hover:text-blue-600 p-1.5 rounded-full transition-colors" title="Ubah Role">
-                              <Edit className="w-3 h-3 md:w-3.5 md:h-3.5"/>
-                            </button>
-                            <button onClick={() => handleDeleteRole(r)} className="text-emerald-500 hover:text-red-500 p-1.5 rounded-full transition-colors" title="Hapus Role">
-                              <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5"/>
-                            </button>
+                            <button onClick={() => handleEditRole(r)} className="text-emerald-500 hover:text-blue-600 p-1.5 rounded-full transition-colors" title="Ubah Role"><Edit className="w-3 h-3 md:w-3.5 md:h-3.5"/></button>
+                            <button onClick={() => handleDeleteRole(r)} className="text-emerald-500 hover:text-red-500 p-1.5 rounded-full transition-colors" title="Hapus Role"><Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5"/></button>
                           </div>
                         </div>
                       ))}
@@ -2138,11 +1801,9 @@ export default function App() {
                       *Role <span className="text-slate-600 border-b border-slate-300">admin</span> dan <span className="text-slate-600 border-b border-slate-300">staff</span> adalah inti sistem dan tidak dapat dihapus.
                     </p>
                   </div>
-
                 </div>
               </div>
 
-              {/* --- BAGIAN 2: KEBIJAKAN & KEAMANAN --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -2151,7 +1812,6 @@ export default function App() {
                 </div>
                 
                 <div className="p-5 md:p-7 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
-                  {/* Batas Upload */}
                   <div className="flex flex-col">
                      <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Batas Ukuran Lampiran</label>
                      <select value={configForm.maxUploadSize || '5'} onChange={(e) => setConfigForm({...configForm, maxUploadSize: e.target.value})} className="w-full px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm text-slate-800 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none cursor-pointer appearance-none transition-all">
@@ -2160,10 +1820,9 @@ export default function App() {
                        <option value="10">10 MB (Kualitas Tinggi)</option>
                        <option value="20">20 MB (Dokumen Ekstra Besar)</option>
                      </select>
-                     <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-2 leading-relaxed">Mencegah staf mengunggah file terlalu besar yang menghabiskan server.</p>
+                     <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-2 leading-relaxed">Mencegah staf mengunggah file terlalu besar.</p>
                   </div>
 
-                  {/* Batas Waktu Sesi */}
                   <div className="flex flex-col">
                      <label className="block text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Otomatis Keluar (Timeout)</label>
                      <select value={configForm.sessionTimeout || '60'} onChange={(e) => setConfigForm({...configForm, sessionTimeout: e.target.value})} className="w-full px-4 py-3 border-2 border-slate-100 rounded-2xl font-bold text-sm text-slate-800 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none cursor-pointer appearance-none transition-all">
@@ -2172,12 +1831,11 @@ export default function App() {
                        <option value="720">12 Jam (Satu Sesi Kerja)</option>
                        <option value="0">Tidak Pernah Logout</option>
                      </select>
-                     <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-2 leading-relaxed">Keamanan ekstra jika staf lupa menutup aplikasi di perangkat umum.</p>
+                     <p className="text-[9px] md:text-[10px] text-slate-400 font-bold mt-2 leading-relaxed">Keamanan ekstra di perangkat umum.</p>
                   </div>
                 </div>
               </div>
 
-              {/* --- BAGIAN 3: SISTEM & OTOMASI (SAKLAR TOGGLE) --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -2186,7 +1844,6 @@ export default function App() {
                 </div>
                 
                 <div className="p-2">
-                  {/* Toggle 1: Wajib Lampiran */}
                   <div className="flex items-center justify-between p-4 md:p-5 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors" onClick={() => setConfigForm({...configForm, strictMode: !configForm.strictMode})}>
                     <div className="pr-4">
                       <h4 className="font-black text-slate-800 text-[11px] md:text-sm">Mode Disiplin (Wajib Bukti)</h4>
@@ -2197,29 +1854,26 @@ export default function App() {
                   
                   <div className="h-px bg-slate-100 mx-5"></div>
 
-                  {/* Toggle 2: Email Notif */}
                   <div className="flex items-center justify-between p-4 md:p-5 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors" onClick={() => setConfigForm({...configForm, autoEmail: !configForm.autoEmail})}>
                     <div className="pr-4">
                       <h4 className="font-black text-slate-800 text-[11px] md:text-sm">Kirim Notifikasi Tugas Harian</h4>
-                      <p className="text-[9px] md:text-[10px] text-slate-500 mt-1 font-bold leading-relaxed">Bot sistem akan otomatis mengirimkan ringkasan tugas aktif setiap pagi.</p>
+                      <p className="text-[9px] md:text-[10px] text-slate-500 mt-1 font-bold leading-relaxed">Bot sistem otomatis mengirimkan ringkasan tugas aktif.</p>
                     </div>
                     <div className={`w-12 h-6 md:w-14 md:h-7 ${configForm.autoEmail ? 'bg-blue-600' : 'bg-slate-200'} rounded-full relative transition-colors duration-300 shrink-0 shadow-inner`}><div className={`w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md absolute top-1 md:top-1 transition-transform duration-300 ${configForm.autoEmail ? 'translate-x-7 md:translate-x-8' : 'translate-x-1'}`}></div></div>
                   </div>
                   
                   <div className="h-px bg-slate-100 mx-5"></div>
                   
-                  {/* Toggle 3: Maintenance */}
                   <div className="flex items-center justify-between p-4 md:p-5 hover:bg-red-50/50 rounded-2xl cursor-pointer transition-colors" onClick={() => setConfigForm({...configForm, maintenanceMode: !configForm.maintenanceMode})}>
                     <div className="pr-4">
                       <h4 className="font-black text-red-600 text-[11px] md:text-sm">Mode Perbaikan (Maintenance)</h4>
-                      <p className="text-[9px] md:text-[10px] text-red-500/80 mt-1 font-bold leading-relaxed">Mengunci akses sistem. Karyawan akan melihat layar perbaikan saat login.</p>
+                      <p className="text-[9px] md:text-[10px] text-red-500/80 mt-1 font-bold leading-relaxed">Mengunci akses sistem. Karyawan akan melihat layar perbaikan.</p>
                     </div>
                     <div className={`w-12 h-6 md:w-14 md:h-7 ${configForm.maintenanceMode ? 'bg-red-500' : 'bg-slate-200'} rounded-full relative transition-colors duration-300 shrink-0 shadow-inner`}><div className={`w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md absolute top-1 md:top-1 transition-transform duration-300 ${configForm.maintenanceMode ? 'translate-x-7 md:translate-x-8' : 'translate-x-1'}`}></div></div>
                   </div>
                 </div>
               </div>
               
-              {/* TOMBOL SIMPAN (Sticky Floating Button khusus HP, Biasa di PC) */}
               <div className="fixed bottom-[85px] left-4 right-4 md:static md:bottom-auto md:left-auto md:right-auto md:pt-4 z-40 print:hidden">
                 <button type="button" onClick={handleSaveConfig} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-[0_8px_20px_rgba(79,70,229,0.3)] hover:bg-blue-700 hover:shadow-[0_10px_25px_rgba(79,70,229,0.4)] transform hover:-translate-y-1 active:translate-y-0 transition-all text-sm md:text-base flex items-center justify-center gap-2">
                    <CheckCircle2 className="w-5 h-5"/> Simpan Pengaturan Sistem
@@ -2233,14 +1887,10 @@ export default function App() {
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
               <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
                 
-                {/* PANEL KIRI: INFO TUGAS (Sembunyi di Mobile jika Chat Aktif) */}
                 <div className={`w-full md:w-1/2 flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-full md:h-full ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
-                  
-                  {/* HEADER PANEL KIRI */}
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-2 md:gap-3">
                       <h3 className="font-black text-sm md:text-xl text-slate-800 tracking-tight">Info Pekerjaan</h3>
-                      
                       {currentUser?.role === 'admin' && (
                         <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm">
                           <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus</span>
@@ -2248,13 +1898,10 @@ export default function App() {
                       )}
                     </div>
                     
-                    {/* TOMBOL AKSI MOBILE */}
                     <div className="flex items-center gap-2">
-                       {/* Tombol Buka Chat Khusus Mobile */}
                        <button type="button" onClick={() => setShowMobileChat(true)} className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl font-bold text-[10px] shadow-sm transition-colors">
                          <MessageSquare className="w-3.5 h-3.5"/> Diskusi
                        </button>
-                       
                        <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-500 rounded-full shadow-sm transition-colors"><X className="w-4 h-4" /></button>
                     </div>
                   </div>
@@ -2262,7 +1909,7 @@ export default function App() {
                   <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-4">
-                        {selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' && (
+                        {selectedTask.dueDate < new Date().toISOString().slice(0, 16) && selectedTask.status !== 'done' && (
                           <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
                         )}
                         <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
@@ -2271,27 +1918,26 @@ export default function App() {
                       
                       <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
                       
-                      {/* RIWAYAT TANGGAL & APPROVAL */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
                         <div className="flex flex-col">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
                           <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
-                            {formatDateTime(selectedTask.created_at)}
+                            {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
                           </span>
                         </div>
                         
                         <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
-                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().split('T')[0] && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
-                            <Clock className="w-3.5 h-3.5"/> {selectedTask.dueDate}
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().slice(0, 16) && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                            <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
                           </span>
                         </div>
                         
                         <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
                           <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.completed_at)}
+                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
                           </span>
                         </div>
                         
@@ -2309,31 +1955,31 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* DROPDOWN UPDATE STATUS PEKERJAAN */}
-                      { (getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || currentUser?.role === 'admin' || currentUser?.role === 'direksi' || currentUser?.role === 'manager') && (
+                    {/* UPDATE STATUS DIPERBAIKI (Tampil untuk Assignee, Creator, Admin, Manager, Direksi) */}
+                    {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || ['admin', 'direksi', 'manager'].includes(currentUser?.role)) && (
                         <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
                           <select 
                             value={selectedTask.status} 
                             onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
-                            disabled={selectedTask.status === 'waiting-approval' && currentUser?.role === 'staff'}
+                            // Terkunci HANYA JIKA staff biasa mencoba mengubah yang sedang waiting approval
+                            disabled={currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval'}
                             className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
                           >
                             <option value="pending">Pending (Belum Dikerjakan)</option>
                             <option value="in-progress">In Progress (Sedang Diproses)</option>
-                            <option value="waiting-approval" disabled>Waiting Approval (Menunggu)</option>
                             <option value="done">Done (Selesai)</option>
                           </select>
-                          {selectedTask.status === 'waiting-approval' && currentUser?.role === 'staff' && (
+                          {currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval' && (
                             <p className="text-[9px] md:text-[10px] text-orange-500 mt-2 font-bold uppercase tracking-wider">
-                              * Status terkunci: Menunggu persetujuan (Approval) dari Atasan.
+                              * Status terkunci: Menunggu persetujuan (Approval) Atasan.
                             </p>
                           )}
                         </div>
                       )}
 
                     {/* AREA APPROVAL */}
-                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'direksi') && selectedTask.status === 'waiting-approval' && (
+                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
                       <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                         <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
                         <div className="grid grid-cols-2 gap-3">
@@ -2347,12 +1993,11 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* LAMPIRAN BUKTI */}
                     <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
                         <div>
                           <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base"><Paperclip className="w-4 h-4 text-blue-500"/> Lampiran Bukti</h4>
-                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max 5MB</p>
+                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max {configForm.maxUploadSize}MB</p>
                         </div>
                         
                         <div className="flex gap-2">
@@ -2394,24 +2039,17 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* PANEL KANAN: CHAT & TOMBOL EXIT (Mundur jika Info Aktif di Mobile) */}
                 <div className={`w-full md:w-1/2 flex-col bg-slate-100 h-full md:h-full relative border-t md:border-t-0 md:border-l border-slate-200 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
-                  
-                  {/* HEADER CHAT */}
                   <div className="px-4 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-3">
-                       {/* Tombol Back Khusus Mobile */}
                        <button type="button" onClick={() => setShowMobileChat(false)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
                           <ChevronRight className="w-5 h-5 rotate-180"/>
                        </button>
                        <h3 className="font-black text-sm md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-blue-500" /> Kolom Diskusi</h3>
                     </div>
-                    
-                    {/* Tombol Exit */}
                     <button type="button" onClick={() => setSelectedTask(null)} className="p-1.5 md:p-2 bg-slate-100 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                   </div>
 
-                  {/* ISI CHAT */}
                   <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-4 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-95">
                     {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
                       const isMe = String(chat?.userId) === String(currentUser?.id);
@@ -2427,7 +2065,6 @@ export default function App() {
                     <div ref={chatEndRef} />
                   </div>
 
-                  {/* INPUT FORM CHAT */}
                   <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-safe shrink-0">
                     <form onSubmit={handleAddComment} className="flex gap-2 items-center">
                       <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik pesan..." className="flex-1 px-3 py-2.5 md:px-4 md:py-3.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-xs md:text-sm bg-slate-50 focus:bg-white font-bold transition-colors" />
@@ -2464,8 +2101,8 @@ export default function App() {
                           <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}><option value="low">Rendah</option><option value="medium">Sedang</option><option value="high">Tinggi</option></select>
                         </div>
                         <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Deadline</label>
-                          <input required type="date" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})}/>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Batas Waktu / Deadline</label>
+                          <input required type="datetime-local" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})}/>
                         </div>
                       </div>
                       {currentUser.role !== 'staff' && (
@@ -2522,26 +2159,9 @@ export default function App() {
                         <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}><option value="staff">Staff</option><option value="manager">Manager</option><option value="direksi">Direksi</option><option value="admin">Admin</option></select>
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi</label>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi Utama</label>
                         <select required className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.division} onChange={e => setNewUser({...newUser, division: e.target.value})}><option value="">-- Pilih Divisi --</option>{divisions.map(div => <option key={div} value={div}>{div}</option>)}</select>
                       </div>
-                      
-                      {/* FITUR BARU: Izinkan Admin mencentang akses global saat bikin akun baru */}
-                      {(newUser.role === 'manager' || newUser.role === 'direksi') && (
-                        <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors col-span-2">
-                          <input 
-                            type="checkbox" 
-                            checked={newUser.crossDivision || false} 
-                            onChange={(e) => setNewUser({...newUser, crossDivision: e.target.checked})}
-                            className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
-                          />
-                          <div>
-                            <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Lintas Divisi (Akses Global)</span>
-                            <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses untuk melihat tugas seluruh staf di luar divisinya.</span>
-                          </div>
-                        </label>
-                      )}
-
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
@@ -2580,13 +2200,13 @@ export default function App() {
                         <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value})}><option value="staff">Staff</option><option value="manager">Manager</option><option value="direksi">Direksi</option><option value="admin">Admin</option></select>
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi</label>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi Utama</label>
                         <select required className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.division} onChange={e => setEditingUser({...editingUser, division: e.target.value})}>{divisions.map(div => <option key={div} value={div}>{div}</option>)}</select>
                       </div>
                     </div>
 
-                    {/* FITUR BARU: Opsi ini sekarang terbuka untuk Direksi juga */}
-                    {(editingUser.role === 'manager' || editingUser.role === 'direksi') && (
+                    {/* MANAGER: AKSES SEMUA DIVISI */}
+                    {editingUser.role === 'manager' && (
                       <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors">
                         <input 
                           type="checkbox" 
@@ -2595,12 +2215,47 @@ export default function App() {
                           className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
                         />
                         <div>
-                          <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Lintas Divisi (Akses Global)</span>
-                          <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke pengguna ini untuk melihat tugas seluruh staf di luar divisinya.</span>
+                          <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Semua Divisi</span>
+                          <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke manager ini untuk melihat seluruh staf di luar divisi utamanya.</span>
                         </div>
                       </label>
                     )}
-                    
+
+                    {/* DIREKSI: AKSES PILIH BEBERAPA DIVISI */}
+                    {editingUser.role === 'direksi' && (
+                      <div className="col-span-1 md:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Akses Divisi Khusus (Khusus Direktur)</label>
+                        <div className="p-4 border-2 border-purple-100 bg-purple-50/30 rounded-xl space-y-3">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox"
+                                    checked={editingUser.crossDivision || false}
+                                    onChange={(e) => setEditingUser({...editingUser, crossDivision: e.target.checked})}
+                                    className="w-5 h-5 text-purple-600 rounded border-purple-300 focus:ring-purple-500"
+                                />
+                                <span className="text-sm font-black text-purple-900">Akses Penuh Semua Divisi</span>
+                            </label>
+                            {!editingUser.crossDivision && (
+                                <div className="pl-8 flex flex-wrap gap-2 mt-2">
+                                    {divisions.map(div => (
+                                        <label key={div} className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors shadow-sm">
+                                            <input type="checkbox"
+                                                checked={(editingUser.accessible_divisions || []).includes(div)}
+                                                onChange={(e) => {
+                                                    const current = editingUser.accessible_divisions || [];
+                                                    const updated = e.target.checked ? [...current, div] : current.filter(d => d !== div);
+                                                    setEditingUser({...editingUser, accessible_divisions: updated});
+                                                }}
+                                                className="w-4 h-4 text-purple-600 rounded border-slate-300"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">{div}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
                       <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.position} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
@@ -2684,9 +2339,8 @@ export default function App() {
             </div>
           )}
 
-          {/* BOTTOM NAVIGATION MOBILE (ALA M-BANKING) */}
+          {/* BOTTOM NAVIGATION MOBILE */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-10px_30px_rgba(0,0,0,0.06)] z-[60] print:hidden">
-            {/* Tambahan pb-safe untuk iPhone agar tidak menabrak garis bawah layar */}
             <div className="flex justify-between items-center h-[72px] pb-safe px-4">
               
               <button type="button" onClick={() => navigateTo('dashboard')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
@@ -2699,7 +2353,6 @@ export default function App() {
                 <span className={`text-[10px] font-black tracking-wide ${activeTab === 'tasks' ? 'text-blue-600' : 'text-slate-400'}`}>Tugas</span>
               </button>
               
-              {/* TOMBOL TENGAH (FLOATING ACTION BUTTON TULEN) */}
               <div className="relative -top-5 flex justify-center w-16 shrink-0">
                  <button type="button" 
                    onClick={() => { if(activeTab === 'admin_users') setIsUserModalOpen(true); else setIsModalOpen(true); }} 
@@ -2730,7 +2383,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* COPYRIGHT KHUSUS MOBILE (MUNCUL SAAT SCROLL PALING BAWAH) */}
           <div className="md:hidden mt-auto pt-8 pb-8 flex flex-col items-center text-center print:hidden cursor-default opacity-80">
             <div className="h-px w-10 bg-slate-200 mb-3"></div>
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-tight">
@@ -2744,7 +2396,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* --- STYLES CSS UNTUK PRINT --- */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
