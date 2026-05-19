@@ -144,13 +144,11 @@ export default function App() {
     { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
   ]);
 
-  // ==========================================
-  // FUNGSI PEMBANTU FORMAT WAKTU (ANTI NGACO)
-  // ==========================================
+  // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
   const getNowStr = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    // Output persis seperti input datetime-local: YYYY-MM-DDTHH:mm
+    // Hasil absolute lokal YYYY-MM-DDTHH:mm
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
@@ -349,6 +347,7 @@ export default function App() {
     }
   };
 
+  // --- FUNGSI SAVE HAK AKSES DIREKTUR DARI MENU SETTING ---
   const handleSaveDirekturAccess = async (direktur) => {
     try {
         const { error } = await supabase.from('initial_users')
@@ -391,6 +390,7 @@ export default function App() {
         updatePayload.completed_at = getNowStr();
         updatePayload.approved_by = currentUser.id; 
       } else if (statusToSave !== 'waiting-approval') {
+        // Jika dibalikkan ke in-progress / pending, reset data penyelesaian
         updatePayload.completed_at = null;
         updatePayload.approved_by = null;
       }
@@ -1008,15 +1008,13 @@ export default function App() {
   const urgentTasks = activeTasks.filter(t => {
     if (t.status === 'done') return false; 
     
-    // Perhitungan urgent task dipastikan akurat agar tidak terpengaruh jam
-    const todayStr = getNowStr().substring(0, 10);
-    const dueStr = (t.dueDate || '').substring(0, 10);
-    const todayDate = new Date(`${todayStr}T00:00:00`);
-    const dueDateObj = new Date(`${dueStr}T00:00:00`);
-    const diffTime = dueDateObj - todayDate;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(t.dueDate);
+    const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays <= 3;
-  }).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')); 
+  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); 
 
   const myNotifications = notifications.filter(n => String(n.userId) === String(currentUser.id));
   const unreadNotifsCount = myNotifications.filter(n => !n.read).length;
@@ -1109,7 +1107,7 @@ export default function App() {
                   {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
                 </button>
                 
-                {/* LIST DIVISI - KINI DAPAT DI-SCROLL PENUH */}
+                {/* LIST DIVISI */}
                 <div className={`transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-[400px] overflow-y-auto custom-scrollbar mt-2' : 'max-h-0 overflow-hidden'}`}>
                   <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1 pr-1">
                     {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
@@ -1366,8 +1364,7 @@ export default function App() {
                   <div className="flex gap-4 overflow-x-auto pb-2 px-1 custom-scrollbar">
                     {urgentTasks.map(task => {
                        const nowLocalStr = getNowStr();
-                       const dueLocalStr = task.dueDate ? task.dueDate.substring(0, 16) : '';
-                       const isOverdue = dueLocalStr && dueLocalStr < nowLocalStr && task.status !== 'done';
+                       const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                        return (
                          <div key={task.id} onClick={() => setSelectedTask(task)} className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}>
                             <div className="flex justify-between items-start mb-3">
@@ -1380,7 +1377,7 @@ export default function App() {
                             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                                  <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-orange-500'}`} />
-                                 {formatLocalTime(task.dueDate)}
+                                 {formatDateTime(task.dueDate)}
                                </div>
                                <span className="text-[10px] font-bold text-blue-500">Klik Detail &rarr;</span>
                             </div>
@@ -1420,7 +1417,7 @@ export default function App() {
                         </div>
                         <div>
                           <h4 className="text-sm font-black text-slate-800 line-clamp-1">{task.title}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {formatLocalTime(task.dueDate)}</p>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {formatDateTime(task.dueDate)}</p>
                         </div>
                       </div>
                       <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
@@ -1458,8 +1455,7 @@ export default function App() {
                     return true;
                   }).map(task => {
                     const nowLocalStr = getNowStr();
-                    const dueLocalStr = task.dueDate ? task.dueDate.substring(0, 16) : '';
-                    const isOverdue = dueLocalStr && dueLocalStr < nowLocalStr && task.status !== 'done';
+                    const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                     const assigneesArr = getAssigneesArray(task.assignedTo);
                     
                     return (  
@@ -1471,7 +1467,7 @@ export default function App() {
                           <div className="min-w-0 flex-1">
                             <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1 mb-1">{task.title}</h4>
                             <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-400">
-                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatLocalTime(task.dueDate)}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatDateTime(task.dueDate)}</span>
                               <span>•</span>
                               <span className="truncate">Oleh: {getUserName(task.assignedBy)}</span>
                             </div>
@@ -1607,9 +1603,7 @@ export default function App() {
                             <tbody>
                               {targetTasks.map((task, index) => { 
                                  const nowLocalStr = getNowStr();
-                                 const dueLocalStr = task.dueDate ? task.dueDate.substring(0, 16) : '';
-                                 const isOverdue = dueLocalStr && dueLocalStr < nowLocalStr && task.status !== 'done';
-                                 
+                                 const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                                  return (
                                   <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
@@ -1618,9 +1612,9 @@ export default function App() {
                                     
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? formatServerTime(task.created_at) : '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
                                         <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
-                                          Deadline: <span className="font-bold">{formatLocalTime(task.dueDate)}</span>
+                                          Deadline: <span className="font-bold">{formatDateTime(task.dueDate)}</span>
                                         </span>
                                         {isOverdue && <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded border border-red-200 w-fit font-bold mt-0.5 print:border-none print:p-0 print:text-red-600">TERLAMBAT</span>}
                                       </div>
@@ -1628,7 +1622,7 @@ export default function App() {
 
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at ? formatLocalTime(task.completed_at) : '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at ? formatDateTime(task.completed_at) : '-'}</span></span>
                                         <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
                                       </div>
                                     </td>
@@ -1946,7 +1940,7 @@ export default function App() {
                                <input type="checkbox" 
                                   checked={direktur.crossDivision || false}
                                   onChange={(e) => {
-                                     setUsers(users.map(u => String(u.id) === String(direktur.id) ? {...u, crossDivision: e.target.checked} : u));
+                                     setUsers(users.map(u => u.id === direktur.id ? {...u, crossDivision: e.target.checked} : u));
                                   }}
                                   className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
                                />
@@ -1962,7 +1956,7 @@ export default function App() {
                                             onChange={(e) => {
                                                 const current = direktur.accessible_divisions || [];
                                                 const updated = e.target.checked ? [...current, div] : current.filter(d => d !== div);
-                                                setUsers(users.map(u => String(u.id) === String(direktur.id) ? {...u, accessible_divisions: updated} : u));
+                                                setUsers(users.map(u => u.id === direktur.id ? {...u, accessible_divisions: updated} : u));
                                             }}
                                             className="w-4 h-4 text-blue-600 rounded border-slate-300 cursor-pointer"
                                         />
@@ -1982,6 +1976,428 @@ export default function App() {
                    <CheckCircle2 className="w-5 h-5"/> Simpan Pengaturan Sistem
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* === MODAL 1: DETAIL TUGAS & APPROVAL === */}
+          {selectedTask && activeTab !== 'chat' && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
+              <div className="w-full h-[85vh] md:max-w-6xl md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300">
+                
+                <div className={`w-full md:w-1/2 flex-col bg-white border-b md:border-b-0 md:border-r border-slate-200 h-full md:h-full ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+                  <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <h3 className="font-black text-sm md:text-xl text-slate-800 tracking-tight">Info Pekerjaan</h3>
+                      {currentUser?.role === 'admin' && (
+                        <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm">
+                          <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus</span>
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                       <button type="button" onClick={() => setShowMobileChat(true)} className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl font-bold text-[10px] shadow-sm transition-colors">
+                         <MessageSquare className="w-3.5 h-3.5"/> Diskusi
+                       </button>
+                       <button type="button" onClick={() => setSelectedTask(null)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-500 rounded-full shadow-sm transition-colors"><X className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+
+                  <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        {selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' && (
+                          <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
+                        )}
+                        <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
+                        <Badge type={selectedTask.priority}>PRIORITAS {selectedTask.priority.toUpperCase()}</Badge>
+                      </div>
+                      
+                      <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
+                            {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                            <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-blue-600' : 'text-slate-400'}`}>
+                            <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
+                        <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Instruksi Detail:</span>
+                        {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
+                      </div>
+                    </div>
+
+                    {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || ['admin', 'direksi', 'manager'].includes(currentUser?.role)) && (
+                        <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
+                          <select 
+                            value={selectedTask.status} 
+                            onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
+                            disabled={currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval'}
+                            className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
+                          >
+                            <option value="pending">Pending (Belum Dikerjakan)</option>
+                            <option value="in-progress">In Progress (Sedang Diproses)</option>
+                            <option value="done">Done (Selesai)</option>
+                          </select>
+                          {currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval' && (
+                            <p className="text-[9px] md:text-[10px] text-orange-500 mt-2 font-bold uppercase tracking-wider">
+                              * Status terkunci: Menunggu persetujuan (Approval) Atasan.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
+                      <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
+                        <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => handleApproveTask(selectedTask.id, true)} className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md">
+                            <Check className="w-4 h-4"/> Approve Selesai
+                          </button>
+                          <button onClick={() => handleApproveTask(selectedTask.id, false)} className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm">
+                            <X className="w-4 h-4"/> Tolak & Revisi
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                        <div>
+                          <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base"><Paperclip className="w-4 h-4 text-blue-500"/> Lampiran Bukti</h4>
+                          <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max {configForm.maxUploadSize}MB</p>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                          <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 border border-blue-200'}`}>
+                            {isUploading ? (<><svg className="w-3.5 h-3.5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Proses...</>) : (<><Plus className="w-3.5 h-3.5"/> Galeri</>)}
+                          </label>
+
+                          <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                          <label htmlFor={isUploading ? "" : "upload-kamera"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-slate-800 text-white cursor-pointer hover:bg-black border border-slate-900'}`}>
+                            <Camera className="w-3.5 h-3.5"/> Kamera
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {(selectedTask.attachments || []).map(file => (
+                          <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
+                             <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
+                                <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-700 truncate block hover:text-blue-600">{file.name}</span>
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
+                                </div>
+                             </div>
+                             <div className="flex gap-2">
+                               <button onClick={() => window.open(file.url, '_blank')} className="text-blue-600 p-1.5 hover:bg-blue-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
+                               {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
+                                 <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                               )}
+                             </div>
+                          </div>
+                        ))}
+                        {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
+                          <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`w-full md:w-1/2 flex-col bg-slate-100 h-full md:h-full relative border-t md:border-t-0 md:border-l border-slate-200 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+                  <div className="px-4 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                    <div className="flex items-center gap-3">
+                       <button type="button" onClick={() => setShowMobileChat(false)} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                          <ChevronRight className="w-5 h-5 rotate-180"/>
+                       </button>
+                       <h3 className="font-black text-sm md:text-xl text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-blue-500" /> Kolom Diskusi</h3>
+                    </div>
+                    <button type="button" onClick={() => setSelectedTask(null)} className="p-1.5 md:p-2 bg-slate-100 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                  </div>
+
+                  <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-4 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-95">
+                    {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
+                      const isMe = String(chat?.userId) === String(currentUser?.id);
+                      return (
+                        <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                          <div className={`p-3 md:p-4 rounded-2xl shadow-sm max-w-[85%] ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'}`}>
+                            <p className="text-[11px] md:text-sm font-medium leading-relaxed">{chat?.text || ''}</p>
+                          </div>
+                          <span className="text-[8px] md:text-[10px] font-black tracking-widest text-slate-400 mt-1 px-1 uppercase">{isMe ? 'Anda' : getUserName(chat?.userId)} • {chat?.timestamp || ''}</span>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  <div className="p-3 md:p-5 bg-white border-t border-slate-200 pb-safe shrink-0">
+                    <form onSubmit={handleAddComment} className="flex gap-2 items-center">
+                      <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Ketik pesan..." className="flex-1 px-3 py-2.5 md:px-4 md:py-3.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-xs md:text-sm bg-slate-50 focus:bg-white font-bold transition-colors" />
+                      <button type="submit" disabled={!newComment.trim()} className="bg-blue-600 text-white p-2.5 md:p-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 transform hover:-translate-y-0.5 shadow-sm shrink-0 transition-transform"><Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" /></button>
+                    </form>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* === MODAL 2: TUGAS BARU === */}
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex justify-end md:justify-center items-end md:items-center md:p-4 print:hidden">
+              <Card className="w-full h-[90vh] md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full md:zoom-in duration-300 border-0 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] md:shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white"> 
+                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-blue-500 flex justify-between items-center bg-blue-600 text-white shrink-0">
+                  <div>
+                     <h3 className="font-black text-base md:text-xl tracking-tight">{currentUser.role === 'staff' ? 'Catat Tugas Mandiri' : 'Form Instruksi Baru'}</h3>
+                     <p className="text-blue-200 text-[9px] md:text-[10px] font-medium mt-0.5">Isi rincian detail pekerjaan.</p>
+                  </div>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                </div>
+                
+                <form id="createTaskForm" onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0">
+                  <div className="overflow-y-auto custom-scrollbar flex-1 bg-white p-5 md:p-8 space-y-4 md:space-y-6">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Judul Pekerjaan</label>
+                        <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})}/>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 md:gap-5">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Prioritas</label>
+                          <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}><option value="low">Rendah</option><option value="medium">Sedang</option><option value="high">Tinggi</option></select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Batas Waktu / Deadline</label>
+                          <input required type="datetime-local" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})}/>
+                        </div>
+                      </div>
+                      {currentUser.role !== 'staff' && (
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pilih Penerima</label>
+                          <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 custom-scrollbar bg-slate-50">
+                            {users.filter(u => {
+                               if (currentUser.role === 'direksi' || currentUser.role === 'admin') return u.role === 'manager' || u.role === 'staff';
+                               if (currentUser.role === 'manager') return u.role === 'staff' || String(u.id) === String(currentUser.id); // Manager bisa milih dirinya
+                               return u.role === 'staff';
+                            }).map(user => (
+                              <label key={user.id} className="flex items-center gap-2 p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg cursor-pointer transition-colors shadow-sm">
+                                <input type="checkbox" checked={newTask.assignedTo.includes(user.id)} onChange={(e) => setNewTask(p => ({ ...p, assignedTo: e.target.checked ? [...p.assignedTo, user.id] : p.assignedTo.filter(id => id !== user.id) }))} className="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
+                                <span className="text-[11px] md:text-xs font-bold text-slate-700">{user.name} {String(user.id) === String(currentUser.id) && <span className="text-blue-500 ml-1">(Anda)</span>} <span className="text-[9px] text-slate-400 font-bold ml-1">({user.division})</span></span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Instruksi Detail</label>
+                        <textarea required rows="3" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none resize-none font-medium min-h-[100px]" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})}></textarea>
+                      </div>
+                  </div>
+                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
+                      <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Pekerjaan</button>
+                  </div>
+                </form>
+              </Card>
+            </div>
+          )}
+
+          {/* === MODAL 3: TAMBAH PENGGUNA === */}
+          {isUserModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex justify-end md:justify-center items-end md:items-center md:p-4 print:hidden">
+              <Card className="w-full h-[90vh] md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full md:zoom-in duration-300 border-0 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] md:shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white">
+                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 text-white shrink-0">
+                  <div>
+                     <h3 className="font-black text-base md:text-xl tracking-tight">Tambah Pengguna</h3>
+                     <p className="text-slate-400 text-[12px] md:text-[13px] font-medium mt-0.5">Buat akun untuk karyawan baru.</p>
+                  </div>
+                  <button type="button" onClick={() => setIsUserModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                </div>
+                <form onSubmit={handleCreateUser} className="flex flex-col flex-1 min-h-0">
+                  <div className="overflow-y-auto custom-scrollbar flex-1 bg-white p-5 md:p-8 space-y-4 md:space-y-6">  
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">NIK (Username Login)</label>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.nik} onChange={e => setNewUser({...newUser, nik: e.target.value})}/>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})}/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:gap-5">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Role Akses</label>
+                        <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}><option value="staff">Staff</option><option value="manager">Manager</option><option value="direksi">Direksi</option><option value="admin">Admin</option></select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi Utama</label>
+                        <select required className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.division} onChange={e => setNewUser({...newUser, division: e.target.value})}><option value="">-- Pilih Divisi --</option>{divisions.map(div => <option key={div} value={div}>{div}</option>)}</select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" placeholder="Contoh: Staff Logistik" value={newUser.position} onChange={e => setNewUser({...newUser, position: e.target.value})}/>
+                    </div>
+                  </div>
+                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
+                    <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
+                    <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Pengguna</button>
+                  </div>
+                </form>
+              </Card>
+            </div>
+          )}
+
+          {/* === MODAL 4: EDIT PENGGUNA === */}
+          {isEditUserModalOpen && editingUser && (
+            <div className="fixed inset-0 bg-slate-900/70 z-[80] flex justify-center md:items-center md:p-4 print:hidden">
+              <Card className="w-full h-full md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in duration-300 border-0 shadow-2xl md:rounded-2xl">
+                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-blue-600 flex justify-between items-center bg-blue-600 text-white shrink-0">
+                  <div>
+                     <h3 className="font-black text-base md:text-xl tracking-tight">Edit Data Pengguna</h3>
+                     <p className="text-blue-200 text-[9px] md:text-[10px] font-medium mt-0.5">Ubah informasi divisi atau jabatan.</p>
+                  </div>
+                  <button type="button" onClick={() => setIsEditUserModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                </div>
+                <form onSubmit={handleUpdateUser} className="flex flex-col flex-1 min-h-0">
+                  <div className="overflow-y-auto custom-scrollbar flex-1 bg-white p-5 md:p-8 space-y-4 md:space-y-6">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})}/>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 md:gap-5">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Role Akses</label>
+                        <select className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.role} onChange={e => setEditingUser({...editingUser, role: e.target.value})}><option value="staff">Staff</option><option value="manager">Manager</option><option value="direksi">Direksi</option><option value="admin">Admin</option></select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Divisi Utama</label>
+                        <select required className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.division} onChange={e => setEditingUser({...editingUser, division: e.target.value})}>{divisions.map(div => <option key={div} value={div}>{div}</option>)}</select>
+                      </div>
+                    </div>
+
+                    {editingUser.role === 'manager' && (
+                      <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={editingUser.crossDivision || false} 
+                          onChange={(e) => setEditingUser({...editingUser, crossDivision: e.target.checked})}
+                          className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-xs md:text-sm font-black text-blue-900 block">Izin Pantau Semua Divisi</span>
+                          <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke manager ini untuk melihat seluruh staf di luar divisi utamanya.</span>
+                        </div>
+                      </label>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.position} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
+                    </div>
+                  </div>
+                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
+                    <button type="button" onClick={() => setIsEditUserModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
+                    <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Perubahan</button>
+                  </div>
+                </form>
+              </Card>
+            </div>
+          )}
+
+          {/* === MODAL 5: INPUT PENGGUNA MASSAL (TABEL) === */}
+          {isMassUserModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex justify-center items-center p-4 print:hidden">
+              <Card className="w-full h-[90vh] md:max-w-6xl flex flex-col overflow-hidden animate-in zoom-in duration-300 border-0 shadow-2xl rounded-2xl relative bg-slate-50"> 
+                
+                <div className="px-5 py-4 md:px-8 md:py-6 border-b border-emerald-500 flex justify-between items-center bg-emerald-600 text-white shrink-0">
+                  <div>
+                    <h3 className="font-black text-base md:text-xl tracking-tight">Input Pengguna Massal</h3>
+                    <p className="text-emerald-100 text-[10px] md:text-xs font-medium mt-0.5">Ketik data langsung di tabel bawah ini. Kosongkan baris yang tidak dipakai.</p>
+                  </div>
+                  <button type="button" onClick={() => setIsMassUserModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                </div>
+                
+                <div className="overflow-auto custom-scrollbar flex-1 p-4 md:p-6 bg-white">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-500 text-[10px] md:text-xs uppercase tracking-widest font-black border-y border-slate-200">
+                        <th className="p-3 w-10 text-center">No</th>
+                        <th className="p-3 w-32">NIK *</th>
+                        <th className="p-3">Nama Lengkap *</th>
+                        <th className="p-3 w-32">Password</th>
+                        <th className="p-3 w-32">Role</th>
+                        <th className="p-3 w-40">Divisi</th>
+                        <th className="p-3 w-48">Jabatan</th>
+                        <th className="p-3 w-12 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {massUsersData.map((row, index) => (
+                        <tr key={index} className="border-b border-slate-100 hover:bg-slate-50 focus-within:bg-blue-50/30">
+                          <td className="p-2 text-center font-bold text-slate-400 text-xs">{index + 1}</td>
+                          <td className="p-2"><input type="text" placeholder="NIK..." value={row.nik} onChange={(e) => handleMassChange(index, 'nik', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" /></td>
+                          <td className="p-2"><input type="text" placeholder="Nama Lengkap..." value={row.name} onChange={(e) => handleMassChange(index, 'name', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" /></td>
+                          <td className="p-2"><input type="text" placeholder="123456" value={row.password} onChange={(e) => handleMassChange(index, 'password', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" title="Kosongkan jika ingin password default: 123456" /></td>
+                          <td className="p-2">
+                            <select value={row.role} onChange={(e) => handleMassChange(index, 'role', e.target.value)} className="w-full px-2 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none bg-white">
+                              <option value="staff">Staff</option><option value="manager">Manager</option><option value="direksi">Direksi</option><option value="admin">Admin</option>
+                            </select>
+                          </td>
+                          <td className="p-2">
+                            <select value={row.division} onChange={(e) => handleMassChange(index, 'division', e.target.value)} className="w-full px-2 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none bg-white">
+                              <option value="">-- Pilih --</option>
+                              {divisions.map(div => <option key={div} value={div}>{div}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-2"><input type="text" placeholder="Posisi..." value={row.position} onChange={(e) => handleMassChange(index, 'position', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" /></td>
+                          <td className="p-2 text-center">
+                            <button type="button" onClick={() => removeMassRow(index)} className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  <button type="button" onClick={addMassRow} className="mt-4 flex items-center gap-2 text-blue-600 font-bold text-xs md:text-sm px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors border border-blue-200 border-dashed w-full justify-center">
+                    <Plus className="w-4 h-4" /> Tambah Baris Kosong Baru
+                  </button>
+                </div>
+
+                <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-200 bg-slate-100 shrink-0">
+                  <button type="button" onClick={() => setIsMassUserModalOpen(false)} className="px-4 py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
+                  <button type="button" onClick={handleSaveMassTable} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Simpan Semua Data
+                  </button>
+                </div>
+              </Card>
             </div>
           )}
 
