@@ -144,20 +144,23 @@ export default function App() {
     { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
   ]);
 
-  // Fungsi Pembantu Waktu & Format
+  // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
   const getNowStr = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    // Hasil absolute lokal YYYY-MM-DDTHH:mm
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   const formatDateTime = (val) => {
     if (!val) return '-';
-    if (val.includes('T')) {
-        const [date, time] = val.split('T');
-        return `${date} ${time.substring(0,5)}`;
-    }
-    return val;
+    try {
+      if (val.includes('T')) {
+          const [date, time] = val.split('T');
+          return `${date} ${time.substring(0,5)}`;
+      }
+      return val;
+    } catch(e) { return val; }
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
@@ -327,6 +330,26 @@ export default function App() {
       }
     } catch (error) {
       alert('Error gagal terhubung ke server saat menyimpan pengaturan.');
+    }
+  };
+
+  // --- FUNGSI SAVE HAK AKSES DIREKTUR DARI MENU SETTING ---
+  const handleSaveDirekturAccess = async (direktur) => {
+    try {
+        const { error } = await supabase.from('initial_users')
+            .update({ 
+                crossDivision: direktur.crossDivision, 
+                accessible_divisions: direktur.accessible_divisions 
+            })
+            .eq('id', direktur.id);
+            
+        if (!error) {
+            alert(`Hak akses untuk Direktur ${direktur.name} berhasil disimpan!`);
+        } else {
+            alert("Gagal menyimpan: " + error.message);
+        }
+    } catch (err) {
+        alert("Error koneksi server database.");
     }
   };
 
@@ -736,7 +759,7 @@ export default function App() {
       const userToUpdate = { 
         name: editingUser.name, role: editingUser.role, division: editingUser.division, 
         position: editingUser.position, crossDivision: editingUser.crossDivision,
-        accessible_divisions: editingUser.accessible_divisions, // Atribut Hak Akses Divisi (Direktur)
+        accessible_divisions: editingUser.accessible_divisions,
         avatar: initials
       };
 
@@ -943,7 +966,7 @@ export default function App() {
     if (currentUser.role === 'direksi') {
       const isTaskAdmin = creator.role === 'admin' || assigneesData.some(u => u.role === 'admin');
       if (isTaskAdmin) return false; 
-      if (currentUser.crossDivision) return true; // Akses semua divisi
+      if (currentUser.crossDivision) return true;
 
       const allowedDivs = currentUser.accessible_divisions || [];
       const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
@@ -1326,8 +1349,8 @@ export default function App() {
                   </div>
                   <div className="flex gap-4 overflow-x-auto pb-2 px-1 custom-scrollbar">
                     {urgentTasks.map(task => {
-                       const nowISO = new Date().toISOString().slice(0, 16);
-                       const isOverdue = task.dueDate < nowISO && task.status !== 'done';
+                       const nowLocalStr = getNowStr();
+                       const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                        return (
                          <div key={task.id} onClick={() => setSelectedTask(task)} className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}>
                             <div className="flex justify-between items-start mb-3">
@@ -1417,8 +1440,8 @@ export default function App() {
                     if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
                     return true;
                   }).map(task => {
-                    const nowISO = new Date().toISOString().slice(0, 16);
-                    const isOverdue = task.dueDate < nowISO && task.status !== 'done';
+                    const nowLocalStr = getNowStr();
+                    const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                     const assigneesArr = getAssigneesArray(task.assignedTo);
                     
                     return (  
@@ -1565,8 +1588,8 @@ export default function App() {
                             </thead>
                             <tbody>
                               {targetTasks.map((task, index) => { 
-                                 const nowISO = new Date().toISOString().slice(0, 16);
-                                 const isOverdue = task.dueDate < nowISO && task.status !== 'done';
+                                 const nowLocalStr = getNowStr();
+                                 const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
                                  return (
                                   <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
@@ -1585,7 +1608,7 @@ export default function App() {
 
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at || '-'}</span></span>
+                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at ? formatDateTime(task.completed_at) : '-'}</span></span>
                                         <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
                                       </div>
                                     </td>
@@ -1747,6 +1770,7 @@ export default function App() {
                 <p className="text-xs md:text-sm text-slate-500 font-medium mt-1.5">Atur identitas, keamanan, dan kebijakan aplikasi secara global.</p>
               </div>
 
+              {/* --- BAGIAN 1: IDENTITAS --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -1804,6 +1828,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* --- BAGIAN 2: KEAMANAN --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -1836,6 +1861,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* --- BAGIAN 3: OTOMASI --- */}
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
                   <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
@@ -1851,9 +1877,7 @@ export default function App() {
                     </div>
                     <div className={`w-12 h-6 md:w-14 md:h-7 ${configForm.strictMode ? 'bg-blue-600' : 'bg-slate-200'} rounded-full relative transition-colors duration-300 shrink-0 shadow-inner`}><div className={`w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md absolute top-1 md:top-1 transition-transform duration-300 ${configForm.strictMode ? 'translate-x-7 md:translate-x-8' : 'translate-x-1'}`}></div></div>
                   </div>
-                  
                   <div className="h-px bg-slate-100 mx-5"></div>
-
                   <div className="flex items-center justify-between p-4 md:p-5 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors" onClick={() => setConfigForm({...configForm, autoEmail: !configForm.autoEmail})}>
                     <div className="pr-4">
                       <h4 className="font-black text-slate-800 text-[11px] md:text-sm">Kirim Notifikasi Tugas Harian</h4>
@@ -1861,9 +1885,7 @@ export default function App() {
                     </div>
                     <div className={`w-12 h-6 md:w-14 md:h-7 ${configForm.autoEmail ? 'bg-blue-600' : 'bg-slate-200'} rounded-full relative transition-colors duration-300 shrink-0 shadow-inner`}><div className={`w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md absolute top-1 md:top-1 transition-transform duration-300 ${configForm.autoEmail ? 'translate-x-7 md:translate-x-8' : 'translate-x-1'}`}></div></div>
                   </div>
-                  
                   <div className="h-px bg-slate-100 mx-5"></div>
-                  
                   <div className="flex items-center justify-between p-4 md:p-5 hover:bg-red-50/50 rounded-2xl cursor-pointer transition-colors" onClick={() => setConfigForm({...configForm, maintenanceMode: !configForm.maintenanceMode})}>
                     <div className="pr-4">
                       <h4 className="font-black text-red-600 text-[11px] md:text-sm">Mode Perbaikan (Maintenance)</h4>
@@ -1871,6 +1893,67 @@ export default function App() {
                     </div>
                     <div className={`w-12 h-6 md:w-14 md:h-7 ${configForm.maintenanceMode ? 'bg-red-500' : 'bg-slate-200'} rounded-full relative transition-colors duration-300 shrink-0 shadow-inner`}><div className={`w-4 h-4 md:w-5 md:h-5 bg-white rounded-full shadow-md absolute top-1 md:top-1 transition-transform duration-300 ${configForm.maintenanceMode ? 'translate-x-7 md:translate-x-8' : 'translate-x-1'}`}></div></div>
                   </div>
+                </div>
+              </div>
+
+              {/* --- BAGIAN 4: HAK AKSES DIREKSI (TERPISAH & RAPI) --- */}
+              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100">
+                  <h4 className="text-xs font-black text-purple-600 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span> Pemetaan Hak Akses Direksi
+                  </h4>
+                </div>
+                <div className="p-5 md:p-7 space-y-4">
+                   {users.filter(u => u.role === 'direksi').length === 0 ? (
+                      <p className="text-sm font-bold text-slate-400">Belum ada pengguna dengan role Direksi.</p>
+                   ) : (
+                      users.filter(u => u.role === 'direksi').map(direktur => (
+                         <div key={direktur.id} className="p-4 border border-slate-200 rounded-xl bg-slate-50/50">
+                            <div className="flex justify-between items-center mb-3 pb-3 border-b border-slate-200/60">
+                               <div>
+                                  <span className="font-black text-slate-800 text-sm md:text-base">{direktur.name}</span>
+                                  <span className="text-[10px] ml-2 font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">NIK: {direktur.nik}</span>
+                               </div>
+                               <button 
+                                  onClick={() => handleSaveDirekturAccess(direktur)}
+                                  className="text-[10px] md:text-xs font-black bg-blue-600 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
+                               >
+                                  Simpan Akses
+                               </button>
+                            </div>
+                            
+                            <label className="flex items-center gap-2 cursor-pointer mb-3">
+                               <input type="checkbox" 
+                                  checked={direktur.crossDivision || false}
+                                  onChange={(e) => {
+                                     setUsers(users.map(u => u.id === direktur.id ? {...u, crossDivision: e.target.checked} : u));
+                                  }}
+                                  className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                               />
+                               <span className="text-xs font-black text-purple-800">Beri Akses Penuh ke Semua Divisi</span>
+                            </label>
+                            
+                            {!direktur.crossDivision && (
+                               <div className="pl-6 border-l-2 border-purple-200 flex flex-wrap gap-2 mt-2">
+                                  {divisions.map(div => (
+                                     <label key={div} className="flex items-center gap-1.5 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 shadow-sm transition-colors">
+                                        <input type="checkbox"
+                                            checked={(direktur.accessible_divisions || []).includes(div)}
+                                            onChange={(e) => {
+                                                const current = direktur.accessible_divisions || [];
+                                                const updated = e.target.checked ? [...current, div] : current.filter(d => d !== div);
+                                                setUsers(users.map(u => u.id === direktur.id ? {...u, accessible_divisions: updated} : u));
+                                            }}
+                                            className="w-4 h-4 text-blue-600 rounded border-slate-300 cursor-pointer"
+                                        />
+                                        <span className="text-[10px] md:text-xs font-bold text-slate-700">{div}</span>
+                                     </label>
+                                  ))}
+                               </div>
+                            )}
+                         </div>
+                      ))
+                   )}
                 </div>
               </div>
               
@@ -1909,7 +1992,7 @@ export default function App() {
                   <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-4">
-                        {selectedTask.dueDate < new Date().toISOString().slice(0, 16) && selectedTask.status !== 'done' && (
+                        {selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' && (
                           <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
                         )}
                         <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
@@ -1929,7 +2012,7 @@ export default function App() {
                         
                         <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
-                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < new Date().toISOString().slice(0, 16) && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
                             <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
                           </span>
                         </div>
@@ -1937,7 +2020,7 @@ export default function App() {
                         <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
                           <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at || '-'}
+                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
                           </span>
                         </div>
                         
@@ -1955,14 +2038,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* UPDATE STATUS DIPERBAIKI (Tampil untuk Assignee, Creator, Admin, Manager, Direksi) */}
                     {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || ['admin', 'direksi', 'manager'].includes(currentUser?.role)) && (
                         <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
                           <select 
                             value={selectedTask.status} 
                             onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
-                            // Terkunci HANYA JIKA staff biasa mencoba mengubah yang sedang waiting approval
                             disabled={currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval'}
                             className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
                           >
@@ -1978,7 +2059,6 @@ export default function App() {
                         </div>
                       )}
 
-                    {/* AREA APPROVAL */}
                     {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
                       <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                         <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
@@ -2109,10 +2189,14 @@ export default function App() {
                         <div>
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pilih Penerima</label>
                           <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 custom-scrollbar bg-slate-50">
-                            {users.filter(u => (currentUser.role === 'direksi' || currentUser.role === 'admin') ? (u.role === 'manager' || u.role === 'staff') : u.role === 'staff').map(user => (
+                            {users.filter(u => {
+                               if (currentUser.role === 'direksi' || currentUser.role === 'admin') return u.role === 'manager' || u.role === 'staff';
+                               if (currentUser.role === 'manager') return u.role === 'staff' || String(u.id) === String(currentUser.id); // Manager bisa milih dirinya
+                               return u.role === 'staff';
+                            }).map(user => (
                               <label key={user.id} className="flex items-center gap-2 p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg cursor-pointer transition-colors shadow-sm">
                                 <input type="checkbox" checked={newTask.assignedTo.includes(user.id)} onChange={(e) => setNewTask(p => ({ ...p, assignedTo: e.target.checked ? [...p.assignedTo, user.id] : p.assignedTo.filter(id => id !== user.id) }))} className="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
-                                <span className="text-[11px] md:text-xs font-bold text-slate-700">{user.name} <span className="text-[9px] text-slate-400 font-bold ml-1">({user.division})</span></span>
+                                <span className="text-[11px] md:text-xs font-bold text-slate-700">{user.name} {String(user.id) === String(currentUser.id) && <span className="text-blue-500 ml-1">(Anda)</span>} <span className="text-[9px] text-slate-400 font-bold ml-1">({user.division})</span></span>
                               </label>
                             ))}
                           </div>
@@ -2205,7 +2289,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* MANAGER: AKSES SEMUA DIVISI */}
                     {editingUser.role === 'manager' && (
                       <label className="flex items-start gap-3 p-4 border-2 border-blue-100 bg-blue-50/50 hover:bg-blue-50 rounded-xl cursor-pointer transition-colors">
                         <input 
@@ -2219,41 +2302,6 @@ export default function App() {
                           <span className="text-[10px] md:text-[11px] font-medium text-blue-600 block mt-0.5">Berikan akses ke manager ini untuk melihat seluruh staf di luar divisi utamanya.</span>
                         </div>
                       </label>
-                    )}
-
-                    {/* DIREKSI: AKSES PILIH BEBERAPA DIVISI */}
-                    {editingUser.role === 'direksi' && (
-                      <div className="col-span-1 md:col-span-2">
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Akses Divisi Khusus (Khusus Direktur)</label>
-                        <div className="p-4 border-2 border-purple-100 bg-purple-50/30 rounded-xl space-y-3">
-                            <label className="flex items-center gap-3 cursor-pointer">
-                                <input type="checkbox"
-                                    checked={editingUser.crossDivision || false}
-                                    onChange={(e) => setEditingUser({...editingUser, crossDivision: e.target.checked})}
-                                    className="w-5 h-5 text-purple-600 rounded border-purple-300 focus:ring-purple-500"
-                                />
-                                <span className="text-sm font-black text-purple-900">Akses Penuh Semua Divisi</span>
-                            </label>
-                            {!editingUser.crossDivision && (
-                                <div className="pl-8 flex flex-wrap gap-2 mt-2">
-                                    {divisions.map(div => (
-                                        <label key={div} className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors shadow-sm">
-                                            <input type="checkbox"
-                                                checked={(editingUser.accessible_divisions || []).includes(div)}
-                                                onChange={(e) => {
-                                                    const current = editingUser.accessible_divisions || [];
-                                                    const updated = e.target.checked ? [...current, div] : current.filter(d => d !== div);
-                                                    setEditingUser({...editingUser, accessible_divisions: updated});
-                                                }}
-                                                className="w-4 h-4 text-purple-600 rounded border-slate-300"
-                                            />
-                                            <span className="text-xs font-bold text-slate-700">{div}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                      </div>
                     )}
 
                     <div>
