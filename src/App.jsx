@@ -156,20 +156,22 @@ export default function App() {
     if (!val) return '-';
     
     // 1. Jika data lama di database hanya berbentuk "YYYY-MM-DD" tanpa jam
-    // Kita tambahkan default "00:00" agar tampilannya seragam dan tidak error
     if (val.length === 10 && !val.includes('T') && !val.includes(' ')) {
       return `${val} 00:00`;
     }
 
+    // 2. MENCEGAH PERGESERAN JAM (TIMEZONE SHIFT) SUPABASE
+    // Supabase otomatis menempelkan zona waktu (+00:00 atau Z). 
+    // Kita potong (substring) 16 karakter pertamanya saja ("YYYY-MM-DDTHH:mm")
+    // lalu ganti huruf 'T' dengan spasi agar tidak diconvert paksa oleh browser.
+    if (typeof val === 'string' && val.includes('T')) {
+      return val.substring(0, 16).replace('T', ' ');
+    }
+
     try {
-      // 2. Parse menggunakan Date() bawaan JavaScript.
-      // Ini akan OTOMATIS mengkonversi waktu UTC (Z) dari Supabase ke Waktu Lokal (WIB) komputer Anda.
+      // 3. Fallback jika format tidak mengandung T
       const d = new Date(val);
-      
-      // 3. Validasi jika parsing gagal (kembalikan teks asli)
       if (isNaN(d.getTime())) return val; 
-      
-      // 4. Format rapi ke YYYY-MM-DD HH:mm
       const pad = (n) => String(n).padStart(2, '0');
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } catch(e) { 
@@ -1010,11 +1012,23 @@ export default function App() {
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const due = new Date(t.dueDate);
+    
+    // Potong string zona waktu sebelum dimasukkan ke new Date()
+    let safeDateStr = t.dueDate;
+    if (typeof safeDateStr === 'string' && safeDateStr.includes('T')) {
+      safeDateStr = safeDateStr.substring(0, 16);
+    }
+    
+    const due = new Date(safeDateStr);
     const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays <= 3;
-  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)); 
+  }).sort((a, b) => {
+    // Pastikan sorting juga menggunakan string yang sudah dipotong agar akurat
+    const dateA = typeof a.dueDate === 'string' ? a.dueDate.substring(0, 16) : a.dueDate;
+    const dateB = typeof b.dueDate === 'string' ? b.dueDate.substring(0, 16) : b.dueDate;
+    return new Date(dateA) - new Date(dateB);
+  }); 
 
   const myNotifications = notifications.filter(n => String(n.userId) === String(currentUser.id));
   const unreadNotifsCount = myNotifications.filter(n => !n.read).length;
