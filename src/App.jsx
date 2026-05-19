@@ -94,6 +94,20 @@ export default function App() {
     }
   };
   
+  // --- FITUR REFRESH OTOMATIS (SETIAP 30 DETIK) ---
+  useEffect(() => {
+    // Jalankan hanya jika user sudah login
+    if (!currentUser) return;
+
+    const interval = setInterval(() => {
+      console.log("Auto-refresh data tugas...");
+      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
+    }, 15000); // 15.000 milidetik = 15 detik
+
+    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
+    return () => clearInterval(interval);
+  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
+  
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
     autoEmail: false, 
