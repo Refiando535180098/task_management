@@ -152,26 +152,17 @@ export default function App() {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  // --- FUNGSI PEMBANTU FORMAT WAKTU ---
   const formatDateTime = (val) => {
     if (!val) return '-';
-    
-    // 1. Jika data lama di database hanya berbentuk "YYYY-MM-DD" tanpa jam
     if (val.length === 10 && !val.includes('T') && !val.includes(' ')) {
       return `${val} 00:00`;
     }
-
-    // 2. MENCEGAH PERGESERAN JAM (TIMEZONE SHIFT) SUPABASE
-    // Supabase otomatis menempelkan zona waktu (+00:00 atau Z). 
-    // Kita potong (substring) 16 karakter pertamanya saja ("YYYY-MM-DDTHH:mm")
-    // lalu ganti huruf 'T' dengan spasi agar tidak diconvert paksa oleh browser.
-    if (typeof val === 'string' && val.includes('T')) {
-      return val.substring(0, 16).replace('T', ' ');
-    }
-
     try {
-      // 3. Fallback jika format tidak mengandung T
+      // Biarkan JavaScript membaca waktu UTC dari Supabase dan otomatis menjadikannya WIB (+7)
       const d = new Date(val);
       if (isNaN(d.getTime())) return val; 
+      
       const pad = (n) => String(n).padStart(2, '0');
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } catch(e) { 
@@ -690,7 +681,8 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      dueDate: newTask.dueDate,
+      // PERBAIKAN: Ubah format input lokal jadi UTC absolut sebelum masuk ke Supabase
+      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : '',
       status: 'pending',
       comments: [],
       attachments: []
@@ -1012,23 +1004,11 @@ export default function App() {
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    // Potong string zona waktu sebelum dimasukkan ke new Date()
-    let safeDateStr = t.dueDate;
-    if (typeof safeDateStr === 'string' && safeDateStr.includes('T')) {
-      safeDateStr = safeDateStr.substring(0, 16);
-    }
-    
-    const due = new Date(safeDateStr);
+    const due = new Date(t.dueDate);
     const diffTime = due - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays <= 3;
-  }).sort((a, b) => {
-    // Pastikan sorting juga menggunakan string yang sudah dipotong agar akurat
-    const dateA = typeof a.dueDate === 'string' ? a.dueDate.substring(0, 16) : a.dueDate;
-    const dateB = typeof b.dueDate === 'string' ? b.dueDate.substring(0, 16) : b.dueDate;
-    return new Date(dateA) - new Date(dateB);
-  }); 
+  }).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
 
   const myNotifications = notifications.filter(n => String(n.userId) === String(currentUser.id));
   const unreadNotifsCount = myNotifications.filter(n => !n.read).length;
