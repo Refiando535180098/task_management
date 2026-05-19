@@ -155,15 +155,24 @@ export default function App() {
   // --- FUNGSI PEMBANTU FORMAT WAKTU ---
   const formatDateTime = (val) => {
     if (!val) return '-';
-    if (val.length === 10 && !val.includes('T') && !val.includes(' ')) {
-      return `${val} 00:00`;
-    }
+    
     try {
-      // Biarkan JavaScript membaca waktu UTC dari Supabase dan otomatis menjadikannya WIB (+7)
-      const d = new Date(val);
+      // 1. Jika data dari Supabase mengandung 'Z' (ISO String), 
+      // kita hilangkan 'Z' agar tidak dianggap UTC oleh browser
+      let dateStr = val;
+      if (typeof val === 'string' && val.endsWith('Z')) {
+        dateStr = val.replace('Z', ''); 
+      }
+      
+      // 2. Gunakan 'T' sebagai pemisah standar. 
+      // Jika ada 'T', kita pecah untuk mendapatkan bagian tanggal dan jam
+      const d = new Date(dateStr);
+      
       if (isNaN(d.getTime())) return val; 
       
       const pad = (n) => String(n).padStart(2, '0');
+      
+      // 3. Ambil waktu lokal secara eksplisit
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } catch(e) { 
       return val; 
