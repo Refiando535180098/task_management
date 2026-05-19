@@ -152,29 +152,29 @@ export default function App() {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const formatDateTime = (val) => {
+  // Khusus untuk waktu auto-generate Supabase (created_at)
+  const formatServerTime = (val) => {
     if (!val) return '-';
-    
-    // 1. Jika data lama di database hanya berbentuk "YYYY-MM-DD" tanpa jam
-    // Kita tambahkan default "00:00" agar tampilannya seragam dan tidak error
+    try {
+      const d = new Date(val); // Dikonversi dari UTC ke Local WIB (+7)
+      if (isNaN(d.getTime())) return val;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch(e) { return val; }
+  };
+
+  // Khusus untuk waktu inputan form / string lokal (dueDate & completed_at)
+  const formatLocalTime = (val) => {
+    if (!val) return '-';
+    // Jika data lama dari DB cuma YYYY-MM-DD, paksakan tambah 00:00 agar rapi
     if (val.length === 10 && !val.includes('T') && !val.includes(' ')) {
       return `${val} 00:00`;
     }
-
-    try {
-      // 2. Parse menggunakan Date() bawaan JavaScript.
-      // Ini akan OTOMATIS mengkonversi waktu UTC (Z) dari Supabase ke Waktu Lokal (WIB) komputer Anda.
-      const d = new Date(val);
-      
-      // 3. Validasi jika parsing gagal (kembalikan teks asli)
-      if (isNaN(d.getTime())) return val; 
-      
-      // 4. Format rapi ke YYYY-MM-DD HH:mm
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    } catch(e) { 
-      return val; 
+    // Jika formatnya sudah YYYY-MM-DDTHH:mm, cukup buang T nya saja (angka tidak bergeser sama sekali)
+    if (val.includes('T')) {
+      return val.substring(0, 16).replace('T', ' ');
     }
+    return val;
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
