@@ -94,19 +94,19 @@ export default function App() {
     }
   };
   
-  // --- FITUR REFRESH OTOMATIS (SETIAP 30 DETIK) ---
+  // --- REFRESH OTOMATIS TUGAS & NOTIFIKASI ---
   useEffect(() => {
-    // Jalankan hanya jika user sudah login
+    
     if (!currentUser) return;
 
     const interval = setInterval(() => {
-      console.log("Auto-refresh data tugas...");
-      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
-    }, 5000); // 5.000 milidetik = 5 detik
+      console.log("Sinkronisasi database aktif...");
+      loadTasksFromDB();     // Refresh data tugas
+      fetchNotifications();  // KUNCI UTAMA: Ambil notifikasi baru secara otomatis
+    }, 10000); // Berjalan otomatis setiap 10 detik
 
-    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
     return () => clearInterval(interval);
-  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
+  }, [currentUser]);
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
@@ -494,14 +494,29 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       loadTasksFromDB();
+      // 1. Deklarasikan fungsi ini secara mandiri agar bisa dipanggil kapan saja
       const fetchNotifications = async () => {
+        if (!currentUser) return;
         try {
-          const { data, error } = await supabase.from('notifications').select('*').eq('userId', currentUser.id).order('id', { ascending: false });
+          const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('userId', currentUser.id)
+            .order('id', { ascending: false });
+            
           if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
         } catch (error) {
           console.error("Gagal menarik notifikasi:", error);
         }
       };
+
+      // 2. Jalankan saat pertama kali user login
+      useEffect(() => {
+        if (currentUser) {
+          loadTasksFromDB();
+          fetchNotifications();
+        }
+      }, [currentUser]);
       fetchNotifications();
     }
   }, [currentUser]);
