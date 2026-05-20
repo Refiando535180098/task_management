@@ -94,19 +94,19 @@ export default function App() {
     }
   };
   
-  // --- REFRESH OTOMATIS TUGAS & NOTIFIKASI ---
+  // --- FITUR REFRESH OTOMATIS (SETIAP 30 DETIK) ---
   useEffect(() => {
-    
+    // Jalankan hanya jika user sudah login
     if (!currentUser) return;
 
     const interval = setInterval(() => {
-      console.log("Sinkronisasi database aktif...");
-      loadTasksFromDB();     // Refresh data tugas
-      fetchNotifications();  // KUNCI UTAMA: Ambil notifikasi baru secara otomatis
-    }, 10000); // Berjalan otomatis setiap 10 detik
+      console.log("Auto-refresh data tugas...");
+      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
+    }, 5000); // 5.000 milidetik = 5 detik
 
+    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
     return () => clearInterval(interval);
-  }, [currentUser]);
+  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
@@ -512,11 +512,11 @@ export default function App() {
 
       // 2. Jalankan saat pertama kali user login
       useEffect(() => {
-        if (currentUser) {
-          loadTasksFromDB();
-          fetchNotifications();
-        }
-      }, [currentUser]);
+      if (currentUser) {
+        loadTasksFromDB();
+        fetchNotifications();
+      }
+    }, [currentUser]);
       fetchNotifications();
     }
   }, [currentUser]);
