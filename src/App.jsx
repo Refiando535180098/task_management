@@ -504,7 +504,8 @@ export default function App() {
             .eq('userId', currentUser.id)
             .order('id', { ascending: false });
             
-          if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
+          // Langsung set data, tidak perlu lagi mapping read_status karena yang ditarik pasti yang belum dibaca
+          if (data) setNotifications(data.map(n => ({...n, read: false})));
         } catch (error) {
           console.error("Gagal menarik notifikasi:", error);
         }
@@ -671,8 +672,17 @@ export default function App() {
   };
 
   const handleReadNotification = async (notif) => {
-    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id); } catch (err) {}
+    // 1. Langsung hapus (hilangkan) notifikasi yang diklik dari tampilan layar
+    setNotifications(prev => prev.filter(n => n.id !== notif.id));
+    
+    try { 
+      // 2. Hapus permanen data notifikasi tersebut dari database Supabase
+      await supabase.from('notifications').delete().eq('id', notif.id); 
+    } catch (err) {
+      console.error("Gagal menghapus notifikasi:", err);
+    }
+
+    // 3. Logika bawaan untuk membuka rincian tugas/pesan
     if (notif.taskId) {
       const task = tasks.find(t => t.id === notif.taskId);
       if (task) {
@@ -689,8 +699,18 @@ export default function App() {
   };
 
   const handleReadAllNotifs = async () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id); } catch (err) {}
+    // 1. Kosongkan semua notifikasi dari tampilan layar
+    setNotifications([]);
+    
+    try { 
+      // 2. Hapus permanen seluruh notifikasi milik pengguna ini dari database
+      await supabase.from('notifications').delete().eq('userId', currentUser.id); 
+    } catch (err) {
+      console.error("Gagal membersihkan notifikasi:", err);
+    }
+    
+    // Tutup popup setelah dibersihkan
+    setIsNotifOpen(false);
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
