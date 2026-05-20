@@ -94,19 +94,19 @@ export default function App() {
     }
   };
   
-  // --- REFRESH OTOMATIS TUGAS & NOTIFIKASI ---
+  // --- FITUR REFRESH OTOMATIS (SETIAP 30 DETIK) ---
   useEffect(() => {
-    
+    // Jalankan hanya jika user sudah login
     if (!currentUser) return;
 
     const interval = setInterval(() => {
-      console.log("Sinkronisasi database aktif...");
-      loadTasksFromDB();     // Refresh data tugas
-      fetchNotifications();  // KUNCI UTAMA: Ambil notifikasi baru secara otomatis
-    }, 10000); // Berjalan otomatis setiap 10 detik
+      console.log("Auto-refresh data tugas...");
+      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
+    }, 5000); // 5.000 milidetik = 5 detik
 
+    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
     return () => clearInterval(interval);
-  }, [currentUser]);
+  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
@@ -495,29 +495,28 @@ export default function App() {
     if (currentUser) {
       loadTasksFromDB();
       // 1. Deklarasikan fungsi ini secara mandiri agar bisa dipanggil kapan saja
-      const fetchNotifications = async () => {
-        if (!currentUser) return;
-        try {
-          const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('userId', currentUser.id)
-            .order('id', { ascending: false });
-            
-          // Langsung set data, tidak perlu lagi mapping read_status karena yang ditarik pasti yang belum dibaca
-          if (data) setNotifications(data.map(n => ({...n, read: false})));
-        } catch (error) {
-          console.error("Gagal menarik notifikasi:", error);
-        }
-      };
+    const fetchNotifications = async () => {
+      if (!currentUser) return;
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('userId', currentUser.id)
+          .order('id', { ascending: false });
+          
+        if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
+      } catch (error) {
+        console.error("Gagal menarik notifikasi:", error);
+      }
+    };
 
-      // 2. Jalankan saat pertama kali user login
-      useEffect(() => {
-        if (currentUser) {
-          loadTasksFromDB();
-          fetchNotifications();
-        }
-      }, [currentUser]);
+    // 2. Jalankan saat pertama kali user login
+    useEffect(() => {
+      if (currentUser) {
+        loadTasksFromDB();
+        fetchNotifications();
+      }
+    }, [currentUser]);
       fetchNotifications();
     }
   }, [currentUser]);
@@ -672,17 +671,8 @@ export default function App() {
   };
 
   const handleReadNotification = async (notif) => {
-    // 1. Langsung hapus (hilangkan) notifikasi yang diklik dari tampilan layar
-    setNotifications(prev => prev.filter(n => n.id !== notif.id));
-    
-    try { 
-      // 2. Hapus permanen data notifikasi tersebut dari database Supabase
-      await supabase.from('notifications').delete().eq('id', notif.id); 
-    } catch (err) {
-      console.error("Gagal menghapus notifikasi:", err);
-    }
-
-    // 3. Logika bawaan untuk membuka rincian tugas/pesan
+    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    try { await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id); } catch (err) {}
     if (notif.taskId) {
       const task = tasks.find(t => t.id === notif.taskId);
       if (task) {
@@ -699,18 +689,8 @@ export default function App() {
   };
 
   const handleReadAllNotifs = async () => {
-    // 1. Kosongkan semua notifikasi dari tampilan layar
-    setNotifications([]);
-    
-    try { 
-      // 2. Hapus permanen seluruh notifikasi milik pengguna ini dari database
-      await supabase.from('notifications').delete().eq('userId', currentUser.id); 
-    } catch (err) {
-      console.error("Gagal membersihkan notifikasi:", err);
-    }
-    
-    // Tutup popup setelah dibersihkan
-    setIsNotifOpen(false);
+    setNotifications(notifications.map(n => ({ ...n, read: true })));
+    try { await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id); } catch (err) {}
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
