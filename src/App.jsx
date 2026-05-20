@@ -102,7 +102,7 @@ export default function App() {
     const interval = setInterval(() => {
       console.log("Auto-refresh data tugas...");
       loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
-    }, 15000); // 15.000 milidetik = 15 detik
+    }, 5000); // 5.000 milidetik = 5 detik
 
     // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
     return () => clearInterval(interval);
