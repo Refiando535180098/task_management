@@ -494,29 +494,14 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       loadTasksFromDB();
-      // 1. Deklarasikan fungsi ini secara mandiri agar bisa dipanggil kapan saja
       const fetchNotifications = async () => {
-        if (!currentUser) return;
         try {
-          const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('userId', currentUser.id)
-            .order('id', { ascending: false });
-            
+          const { data, error } = await supabase.from('notifications').select('*').eq('userId', currentUser.id).order('id', { ascending: false });
           if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
         } catch (error) {
           console.error("Gagal menarik notifikasi:", error);
         }
       };
-
-      // 2. Jalankan saat pertama kali user login
-      useEffect(() => {
-      if (currentUser) {
-        loadTasksFromDB();
-        fetchNotifications();
-      }
-    }, [currentUser]);
       fetchNotifications();
     }
   }, [currentUser]);
