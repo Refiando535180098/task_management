@@ -56,7 +56,7 @@ export default function App() {
     if (!currentUser) return;
     const currentUnread = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
     if (currentUnread > prevUnreadCount.current) {
-      const notifSound = new Audio('/notif.mp3');
+      const notifSound = new Audio('/Notif suara.mp3');
       notifSound.play().catch(err => console.warn("Suara diblokir browser"));
     }
     prevUnreadCount.current = currentUnread;
