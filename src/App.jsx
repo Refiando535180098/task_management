@@ -56,7 +56,7 @@ export default function App() {
     if (!currentUser) return;
     const currentUnread = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
     if (currentUnread > prevUnreadCount.current) {
-      const notifSound = new Audio('/notif.mp3');
+      const notifSound = new Audio('/Notif suara.mp3');
       notifSound.play().catch(err => console.warn("Suara diblokir browser"));
     }
     prevUnreadCount.current = currentUnread;
@@ -102,7 +102,7 @@ export default function App() {
     const interval = setInterval(() => {
       console.log("Auto-refresh data tugas...");
       loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
-    }, 5000); // 15.000 milidetik = 15 detik
+    }, 5000); // 5.000 milidetik = 5 detik
 
     // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
     return () => clearInterval(interval);
