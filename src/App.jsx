@@ -675,8 +675,20 @@ export default function App() {
   };
 
   const handleReadNotification = async (notif) => {
-    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id); } catch (err) {}
+    // 1. Hapus dari tampilan layar (UI)
+    setNotifications(prev => prev.filter(n => n.id !== notif.id));
+
+    // 2. Hapus permanen dari database Supabase
+    try { 
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', notif.id); 
+    } catch (err) {
+      console.error("Gagal menghapus notifikasi:", err);
+    }
+
+    // 3. Logika navigasi tetap sama
     if (notif.taskId) {
       const task = tasks.find(t => t.id === notif.taskId);
       if (task) {
@@ -693,8 +705,20 @@ export default function App() {
   };
 
   const handleReadAllNotifs = async () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id); } catch (err) {}
+    // 1. Kosongkan tampilan layar
+    setNotifications([]);
+    
+    // 2. Hapus semua notifikasi user ini dari database
+    try { 
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('userId', currentUser.id); 
+    } catch (err) {
+      console.error("Gagal membersihkan semua notifikasi:", err);
+    }
+    
+    setIsNotifOpen(false);
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
