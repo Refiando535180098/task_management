@@ -52,12 +52,25 @@ export default function App() {
   const [divisions, setDivisions] = useState([]);
   const prevUnreadCount = useRef(0); 
 
+  // --- PEMICU SUARA NOTIFIKASI (ANTI BLOKIR) ---
+  const isFirstLoad = useRef(true); // Mencegah bunyi saat web baru di-refresh
+
   useEffect(() => {
     if (!currentUser) return;
     const currentUnread = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
+    
+    // Jangan bunyikan suara saat pertama kali login/refresh (pasti diblokir browser)
+    if (isFirstLoad.current) {
+       isFirstLoad.current = false;
+       prevUnreadCount.current = currentUnread;
+       return; 
+    }
+
+    // Hanya bunyi jika ada TAMBAHAN notifikasi baru
     if (currentUnread > prevUnreadCount.current) {
-      const notifSound = new Audio('/Notif suara.mp3');
-      notifSound.play().catch(err => console.warn("Suara diblokir browser"));
+      // PENTING: Pastikan nama file MP3 Anda di folder public diganti jadi "notif.mp3" (tanpa spasi)
+      const notifSound = new Audio('/Notif_suara.mp3'); 
+      notifSound.play().catch(err => console.warn("Browser butuh interaksi klik sebelum bisa memutar suara."));
     }
     prevUnreadCount.current = currentUnread;
   }, [notifications, currentUser]);
