@@ -94,7 +94,7 @@ export default function App() {
     }
   };
   
-  // --- FITUR REFRESH OTOMATIS (SETIAP 30 DETIK) ---
+  // --- FITUR REFRESH OTOMATIS ---
   useEffect(() => {
     // Jalankan hanya jika user sudah login
     if (!currentUser) return;
@@ -459,37 +459,20 @@ export default function App() {
 
   const loadTasksFromDB = async () => {
     try {
-      const { data, error } = await supabase.from('initial_tasks').select('*').order('id', { ascending: false });
+      const { data, error } = await supabase
+        .from('initial_tasks')
+        .select('*')
+        .order('id', { ascending: false });
+        
       if (data) {
         setTasks(data);
-        if (currentUser) {
-          const myUnfinishedTasks = data.filter(t => t.status !== 'done' && getAssigneesArray(t.assignedTo).includes(currentUser.id));
-          if (myUnfinishedTasks.length > 0) {
-            setNotifications(prev => {
-              let currentNotifs = [...prev];
-              myUnfinishedTasks.forEach(task => {
-                const isAlreadyNotified = currentNotifs.some(n => n.taskId === task.id && !n.read);
-                if (!isAlreadyNotified) {
-                  currentNotifs.unshift({
-                    id: Date.now() + Math.random(),
-                    userId: currentUser.id,
-                    type: 'reminder',
-                    message: `PENGINGAT: Tugas "${task.title}" belum dikerjakan!`, 
-                    read: false,
-                    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-                    taskId: task.id
-                  });
-                }
-              });
-              return currentNotifs;
-            });
-          }
-        }
+        // Blok pembuatan notifikasi PENGINGAT sudah dibuang sepenuhnya dari sini
       }
     } catch (error) {
+      console.error("Gagal memuat data tugas:", error);
       setTasks([]);
     }
-  }
+  };
   
   useEffect(() => {
     if (currentUser) {
