@@ -107,20 +107,6 @@ export default function App() {
     }
   };
   
-  // --- FITUR REFRESH OTOMATIS ---
-  useEffect(() => {
-    // Jalankan hanya jika user sudah login
-    if (!currentUser) return;
-
-    const interval = setInterval(() => {
-      console.log("Auto-refresh data tugas...");
-      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
-    }, 5000); // 5.000 milidetik = 5 detik
-
-    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
-    return () => clearInterval(interval);
-  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
-  
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
     autoEmail: false, 
@@ -487,19 +473,56 @@ export default function App() {
     }
   };
   
-  useEffect(() => {
-    if (currentUser) {
-      loadTasksFromDB();
-      const fetchNotifications = async () => {
-        try {
-          const { data, error } = await supabase.from('notifications').select('*').eq('userId', currentUser.id).order('id', { ascending: false });
-          if (data) setNotifications(data.map(n => ({...n, read: n.read_status})));
-        } catch (error) {
-          console.error("Gagal menarik notifikasi:", error);
-        }
-      };
-      fetchNotifications();
+  // --- FUNGSI PENARIK NOTIFIKASI (MANDIRI) ---
+  const fetchNotifications = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('userId', currentUser.id)
+        .order('id', { ascending: false });
+        
+      if (data) setNotifications(data.map(n => ({...n, read: false})));
+    } catch (error) {
+      console.error("Gagal menarik notifikasi:", error);
     }
+  };
+
+  // --- JALUR GANDA: REALTIME + INTERVAL CADANGAN ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // 1. Tarik data awal saat login
+    loadTasksFromDB();
+    fetchNotifications();
+
+    // 2. Jalur Utama: Supabase Realtime (Langsung masuk dalam 0 detik)
+    const notifChannel = supabase
+      .channel('realtime-notifs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+         fetchNotifications();
+      })
+      .subscribe();
+
+    const taskChannel = supabase
+      .channel('realtime-tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'initial_tasks' }, () => {
+         loadTasksFromDB();
+      })
+      .subscribe();
+
+    // 3. Jalur Cadangan (Jaring Pengaman): Auto-Refresh tiap 5 Detik
+    const fallbackInterval = setInterval(() => {
+      loadTasksFromDB();
+      fetchNotifications();
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(notifChannel);
+      supabase.removeChannel(taskChannel);
+      clearInterval(fallbackInterval);
+    };
   }, [currentUser]);
   
   const [selectedTask, setSelectedTask] = useState(null);
