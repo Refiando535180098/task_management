@@ -465,7 +465,7 @@ export default function App() {
         
       if (data) {
         setTasks(data);
-        // Logika "PENGINGAT" dihapus total dari sini agar tidak muncul berulang
+        // Blok pembuatan notifikasi PENGINGAT sudah dibuang sepenuhnya dari sini
       }
     } catch (error) {
       console.error("Gagal memuat data tugas:", error);
