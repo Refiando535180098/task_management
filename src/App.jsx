@@ -57,18 +57,23 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
-    
-    // Hitung jumlah notifikasi yang ADA di database
     const currentUnread = notifications.filter(n => n.userId === currentUser.id && !n.read).length;
     
-    // Jika notifikasi bertambah dibanding sebelumnya, baru bunyikan suara
-    if (currentUnread > prevUnreadCount.current) {
-      const notifSound = new Audio('/Notif_suara.mp3'); 
-      notifSound.play().catch(err => console.warn("Suara diblokir browser"));
+    // Jangan bunyikan suara saat pertama kali login/refresh (pasti diblokir browser)
+    if (isFirstLoad.current) {
+       isFirstLoad.current = false;
+       prevUnreadCount.current = currentUnread;
+       return; 
     }
-    
+
+    // Hanya bunyi jika ada TAMBAHAN notifikasi baru
+    if (currentUnread > prevUnreadCount.current) {
+      // PENTING: Pastikan nama file MP3 Anda di folder public diganti jadi "notif.mp3" (tanpa spasi)
+      const notifSound = new Audio('/Notif_suara.mp3'); 
+      notifSound.play().catch(err => console.warn("Browser butuh interaksi klik sebelum bisa memutar suara."));
+    }
     prevUnreadCount.current = currentUnread;
-  }, [notifications]); // Ganti dependencies-nya agar hanya fokus ke notifications
+  }, [notifications, currentUser]);
 
   const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']);
   const [newRoleName, setNewRoleName] = useState('');
@@ -484,7 +489,7 @@ export default function App() {
     }
   };
 
-  // --- JALUR NOTIFIKASI REALTIME + CADANGAN ---
+  // --- JALUR GANDA: REALTIME + INTERVAL CADANGAN ---
   useEffect(() => {
     if (!currentUser) return;
 
@@ -492,7 +497,7 @@ export default function App() {
     loadTasksFromDB();
     fetchNotifications();
 
-    // 2. Jalur Utama: Realtime (Instan, detik itu juga)
+    // 2. Jalur Utama: Supabase Realtime (Langsung masuk dalam 0 detik)
     const notifChannel = supabase
       .channel('realtime-notifs')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
