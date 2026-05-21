@@ -674,28 +674,7 @@ export default function App() {
     if (customAction) customAction();
   };
 
-  const handleReadNotification = async (notif) => {
-    setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('id', notif.id); } catch (err) {}
-    if (notif.taskId) {
-      const task = tasks.find(t => t.id === notif.taskId);
-      if (task) {
-        setSelectedTask(task);
-        setIsNotifOpen(false); 
-        if (notif.type === 'chat') {
-          navigateTo('chat');       
-          setShowMobileChat(true);  
-        } else {
-          navigateTo('tasks');      
-        }
-      }
-    }
-  };
-
-  const handleReadAllNotifs = async () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-    try { await supabase.from('notifications').update({ read_status: true }).eq('userId', currentUser.id); } catch (err) {}
-  };
+  
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
