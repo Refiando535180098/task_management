@@ -94,19 +94,45 @@ export default function App() {
     }
   };
   
-  // --- FITUR REFRESH OTOMATIS ---
+  // --- FITUR REALTIME: INSTAN TANPA DELAY & TANPA REFRESH ---
   useEffect(() => {
-    // Jalankan hanya jika user sudah login
     if (!currentUser) return;
 
-    const interval = setInterval(() => {
-      console.log("Auto-refresh data tugas...");
-      loadTasksFromDB(); // Memanggil ulang fungsi loadTasksFromDB yang sudah Anda miliki
-    }, 5000); // 5.000 milidetik = 5 detik
+    console.log("Mengaktifkan Jalur Realtime Supabase...");
 
-    // Membersihkan interval saat komponen di-unmount agar tidak terjadi kebocoran memori
-    return () => clearInterval(interval);
-  }, [currentUser]); // Efek ini akan berjalan ulang jika status currentUser berubah
+    // 1. Dengar perubahan pada tabel NOTIFIKASI secara instan
+    const notifChannel = supabase
+      .channel('realtime-notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `userId=eq.${currentUser.id}` },
+        (payload) => {
+          console.log("Ada notifikasi masuk secara realtime!", payload.new);
+          // Jalankan fungsi fetch untuk memperbarui data & memicu suara instan
+          fetchNotifications();
+        }
+      )
+      .subscribe();
+
+    // 2. Dengar perubahan pada tabel TUGAS/CHAT secara instan
+    const taskChannel = supabase
+      .channel('realtime-tasks')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'initial_tasks' },
+        (payload) => {
+          console.log("Ada pembaruan tugas/chat secara realtime!");
+          loadTasksFromDB(); // Perbarui daftar tugas & kolom chat saat itu juga
+        }
+      )
+      .subscribe();
+
+    // Bersihkan jalur (unsubscribe) jika user logout atau halaman ditutup
+    return () => {
+      supabase.removeChannel(notifChannel);
+      supabase.removeChannel(taskChannel);
+    };
+  }, [currentUser]);
   
   const [sysConfig, setSysConfig] = useState({ 
     brandName: 'SYNTEGRA SERVICES', 
