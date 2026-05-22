@@ -1391,7 +1391,7 @@ export default function App() {
                  </div>
                  <div className="relative z-10 flex items-center justify-between mt-6 pt-4 border-t border-blue-500/50">
                     <div className="flex flex-col">
-                      <span className="text-[10px] md:text-xs font-bold text-blue-200">Selesai (KPI)</span>
+                      <span className="text-[10px] md:text-xs font-bold text-blue-200">Peresentase Selesai</span>
                       <span className="text-sm md:text-base font-black">{activeTasks.length === 0 ? 0 : Math.round((activeTasks.filter(t => t.status === 'done').length / activeTasks.length) * 100)}%</span>
                     </div>
                     <div className="flex flex-col text-right">
