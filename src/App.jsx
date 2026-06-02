@@ -157,6 +157,8 @@ export default function App() {
     { nik: '', password: '', name: '', role: 'staff', division: '', position: '' }
   ]);
 
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState(''); // State baru untuk pencarian penerima
+
   // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
   const getNowStr = () => {
     const d = new Date();
@@ -2248,18 +2250,61 @@ export default function App() {
                       </div>
                       {currentUser.role !== 'staff' && (
                         <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pilih Penerima</label>
-                          <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 custom-scrollbar bg-slate-50">
+                          <div className="flex justify-between items-end mb-1.5">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Pilih Penerima Instruksi</label>
+                          </div>
+                          
+                          {/* KOLOM PENCARIAN PENERIMA */}
+                          <div className="relative mb-2">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input 
+                              type="text" 
+                              placeholder="Cari nama karyawan..." 
+                              value={recipientSearchQuery}
+                              onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                              className="w-full pl-9 pr-3 py-2 border-2 border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition-colors bg-slate-50 focus:bg-white"
+                            />
+                          </div>
+
+                          {/* DAFTAR PENERIMA YANG DIFILTER */}
+                          <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 bg-slate-50 custom-scrollbar">
                             {users.filter(u => {
-                               if (currentUser.role === 'direksi' || currentUser.role === 'admin') return u.role === 'manager' || u.role === 'staff';
-                               if (currentUser.role === 'manager') return u.role === 'staff' || String(u.id) === String(currentUser.id); // Manager bisa milih dirinya
-                               return u.role === 'staff';
+                               // 1. Aturan Akses
+                               let hasAccess = false;
+                               if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
+                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || String(u.id) === String(currentUser.id));
+                               else hasAccess = (u.role === 'staff');
+
+                               // Jika tidak punya akses, sembunyikan
+                               if (!hasAccess) return false;
+
+                               // 2. Filter Pencarian Nama
+                               if (recipientSearchQuery) {
+                                 return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
+                               }
+
+                               return true; // Tampilkan semua jika tidak ada pencarian
                             }).map(user => (
-                              <label key={user.id} className="flex items-center gap-2 p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg cursor-pointer transition-colors shadow-sm">
-                                <input type="checkbox" checked={newTask.assignedTo.includes(user.id)} onChange={(e) => setNewTask(p => ({ ...p, assignedTo: e.target.checked ? [...p.assignedTo, user.id] : p.assignedTo.filter(id => id !== user.id) }))} className="w-4 h-4 md:w-5 md:h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
-                                <span className="text-[11px] md:text-xs font-bold text-slate-700">{user.name} {String(user.id) === String(currentUser.id) && <span className="text-blue-500 ml-1">(Anda)</span>} <span className="text-[9px] text-slate-400 font-bold ml-1">({user.division})</span></span>
+                              <label key={user.id} className="flex items-center gap-2 p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg cursor-pointer transition-colors shadow-sm bg-white">
+                                <input type="checkbox" checked={newTask.assignedTo.includes(user.id)} onChange={(e) => setNewTask(p => ({ ...p, assignedTo: e.target.checked ? [...p.assignedTo, user.id] : p.assignedTo.filter(id => id !== user.id) }))} className="w-4 h-4 text-blue-600 rounded border-slate-300 cursor-pointer" />
+                                <span className="text-xs font-bold text-slate-700">{user.name} {String(user.id) === String(currentUser.id) && <span className="text-blue-500 font-bold">(Anda)</span>} <span className="text-[10px] text-gray-400 font-bold ml-1">({user.division})</span></span>
                               </label>
                             ))}
+
+                            {/* Teks Jika Pencarian Kosong */}
+                            {users.filter(u => {
+                               let hasAccess = false;
+                               if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
+                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || String(u.id) === String(currentUser.id));
+                               else hasAccess = (u.role === 'staff');
+                               if (!hasAccess) return false;
+                               if (recipientSearchQuery) return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
+                               return true;
+                            }).length === 0 && (
+                               <div className="text-center py-4 text-xs font-bold text-slate-400">
+                                  Karyawan tidak ditemukan.
+                               </div>
+                            )}
                           </div>
                         </div>
                       )}
