@@ -2269,10 +2269,10 @@ export default function App() {
                           {/* DAFTAR PENERIMA YANG DIFILTER */}
                           <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 bg-slate-50 custom-scrollbar">
                             {users.filter(u => {
-                               // 1. Aturan Akses
+                               // 1. Aturan Akses (UPDATE: Manager sekarang bisa melihat sesama Manager)
                                let hasAccess = false;
                                if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
-                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || String(u.id) === String(currentUser.id));
+                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || u.role === 'manager'); // <-- BARIS INI YANG DIUBAH
                                else hasAccess = (u.role === 'staff');
 
                                // Jika tidak punya akses, sembunyikan
@@ -2295,8 +2295,9 @@ export default function App() {
                             {users.filter(u => {
                                let hasAccess = false;
                                if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
-                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || String(u.id) === String(currentUser.id));
+                               else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || u.role === 'manager'); // <-- BARIS INI JUGA DIUBAH
                                else hasAccess = (u.role === 'staff');
+                               
                                if (!hasAccess) return false;
                                if (recipientSearchQuery) return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
                                return true;
