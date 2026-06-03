@@ -160,41 +160,36 @@ export default function App() {
   const [recipientSearchQuery, setRecipientSearchQuery] = useState(''); // State baru untuk pencarian penerima
 
   // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
-  // --- FUNGSI PEMBANTU FORMAT WAKTU (SUDAH STANDAR GLOBAL) ---
   const getNowStr = () => {
-    // Akan menghasilkan waktu standar ISO yang dikenali otomatis oleh Supabase dan Browser
     return new Date().toISOString(); 
   };
 
-  // --- FUNGSI PEMBANTU FORMAT WAKTU (SUDAH DIPERBAIKI UNTUK ZONA WAKTU LOKAL) ---
+  // --- 1. FUNGSI PEMBANTU FORMAT WAKTU (SUPER AKURAT) ---
   const formatDateTime = (val) => {
     if (!val) return '-';
     
     try {
-      // 1. Ambil string waktu dari database
       let dateStr = val;
       
-      // Jika string menggunakan spasi (bukan T), ubah ke T agar bisa dibaca sempurna oleh semua browser (terutama Safari/iOS)
+      // Ubah spasi menjadi 'T' agar formatnya sesuai standar ISO
       if (dateStr.includes(' ') && !dateStr.includes('T')) {
         dateStr = dateStr.replace(' ', 'T');
       }
 
-      // 2. Ubah menjadi objek Date. 
-      // Jika data dari Supabase berakhiran 'Z' (UTC), ini akan OTOMATIS terkonversi ke waktu lokal laptop/HP (WIB).
-      const dateObj = new Date(dateStr);
-
-      // Cek apakah parsing berhasil
-      if (isNaN(dateObj.getTime())) {
-        return val.replace('T', ' ').replace('Z', '').substring(0, 16);
+      // KUNCI PERBAIKAN: Jika data dari Supabase kehilangan kode 'Z' (UTC), 
+      // kita paksa tambahkan 'Z' agar browser tahu ini waktu dari server luar negeri
+      // sehingga otomatis dikonversi ke +7 (WIB) / +8 (WITA) / +9 (WIT).
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+        dateStr += 'Z';
       }
 
-      // 3. Format kembali menjadi string yang rapi (YYYY-MM-DD HH:mm)
+      const dateObj = new Date(dateStr);
+      
       const pad = (n) => String(n).padStart(2, '0');
       return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
       
     } catch (error) {
-      // Fallback aman jika terjadi error
-      return val.replace('T', ' ').replace('Z', '').substring(0, 16);
+      return val.substring(0, 16).replace('T', ' ');
     }
   };
 
