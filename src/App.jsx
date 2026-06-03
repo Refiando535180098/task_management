@@ -746,21 +746,23 @@ export default function App() {
 
     try {
       const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
-      if (!error && newTasks && newTasks.length > 0) {
-        setIsModalOpen(false);
-        setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
-        loadTasksFromDB();
+        if (!error && newTasks && newTasks.length > 0) {
+          setIsModalOpen(false);
+          setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
+          loadTasksFromDB();
+
+          const insertedTask = newTasks[0];
 
         const notifsToInsert = assignedUserIds
-           .filter(id => String(id) !== String(currentUser.id))
-           .map(id => ({
-              userId: id,
-              type: 'task',
-              message: `Tugas Baru: "${insertedTask.title}" (${insertedTask.priority.toUpperCase()})`,
-              read_status: false,
-              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-              taskId: insertedTask.id
-           }));
+        .filter(id => String(id) !== String(currentUser.id))
+        .map(id => ({
+          userId: id,
+          type: 'task',
+          message: `Tugas Baru: "${insertedTask.title}" (${insertedTask.priority.toUpperCase()})`,
+          read_status: false,
+          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          taskId: insertedTask.id
+        }));
         
         if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
       } else {
