@@ -748,11 +748,13 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      // Ubah input kalender lokal menjadi standar ISO sebelum dikirim ke database
+      // Ubah input kalender ke format UTC sebelum dikirim
       dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null, 
       status: 'pending',
       comments: [],
-      attachments: []
+      attachments: [],
+      // PAKSA SIMPAN WAKTU PEMBUATAN DARI LAPTOP/HP USER SAAT KLIK TOMBOL SIMPAN
+      created_at: new Date().toISOString()
     };
 
     try {
