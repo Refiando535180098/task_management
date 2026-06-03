@@ -161,16 +161,29 @@ export default function App() {
 
   // --- 1. FUNGSI PEMBANTU (PAKSA WAKTU LOKAL INDONESIA) ---
   const getNowStr = () => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    // Menghasilkan teks absolut lokal: "YYYY-MM-DD HH:mm:ss"
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    // Menggunakan standar baku ISO untuk dikirim ke Supabase
+    return new Date().toISOString(); 
   };
 
   const formatDateTime = (val) => {
     if (!val) return '-';
-    // Menampilkan mentah-mentah apa yang ada di database tanpa peduli zona waktu
-    return val.replace('T', ' ').replace('Z', '').substring(0, 16);
+    
+    try {
+      // Supabase mengirimkan format jam London (contoh: "2026-06-03T15:11:00+00:00")
+      // new Date() akan otomatis mendeteksi bahwa laptop/HP Anda ada di Indonesia,
+      // lalu mengkonversinya langsung menjadi jam "22:11:00 WIB"
+      const dateObj = new Date(val);
+      
+      // Jika data tidak valid, kembalikan teks aslinya
+      if (isNaN(dateObj.getTime())) {
+        return val.substring(0, 16).replace('T', ' ');
+      }
+
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+    } catch (error) {
+      return val.substring(0, 16).replace('T', ' ');
+    }
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
@@ -729,13 +742,12 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      // HAPUS toISOString(). Kirim jam lokal mentah-mentah ke database
-      dueDate: newTask.dueDate ? newTask.dueDate.replace('T', ' ') + ':00' : null, 
+      // Konversi jam input kalender dari browser ke format standar Supabase
+      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null, 
       status: 'pending',
       comments: [],
-      attachments: [],
-      // Gunakan getNowStr() yang sudah disetting untuk jam lokal
-      created_at: getNowStr()
+      attachments: []
+      // Jangan tulis created_at di sini. Biarkan server Supabase yang mengisi otomatis.
     };
 
     try {
