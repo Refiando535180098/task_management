@@ -160,11 +160,10 @@ export default function App() {
   const [recipientSearchQuery, setRecipientSearchQuery] = useState(''); // State baru untuk pencarian penerima
 
   // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
+  // --- FUNGSI PEMBANTU FORMAT WAKTU (SUDAH STANDAR GLOBAL) ---
   const getNowStr = () => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    // Hasil absolute lokal YYYY-MM-DDTHH:mm
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    // Akan menghasilkan waktu standar ISO yang dikenali otomatis oleh Supabase dan Browser
+    return new Date().toISOString(); 
   };
 
   // --- FUNGSI PEMBANTU FORMAT WAKTU (SUDAH DIPERBAIKI UNTUK ZONA WAKTU LOKAL) ---
@@ -754,8 +753,8 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      // UBAH BAGIAN INI: Simpan string mentah apa adanya dari input form
-      dueDate: newTask.dueDate ? newTask.dueDate.replace('T', ' ') : '', 
+      // Ubah input kalender lokal menjadi standar ISO sebelum dikirim ke database
+      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null, 
       status: 'pending',
       comments: [],
       attachments: []
