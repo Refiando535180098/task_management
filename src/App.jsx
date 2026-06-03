@@ -159,38 +159,18 @@ export default function App() {
 
   const [recipientSearchQuery, setRecipientSearchQuery] = useState(''); // State baru untuk pencarian penerima
 
-  // --- FUNGSI PEMBANTU FORMAT WAKTU (MENCEGAH ZONA WAKTU NGACO) ---
+  // --- 1. FUNGSI PEMBANTU (PAKSA WAKTU LOKAL INDONESIA) ---
   const getNowStr = () => {
-    return new Date().toISOString(); 
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    // Menghasilkan teks absolut lokal: "YYYY-MM-DD HH:mm:ss"
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   };
 
-  // --- 1. FUNGSI PEMBANTU FORMAT WAKTU (SUPER AKURAT) ---
   const formatDateTime = (val) => {
     if (!val) return '-';
-    
-    try {
-      let dateStr = val;
-      
-      // Ubah spasi menjadi 'T' agar formatnya sesuai standar ISO
-      if (dateStr.includes(' ') && !dateStr.includes('T')) {
-        dateStr = dateStr.replace(' ', 'T');
-      }
-
-      // KUNCI PERBAIKAN: Jika data dari Supabase kehilangan kode 'Z' (UTC), 
-      // kita paksa tambahkan 'Z' agar browser tahu ini waktu dari server luar negeri
-      // sehingga otomatis dikonversi ke +7 (WIB) / +8 (WITA) / +9 (WIT).
-      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
-        dateStr += 'Z';
-      }
-
-      const dateObj = new Date(dateStr);
-      
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
-      
-    } catch (error) {
-      return val.substring(0, 16).replace('T', ' ');
-    }
+    // Menampilkan mentah-mentah apa yang ada di database tanpa peduli zona waktu
+    return val.replace('T', ' ').replace('Z', '').substring(0, 16);
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
@@ -432,6 +412,7 @@ export default function App() {
     try {
       const updatePayload = { 
         status: finalStatus,
+        // Gunakan getNowStr() agar jam approve tepat dengan jam HP/PC saat ini
         completed_at: isApproved ? getNowStr() : null,
         approved_by: isApproved ? currentUser.id : null 
       };
@@ -748,13 +729,13 @@ export default function App() {
       assignedTo: assignedUserIds,
       assignedBy: currentUser.id,
       priority: newTask.priority,
-      // Ubah input kalender ke format UTC sebelum dikirim
-      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null, 
+      // HAPUS toISOString(). Kirim jam lokal mentah-mentah ke database
+      dueDate: newTask.dueDate ? newTask.dueDate.replace('T', ' ') + ':00' : null, 
       status: 'pending',
       comments: [],
       attachments: [],
-      // PAKSA SIMPAN WAKTU PEMBUATAN DARI LAPTOP/HP USER SAAT KLIK TOMBOL SIMPAN
-      created_at: new Date().toISOString()
+      // Gunakan getNowStr() yang sudah disetting untuk jam lokal
+      created_at: getNowStr()
     };
 
     try {
