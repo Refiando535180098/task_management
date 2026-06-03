@@ -167,19 +167,36 @@ export default function App() {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  // --- FUNGSI PEMBANTU FORMAT WAKTU ---
+  // --- FUNGSI PEMBANTU FORMAT WAKTU (SUDAH DIPERBAIKI UNTUK ZONA WAKTU LOKAL) ---
   const formatDateTime = (val) => {
     if (!val) return '-';
     
-    // Hilangkan huruf T atau Z jika terbawa dari format lama, ganti dengan spasi
-    let cleanVal = val.replace('T', ' ').replace('Z', ''); 
-    
-    // Ambil 16 karakter pertama saja (YYYY-MM-DD HH:mm) agar detik tidak ikut tampil
-    if (cleanVal.length > 16) {
-      cleanVal = cleanVal.substring(0, 16);
+    try {
+      // 1. Ambil string waktu dari database
+      let dateStr = val;
+      
+      // Jika string menggunakan spasi (bukan T), ubah ke T agar bisa dibaca sempurna oleh semua browser (terutama Safari/iOS)
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T');
+      }
+
+      // 2. Ubah menjadi objek Date. 
+      // Jika data dari Supabase berakhiran 'Z' (UTC), ini akan OTOMATIS terkonversi ke waktu lokal laptop/HP (WIB).
+      const dateObj = new Date(dateStr);
+
+      // Cek apakah parsing berhasil
+      if (isNaN(dateObj.getTime())) {
+        return val.replace('T', ' ').replace('Z', '').substring(0, 16);
+      }
+
+      // 3. Format kembali menjadi string yang rapi (YYYY-MM-DD HH:mm)
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+      
+    } catch (error) {
+      // Fallback aman jika terjadi error
+      return val.replace('T', ' ').replace('Z', '').substring(0, 16);
     }
-    
-    return cleanVal;
   };
 
   // --- FUNGSI UPLOAD LAMPIRAN KE SUPABASE STORAGE ---
