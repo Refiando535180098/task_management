@@ -1434,6 +1434,8 @@ export default function TaskManagement() {
                  
                  <div className="flex w-full md:w-auto gap-2">
                    <input type="month" value={taskFilterMonth} onChange={(e) => {setTaskFilterMonth(e.target.value); setTaskFilterDate('');}} className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-blue-300" />
+                   
+                   {/* PERBAIKAN: Tombol Reset ikut mereset taskFilterUserId */}
                    {(taskFilterMonth || taskFilterDate || taskSearchQuery || taskFilterUserId !== 'ALL') && (
                      <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate(''); setTaskFilterUserId('ALL');}} className="px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-xl hover:bg-red-100 shrink-0">Reset</button>
                    )}
@@ -1441,7 +1443,8 @@ export default function TaskManagement() {
                </div>
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
-                 {/* UBAH HEADER AGAR MUNCUL NAMA KARYAWAN YANG DIFILTER */}
+                 
+                 {/* PERBAIKAN: Judul header berubah dinamis saat sedang difilter */}
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3 flex justify-between items-center">
                    <span>Daftar Pekerjaan</span>
                    {taskFilterUserId !== 'ALL' && (
@@ -1455,7 +1458,10 @@ export default function TaskManagement() {
                     if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
                     if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
-                    if (taskFilterUserId !== 'ALL' && !getAssigneesArray(t.assignedTo).includes(taskFilterUserId)) return false; 
+                    
+                    // PERBAIKAN: Gunakan .map(String) agar tipe data angka/huruf selalu cocok
+                    if (taskFilterUserId !== 'ALL' && !getAssigneesArray(t.assignedTo).map(String).includes(String(taskFilterUserId))) return false; 
+                    
                     return true;
                   }).map(task => {
                     const nowLocalStr = getNowStr();
