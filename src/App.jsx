@@ -56,7 +56,7 @@ export default function App() {
         } />
 
         {/* Modul Task Management */}
-        <Route path="/task-management" element={
+        <Route path="/TaskManagement" element={
           <ProtectedRoute>
             <TaskManagement />
           </ProtectedRoute>

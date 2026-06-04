@@ -391,7 +391,7 @@ const PortalHome = () => {
           
           {/* Menu Task Management */}
           <div 
-            onClick={() => navigate('/task-management')}
+            onClick={() => navigate('/TaskManagement')}
             className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/5 transition-all cursor-pointer relative overflow-hidden"
           >
             <div className="w-12 h-12 bg-slate-950 text-amber-400 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
