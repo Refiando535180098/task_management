@@ -81,7 +81,7 @@ export default function Login() {
             <img src="/Logo_apps.png" alt="Logo" />
           </div>
           <h1 className="text-2xl md:text-3xl font-black text-yellow-500 tracking-tight uppercase">{sysConfig.brandName}<br/><span className="text-slate-800 text-lg md:text-xl">SYNTEGRA ERP SYSTEM</span></h1>
-          <p className="text-slate-500 text-xs md:text-sm font-medium mt-1">Sistem Manajemen Kinerja Terpadu</p>
+          <p className="text-slate-500 text-xs md:text-sm font-medium mt-1">Sistem ERP Terintegrasi</p>
         </div>
         
         <form onSubmit={handleLoginSubmit} className="space-y-4 md:space-y-5">
