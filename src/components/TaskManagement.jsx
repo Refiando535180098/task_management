@@ -1459,8 +1459,15 @@ export default function TaskManagement() {
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
                     if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
                     
-                    // PERBAIKAN: Gunakan .map(String) agar tipe data angka/huruf selalu cocok
-                    if (taskFilterUserId !== 'ALL' && !getAssigneesArray(t.assignedTo).map(String).includes(String(taskFilterUserId))) return false; 
+                    // ==========================================
+                    // PERBAIKAN UTAMA: PAKSA KEDUA SISI MENJADI STRING BERSIH
+                    // ==========================================
+                    if (taskFilterUserId !== 'ALL') {
+                      const listIdPenerima = getAssigneesArray(t.assignedTo).map(id => String(id).trim());
+                      const idYangDicari = String(taskFilterUserId).trim();
+                      
+                      if (!listIdPenerima.includes(idYangDicari)) return false;
+                    }
                     
                     return true;
                   }).map(task => {
@@ -1669,13 +1676,13 @@ export default function TaskManagement() {
           {/* TAB: TIM DIVISI */}
           {activeTab === 'division' && (currentUser.role !== 'staff') && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 print:hidden animate-in fade-in duration-300 md:p-10">
-              {users.filter(u => 
-                 (u.role === 'staff' || u.role === 'manager') && 
-                 (selectedDivision === 'Semua Divisi' ? 
-                     (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division) : 
-                     u.division === selectedDivision
-                 )
-              ).map(staff => {
+                  {users.filter(u => 
+                    (u.role === 'staff' || u.role === 'manager') && 
+                    (selectedDivision === 'Semua Divisi' ? 
+                        (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division) : 
+                        u.division === selectedDivision
+                    )
+                  ).map(staff => {
                   const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
                   return (
                     <Card 
