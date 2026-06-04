@@ -133,6 +133,7 @@ export default function TaskManagement() {
   const [taskFilterMonth, setTaskFilterMonth] = useState('');
   const [taskFilterDate, setTaskFilterDate] = useState('');
   const [reportFilterMonth, setReportFilterMonth] = useState('');
+  const [taskFilterUserId, setTaskFilterUserId] = useState('ALL');
   
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -1446,6 +1447,7 @@ export default function TaskManagement() {
                     if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
                     if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
+                    if (taskFilterUserId !== 'ALL' && !getAssigneesArray(t.assignedTo).includes(taskFilterUserId)) return false; 
                     return true;
                   }).map(task => {
                     const nowLocalStr = getNowStr();
@@ -1662,7 +1664,11 @@ export default function TaskManagement() {
               ).map(staff => {
                   const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
                   return (
-                    <Card key={staff.id} className="p-0 flex flex-col items-center text-center hover:-translate-y-1 transition-transform border border-slate-200 shadow-sm relative overflow-hidden bg-white">
+                    <Card 
+                      key={staff.id} 
+                      onClick={() => { setTaskFilterUserId(staff.id); navigateTo('tasks'); }} 
+                      className="p-0 flex flex-col items-center text-center hover:-translate-y-1 transition-transform border border-slate-200 shadow-sm relative overflow-hidden bg-white cursor-pointer hover:border-blue-400 hover:shadow-md"
+                    >
                       <div className="absolute top-0 w-full h-1.5 md:h-2 bg-gradient-to-r from-blue-500 to-blue-800"></div>
                       <div className="p-5 md:p-6 w-full flex flex-col items-center">
                         <div className="w-14 h-14 md:w-20 md:h-20 bg-slate-50 text-slate-700 font-black text-xl md:text-2xl rounded-2xl flex items-center justify-center mb-3 shadow-sm border border-slate-100">{staff.avatar}</div>
