@@ -49,6 +49,17 @@ export default function TaskManagement() {
   const [divisions, setDivisions] = useState([]);
   const prevUnreadCount = useRef(0); 
 
+  const timeoutMs =
+  parseInt(config.sessionTimeout) * 60 * 1000;
+
+  setTimeout(() => {
+  localStorage.removeItem(
+    'syntegra_user_session'
+  );
+
+  window.location.href = '/login';
+}, timeoutMs);
+
   // --- PEMICU SUARA NOTIFIKASI (ANTI BLOKIR) ---
   const isFirstLoad = useRef(true); // Mencegah bunyi saat web baru di-refresh
 
