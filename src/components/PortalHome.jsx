@@ -607,7 +607,7 @@ const PortalHome = () => {
         </button>
 
         {/* Tombol Task Management */}
-        <button onClick={() => navigate('/task-management')} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1">
+        <button onClick={() => navigate('/TaskManagement')} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1">
           <ClipboardList size={22} />
           <span className="text-[9px] font-bold uppercase tracking-wider">Tasks</span>
         </button>
