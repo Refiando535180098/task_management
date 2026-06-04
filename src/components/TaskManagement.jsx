@@ -1434,14 +1434,22 @@ export default function TaskManagement() {
                  
                  <div className="flex w-full md:w-auto gap-2">
                    <input type="month" value={taskFilterMonth} onChange={(e) => {setTaskFilterMonth(e.target.value); setTaskFilterDate('');}} className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-blue-300" />
-                   {(taskFilterMonth || taskFilterDate || taskSearchQuery) && (
-                     <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate('');}} className="px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-xl hover:bg-red-100 shrink-0">Reset</button>
+                   {(taskFilterMonth || taskFilterDate || taskSearchQuery || taskFilterUserId !== 'ALL') && (
+                     <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate(''); setTaskFilterUserId('ALL');}} className="px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-xl hover:bg-red-100 shrink-0">Reset</button>
                    )}
                  </div>
                </div>
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
-                 <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
+                 {/* UBAH HEADER AGAR MUNCUL NAMA KARYAWAN YANG DIFILTER */}
+                 <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3 flex justify-between items-center">
+                   <span>Daftar Pekerjaan</span>
+                   {taskFilterUserId !== 'ALL' && (
+                     <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-lg text-[10px] normal-case tracking-normal">
+                       Tugas milik: {getUserName(taskFilterUserId)}
+                     </span>
+                   )}
+                 </h3>
                  <div className="space-y-1 overflow-y-auto custom-scrollbar">
                   {myTasks.filter(t => {
                     if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
