@@ -149,7 +149,7 @@ const PortalHome = () => {
   const handleLogout = () => {
     localStorage.removeItem('syntegra_user_session');
     localStorage.removeItem('isAuthenticated');
-    window.location.href = '/login';
+    navigate('/login');
   };
 
   const canAccessRecruitment = () => {
