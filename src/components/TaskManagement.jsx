@@ -11,8 +11,8 @@ import {
 // ==========================================
 // 2. KOMPONEN UI PENDUKUNG
 // ==========================================
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-slate-200/60 ${className}`}>
+const Card = ({ children, className = '', ...props }) => (
+  <div className={`bg-white rounded-2xl shadow-sm border border-slate-200/60 ${className}`} {...props}>
     {children}
   </div>
 );
