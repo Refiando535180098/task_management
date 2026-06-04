@@ -48,18 +48,7 @@ export default function TaskManagement() {
   const [notifications, setNotifications] = useState([]); 
   const [divisions, setDivisions] = useState([]);
   const prevUnreadCount = useRef(0); 
-
-  const timeoutMs =
-  parseInt(config.sessionTimeout) * 60 * 1000;
-
-  setTimeout(() => {
-  localStorage.removeItem(
-    'syntegra_user_session'
-  );
-
-  window.location.href = '/login';
-}, timeoutMs);
-
+  
   // --- PEMICU SUARA NOTIFIKASI (ANTI BLOKIR) ---
   const isFirstLoad = useRef(true); // Mencegah bunyi saat web baru di-refresh
 
@@ -280,6 +269,23 @@ export default function TaskManagement() {
       alert('Gagal terhubung ke server saat hapus file.');
     }
   };
+
+  // --- LOGIKA AUTO LOGOUT AMAN ---
+  useEffect(() => {
+    // Jika timeout diset '0' (Tidak pernah logout) atau belum ada data, batalkan.
+    if (!sysConfig.sessionTimeout || sysConfig.sessionTimeout === '0') return;
+
+    const timeoutMs = parseInt(sysConfig.sessionTimeout) * 60 * 1000;
+    
+    const timer = setTimeout(() => {
+      localStorage.removeItem('syntegra_user_session');
+      localStorage.removeItem('isAuthenticated');
+      window.location.href = '/login';
+    }, timeoutMs);
+
+    // Bersihkan timer setiap kali komponen di-render ulang agar tidak bocor
+    return () => clearTimeout(timer);
+  }, [sysConfig.sessionTimeout]);
 
   const handleAddComment = async (e) => {
     e.preventDefault();
