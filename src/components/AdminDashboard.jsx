@@ -1066,7 +1066,7 @@ const AdminDashboard = ({ setAuth }) => {
                          <div>
                            <label className="block text-[10px] font-black text-blue-800/70 uppercase mb-1.5">Kategori / Tipe Pekerja</label>
                            <select value={kategoriInput} onChange={(e) => setKategoriInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl p-3 w-full text-sm font-bold text-slate-800 focus:outline-none">
-                             <option value="Internal HO">Internal Syntegra (HO)</option>
+                             <option value="Internal HO">Internal Syntegra</option>
                              <option value="Pekerja Site">Pekerja Site / Client</option>
                            </select>
                          </div>
