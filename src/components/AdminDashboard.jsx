@@ -21,11 +21,14 @@ const AdminDashboard = ({ setAuth }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterJasa, setFilterJasa] = useState('');
 
-  // STATE PLOTTING & MUTASI
+  // STATE PLOTTING & MUTASI (SATUAN)
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [lokasiInput, setLokasiInput] = useState('');
   const [nikInput, setNikInput] = useState('');
-  const [kategoriInput, setKategoriInput] = useState('Pekerja Site');
+
+  // STATE BULK MUTASI (MODAL BARU)
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkLokasi, setBulkLokasi] = useState('');
 
   // STATE EDIT PROFIL & BULK
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -38,10 +41,10 @@ const AdminDashboard = ({ setAuth }) => {
     )
   );
 
-  // STATE SETTINGS MASTER SITE (TAMBAH & EDIT)
-  const [newSiteData, setNewSiteData] = useState({ region: '', name: '', info: '' });
-  const [editingSiteId, setEditingSiteId] = useState(null); // FITUR BARU
-  const [editSiteData, setEditSiteData] = useState({ region: '', name: '', info: '' }); // FITUR BARU
+  // STATE SETTINGS MASTER SITE (TAMBAH & EDIT) + KATEGORI KARYAWAN
+  const [newSiteData, setNewSiteData] = useState({ region: '', name: '', info: '', kategori_karyawan: 'Pekerja Site' });
+  const [editingSiteId, setEditingSiteId] = useState(null);
+  const [editSiteData, setEditSiteData] = useState({ region: '', name: '', info: '', kategori_karyawan: 'Pekerja Site' });
 
   useEffect(() => {
     const session = JSON.parse(
@@ -53,11 +56,7 @@ const AdminDashboard = ({ setAuth }) => {
       return;
     }
 
-    const division = (session.division || '').toLowerCase();
-    const role = (session.role || '').toLowerCase();
-
-    const canAccess =
-      session.has_portal_access === true;
+    const canAccess = session.has_portal_access === true;
 
     if (!canAccess) {
       alert('Anda tidak memiliki akses ke modul HRD');
@@ -67,6 +66,7 @@ const AdminDashboard = ({ setAuth }) => {
 
     fetchData();
   }, []);
+
   useEffect(() => { setSelectedIds([]); }, [currentView, searchTerm, filterJasa]);
 
   const fetchData = async () => {
@@ -104,40 +104,58 @@ const AdminDashboard = ({ setAuth }) => {
 
   // --- LOGIKA MASTER SITE (SETTINGS) ---
   const handleAddSite = async (e) => {
-
     if (!user?.can_create_hrd) {
       alert('Anda tidak memiliki hak tambah data');
       return;
     }
-
     e.preventDefault();
     try {
       const { error } = await supabase.from('master_sites').insert([newSiteData]);
       if (error) throw error;
       alert(`Cabang / Site "${newSiteData.name}" berhasil ditambahkan!`);
-      setNewSiteData({ region: '', name: '', info: '' });
+      setNewSiteData({ region: '', name: '', info: '', kategori_karyawan: 'Pekerja Site' });
       fetchData();
     } catch (error) { alert('Gagal menambah site: ' + error.message); }
   };
 
-  // FITUR BARU: Mulai Mode Edit In-Line
   const startEditSite = (site) => {
     setEditingSiteId(site.id);
-    setEditSiteData({ region: site.region, name: site.name, info: site.info || '' });
+    setEditSiteData({ 
+      region: site.region, 
+      name: site.name, 
+      info: site.info || '',
+      kategori_karyawan: site.kategori_karyawan || 'Pekerja Site' 
+    });
   };
 
-  // FITUR BARU: Simpan Hasil Perubahan Master Site
+  // FITUR DIPERBARUI: Sync otomatis ke karyawan saat site di-update
   const handleUpdateSite = async (id) => {
     if (!user?.can_edit_hrd) {
       alert('Anda tidak memiliki hak edit data');
       return;
     }
     try {
+      // Ambil nama site lama sebelum diupdate
+      const originalSite = masterSites.find(s => s.id === id);
+
       const { error } = await supabase.from('master_sites').update(editSiteData).eq('id', id);
       if (error) throw error;
-      alert('Data Cabang / Site berhasil diperbarui!');
+
+      // UPDATE MASSAL DATA KARYAWAN OTOMATIS
+      if (originalSite && originalSite.name) {
+        const { error: candError } = await supabase.from('candidates')
+          .update({ 
+             lokasi_penempatan: editSiteData.name, // Ikut ganti kalau nama site berubah
+             kategori_karyawan: editSiteData.kategori_karyawan // Kategori disesuaikan
+          })
+          .eq('lokasi_penempatan', originalSite.name); // Cari karyawan di site lama
+          
+        if (candError) console.error("Gagal sinkronisasi kategori karyawan:", candError);
+      }
+
+      alert('Data Site diperbarui! Kategori seluruh karyawan di lokasi tersebut juga otomatis disesuaikan.');
       setEditingSiteId(null);
-      fetchData();
+      fetchData(); // Refresh semua data (Sites dan Candidates)
     } catch (error) { alert('Gagal memperbarui data site: ' + error.message); }
   };
 
@@ -166,41 +184,24 @@ const AdminDashboard = ({ setAuth }) => {
   };
 
   const bulkDeleteCandidates = async () => {
-
     if (!user?.can_delete_hrd) {
       alert('Anda tidak memiliki hak hapus data');
       return;
     }
-
     if(!window.confirm(`PERINGATAN: Hapus PERMANEN ${selectedIds.length} data yang dipilih?`)) return;
-
     try {
-      const { error } = await supabase
-        .from('candidates')
-        .delete()
-        .in('id', selectedIds);
-
+      const { error } = await supabase.from('candidates').delete().in('id', selectedIds);
       if (error) throw error;
-
-      setCandidates(
-        candidates.filter(
-          c => !selectedIds.includes(c.id)
-        )
-      );
-
+      setCandidates(candidates.filter(c => !selectedIds.includes(c.id)));
       setSelectedIds([]);
-
-      alert(
-        `Berhasil menghapus ${selectedIds.length} data.`
-      );
-
+      alert(`Berhasil menghapus ${selectedIds.length} data.`);
     } catch (error) {
       alert('Gagal menghapus data: ' + error.message);
     }
   };
 
   const bulkUpdateStatus = async (newStatus) => {
-        if (!user?.can_edit_hrd) {
+    if (!user?.can_edit_hrd) {
       alert('Anda tidak memiliki hak edit');
       return;
     }
@@ -213,67 +214,68 @@ const AdminDashboard = ({ setAuth }) => {
     } catch (error) { alert('Gagal update massal: ' + error.message); }
   };
 
-  const bulkMutasiSite = async () => {
-        if (!user?.can_edit_hrd) {
+  // LOGIKA DIPERBARUI: Eksekusi Mutasi Massal Otomatis Kategori
+  const executeBulkMutasi = async () => {
+    if (!user?.can_edit_hrd) {
       alert('Anda tidak memiliki hak mutasi / penempatan');
       return;
     }
-    const newSite = window.prompt(`Masukkan nama SITE / LOKASI CABANG baru untuk ${selectedIds.length} karyawan terpilih:`);
-    if(!newSite) return;
+    if (!bulkLokasi) {
+      alert("Silakan pilih lokasi penempatan terlebih dahulu.");
+      return;
+    }
+    
+    // Cari kategori dari master site yang dipilih
+    const selectedSite = masterSites.find(s => s.name === bulkLokasi);
+    const targetKategori = selectedSite ? selectedSite.kategori_karyawan : 'Pekerja Site';
+
+    if(!window.confirm(`Mutasi ${selectedIds.length} karyawan ke "${bulkLokasi}"? Kategori akan otomatis menjadi: ${targetKategori}`)) return;
+    
     try {
-      const { error } = await supabase.from('candidates').update({ lokasi_penempatan: newSite }).in('id', selectedIds);
+      const payload = { 
+        lokasi_penempatan: bulkLokasi, 
+        kategori_karyawan: targetKategori 
+      };
+      const { error } = await supabase.from('candidates').update(payload).in('id', selectedIds);
       if (error) throw error;
-      setCandidates(candidates.map(c => selectedIds.includes(c.id) ? { ...c, lokasi_penempatan: newSite } : c));
-      setSelectedIds([]); alert(`Berhasil memutasi ${selectedIds.length} karyawan ke site "${newSite}".`);
-    } catch (error) { alert('Gagal mutasi data: ' + error.message); }
+      
+      setCandidates(candidates.map(c => selectedIds.includes(c.id) ? { ...c, ...payload } : c));
+      setSelectedIds([]); 
+      setShowBulkModal(false);
+      setBulkLokasi('');
+      alert(`Berhasil memutasi ${selectedIds.length} karyawan.`);
+    } catch (error) { 
+      alert('Gagal mutasi data: ' + error.message); 
+    }
   };
 
   // --- LOGIKA SATUAN ---
   const updateStatus = async (id, newStatus) => {
-
-  if (!user?.can_edit_hrd) {
-    alert('Anda tidak memiliki hak edit data');
-    return;
-  }
-
-  if(!window.confirm(`Ubah status menjadi ${newStatus}?`)) return;
-
+    if (!user?.can_edit_hrd) {
+      alert('Anda tidak memiliki hak edit data');
+      return;
+    }
+    if(!window.confirm(`Ubah status menjadi ${newStatus}?`)) return;
     try {
-      const { error } = await supabase
-        .from('candidates')
-        .update({
-          status: newStatus
-        })
-        .eq('id', id);
-
+      const { error } = await supabase.from('candidates').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
-
-      setCandidates(
-        candidates.map(c =>
-          c.id === id
-            ? { ...c, status: newStatus }
-            : c
-        )
-      );
-
+      setCandidates(candidates.map(c => c.id === id ? { ...c, status: newStatus } : c));
       setSelectedCandidate(null);
       setIsEditingProfile(false);
-
       alert('Status berhasil diubah.');
-
-    } catch (error) {
-      alert(
-        'Gagal mengupdate status: ' +
-        error.message
-      );
-    }
+    } catch (error) { alert('Gagal mengupdate status: ' + error.message); }
   };
 
+  // LOGIKA DIPERBARUI: Save Profil / Mutasi Satuan
   const saveCandidateInfo = async (id) => {
     if (!user?.can_edit_hrd) {alert('Anda tidak memiliki hak edit data'); return;}
     if(!window.confirm("Simpan perubahan Penempatan / Mutasi ini?")) return;
     try {
-      const payload = { lokasi_penempatan: lokasiInput, nik_karyawan: nikInput, kategori_karyawan: kategoriInput };
+      // Cari kategori otomatis dari master site
+      const selectedSite = masterSites.find(s => s.name === lokasiInput);
+      const autoKategori = selectedSite ? selectedSite.kategori_karyawan : 'Pekerja Site';
+
+      const payload = { lokasi_penempatan: lokasiInput, nik_karyawan: nikInput, kategori_karyawan: autoKategori };
       const { error } = await supabase.from('candidates').update(payload).eq('id', id);
       if (error) throw error;
 
@@ -361,14 +363,12 @@ const AdminDashboard = ({ setAuth }) => {
     XLSX.writeFile(workbook, `HR_SWS_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // --- GROUPING SITES UNTUK SIDEBAR ---
   const groupedSites = masterSites.reduce((acc, site) => {
     if (!acc[site.region]) acc[site.region] = [];
     acc[site.region].push(site);
     return acc;
   }, {});
 
-  // --- FILTERING DATA ---
   let displayData = candidates;
   
   if (currentView.module === 'RECRUITMENT') {
@@ -390,7 +390,6 @@ const AdminDashboard = ({ setAuth }) => {
       
       {/* SIDEBAR NAVIGATION */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-slate-950 text-slate-300 transform transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
-        
         {/* Logo Area */}
         <div className="flex items-center justify-between p-6 border-b border-slate-800">
            <div className="flex items-center gap-3">
@@ -487,7 +486,7 @@ const AdminDashboard = ({ setAuth }) => {
            </div>
            <div className="flex gap-2">
             <button 
-              onClick={() => setShowQR(!showQR)} // <--- UBAH INI (Ganti true menjadi !showQR)
+              onClick={() => setShowQR(!showQR)}
               className="bg-amber-100 hover:bg-amber-200 text-amber-700 p-2 md:px-4 md:py-2 rounded-xl text-xs font-bold transition flex items-center gap-2"
             >
               <QrCode size={16}/> <span className="hidden md:inline">Generate QR</span>
@@ -498,22 +497,19 @@ const AdminDashboard = ({ setAuth }) => {
         {/* CONTENT BODY */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
 
-          {/* === GANTI BLOK showQR ANDA DENGAN INI === */}
+          {/* QR CODE VIEW */}
           {showQR && (
             <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200 mb-6 text-center flex flex-col items-center relative overflow-hidden max-w-4xl mx-auto animate-fade-in">
               <div className="absolute top-0 right-0 p-4">
-                {/* Menggunakan tanda silang teks biasa agar tidak ketergantungan ikon X */}
                 <button onClick={() => setShowQR(false)} className="text-slate-400 hover:text-slate-800 font-bold text-sm">✕</button>
               </div>
               <h2 className="font-black text-slate-800 text-sm md:text-base mb-1">QR Code Pendaftaran Calon Karyawan</h2>
               <p className="text-[11px] text-slate-500 mb-4">Pelamar di site/lapangan dapat melakukan scan pada kode ini untuk mengisi formulir resmi</p>
               
               <div className="p-4 border-2 border-dashed border-slate-200 rounded-3xl bg-white mb-4">
-                {/* Pastikan id="qrCodeCanvas" sesuai dengan fungsi download piringan asli Anda */}
                 <QRCodeCanvas id="qrCodeCanvas" value={`${window.location.origin}/FormRekrutmen`} size={160} level={"H"} />
               </div>
               
-              {/* Tombol download menggunakan fungsi asli bawaan Anda */}
               <button 
                 onClick={() => {
                   const canvas = document.getElementById("qrCodeCanvas");
@@ -538,10 +534,11 @@ const AdminDashboard = ({ setAuth }) => {
           {/* VIEW: SETTINGS DENGAN EDIT IN-LINE (PENGATURAN CABANG/SITE) */}
           {/* ========================================================= */}
           {currentView.module === 'SETTINGS' ? (
-            <div className="max-w-4xl animate-fade-in">
+            <div className="max-w-5xl animate-fade-in">
               <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mb-6">
                  <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2"><PlusCircle size={18} className="text-amber-500"/> Tambah Lokasi Cabang / Site Baru</h3>
-                 <form onSubmit={handleAddSite} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                 {/* FORM TAMBAH LOKASI MODIFIED */}
+                 <form onSubmit={handleAddSite} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Nama Cabang / Region</label>
                       <input type="text" value={newSiteData.region} onChange={e => setNewSiteData({...newSiteData, region: e.target.value})} placeholder="Cth: Jawa Barat" required className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-amber-500 focus:bg-white" />
@@ -552,7 +549,14 @@ const AdminDashboard = ({ setAuth }) => {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Info Tambahan</label>
-                      <input type="text" value={newSiteData.info} onChange={e => setNewSiteData({...newSiteData, info: e.target.value})} placeholder="Cth: Site Perkebunan Sawit" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-amber-500 focus:bg-white" />
+                      <input type="text" value={newSiteData.info} onChange={e => setNewSiteData({...newSiteData, info: e.target.value})} placeholder="Cth: Perkebunan Sawit" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-amber-500 focus:bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Kategori Karyawan Default</label>
+                      <select value={newSiteData.kategori_karyawan} onChange={e => setNewSiteData({...newSiteData, kategori_karyawan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-amber-500 font-bold text-slate-700">
+                         <option value="Pekerja Site">Pekerja Site / Client</option>
+                         <option value="Internal HO">Internal Syntegra (HO)</option>
+                      </select>
                     </div>
                     <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition h-[42px]">Simpan Site</button>
                  </form>
@@ -566,6 +570,7 @@ const AdminDashboard = ({ setAuth }) => {
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Region / Cabang</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Nama Site</th>
                         <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Info</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Kategori Karyawan</th>
                         <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase">Aksi</th>
                       </tr>
                     </thead>
@@ -584,6 +589,12 @@ const AdminDashboard = ({ setAuth }) => {
                               <td className="px-4 py-2">
                                 <input type="text" value={editSiteData.info} onChange={e => setEditSiteData({...editSiteData, info: e.target.value})} className="bg-white border border-amber-500 rounded-lg p-1.5 text-xs w-full focus:outline-none" />
                               </td>
+                              <td className="px-4 py-2">
+                                <select value={editSiteData.kategori_karyawan} onChange={e => setEditSiteData({...editSiteData, kategori_karyawan: e.target.value})} className="bg-white border border-amber-500 rounded-lg p-1.5 text-[11px] font-bold w-full focus:outline-none">
+                                   <option value="Pekerja Site">Pekerja Site</option>
+                                   <option value="Internal HO">Internal HO</option>
+                                </select>
+                              </td>
                               <td className="px-4 py-2 text-center flex justify-center gap-1">
                                 <button onClick={() => handleUpdateSite(site.id)} className="bg-emerald-500 text-white text-[10px] px-2.5 py-1.5 rounded-lg font-bold shadow-sm">Simpan</button>
                                 <button onClick={() => setEditingSiteId(null)} className="bg-slate-200 text-slate-700 text-[10px] px-2.5 py-1.5 rounded-lg font-bold">Batal</button>
@@ -595,6 +606,9 @@ const AdminDashboard = ({ setAuth }) => {
                               <td className="px-6 py-3.5 text-xs font-bold text-slate-700">{site.region}</td>
                               <td className="px-6 py-3.5 text-sm font-black text-slate-900">{site.name}</td>
                               <td className="px-6 py-3.5 text-xs text-slate-500">{site.info || '-'}</td>
+                              <td className="px-6 py-3.5 text-xs font-bold">
+                                {site.kategori_karyawan === 'Internal HO' ? <span className="bg-slate-900 text-white px-2 py-1 rounded-md text-[10px]">Internal HO</span> : <span className="bg-orange-100 text-orange-700 border border-orange-200 px-2 py-1 rounded-md text-[10px]">Pekerja Site</span>}
+                              </td>
                               <td className="px-6 py-3.5 text-center flex justify-center gap-1">
                                 <button onClick={() => startEditSite(site)} className="text-amber-600 bg-amber-50 hover:bg-amber-100 p-2 rounded-lg transition" title="Koreksi Site"><Edit size={14}/></button>
                                 <button onClick={() => deleteSite(site.id, site.name)} className="text-red-500 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition"><Trash2 size={14}/></button>
@@ -668,7 +682,7 @@ const AdminDashboard = ({ setAuth }) => {
                               <span className="inline-block bg-slate-100 text-slate-700 text-[10px] px-2 py-1 rounded-md font-bold mb-1.5 border border-slate-200">{c.bidang_jasa}</span>
                               {currentView.module === 'HRIS' ? (
                                 <div className="mt-1">
-                                  {c.kategori_karyawan === 'Internal HO' ? <span className="inline-flex items-center gap-1 bg-slate-900 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Building2 size={10}/> Pusat (HO)</span> : <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Map size={10}/> Pekerja Site</span>}
+                                  {c.kategori_karyawan === 'Internal HO' ? <span className="inline-flex items-center gap-1 bg-slate-900 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Building2 size={10}/> Karyawan Internal</span> : <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Map size={10}/> Pekerja Site</span>}
                                 </div>
                               ) : (
                                 <div className="text-[11px] text-slate-500 flex items-start gap-1"><MapPin size={12} className="mt-0.5 flex-shrink-0"/> {c.alamat_domisili || '-'}</div>
@@ -680,7 +694,7 @@ const AdminDashboard = ({ setAuth }) => {
                               {currentView.module === 'HRIS' && <div className="text-[10px] text-slate-500 font-bold mt-1">Status: <span className="text-emerald-600">{c.status_kontrak || 'Probation'}</span></div>}
                             </td>
                             <td className="px-4 py-4 text-center align-middle">
-                              <button onClick={() => { setSelectedCandidate(c); setLokasiInput(c.lokasi_penempatan || ''); setNikInput(c.nik_karyawan || ''); setKategoriInput(c.kategori_karyawan || 'Pekerja Site'); setIsEditingProfile(false); setEditProfileData(c); }} className="bg-slate-100 hover:bg-slate-200 text-blue-700 border border-slate-200 text-xs px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm w-full md:w-auto">
+                              <button onClick={() => { setSelectedCandidate(c); setLokasiInput(c.lokasi_penempatan || ''); setNikInput(c.nik_karyawan || ''); setIsEditingProfile(false); setEditProfileData(c); }} className="bg-slate-100 hover:bg-slate-200 text-blue-700 border border-slate-200 text-xs px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm w-full md:w-auto">
                                 Buka Profil
                               </button>
                             </td>
@@ -698,7 +712,7 @@ const AdminDashboard = ({ setAuth }) => {
 
       {/* FLOATING ACTION BAR UNTUK BULK CHECKBOX */}
       {selectedIds.length > 0 && currentView.module !== 'SETTINGS' && (
-        <div className="fixed bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-3 md:py-4 rounded-full shadow-2xl flex items-center gap-3 md:gap-5 z-50 animate-fade-in-up border border-slate-700 whitespace-nowrap overflow-x-auto max-w-[90vw]">
+        <div className="fixed bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 md:px-6 py-3 md:py-4 rounded-full shadow-2xl flex items-center gap-3 md:gap-5 z-40 animate-fade-in-up border border-slate-700 whitespace-nowrap overflow-x-auto max-w-[90vw]">
           <span className="text-[10px] md:text-xs font-black bg-amber-500 text-slate-950 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0"><CheckSquare size={14}/> {selectedIds.length} Terpilih</span>
           <div className="h-6 w-px bg-slate-700 shrink-0"></div>
           
@@ -711,7 +725,7 @@ const AdminDashboard = ({ setAuth }) => {
           {currentView.module === 'HRIS' && (
             <div className="flex items-center gap-2 shrink-0">
                <span className="text-[9px] uppercase text-slate-400 font-bold hidden sm:inline">Aksi HRIS:</span>
-               <button onClick={bulkMutasiSite} className="text-[10px] md:text-xs font-bold hover:bg-blue-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><MapPin size={12}/> Mutasi Lokasi/Site</button>
+               <button onClick={() => setShowBulkModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-blue-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><MapPin size={12}/> Mutasi / Plotting Lokasi</button>
             </div>
           )}
           <div className="h-6 w-px bg-slate-700 shrink-0"></div>
@@ -719,9 +733,43 @@ const AdminDashboard = ({ setAuth }) => {
         </div>
       )}
 
+      {/* MODAL BULK MUTASI (MODAL BARU) */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+             <div className="bg-blue-600 p-5 flex justify-between items-center text-white">
+                <h3 className="font-black flex items-center gap-2"><MapPin size={18}/> Mutasi Massal ({selectedIds.length} Karyawan)</h3>
+                <button onClick={() => setShowBulkModal(false)} className="text-blue-200 hover:text-white"><X size={20}/></button>
+             </div>
+             <div className="p-6 space-y-4">
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pilih Lokasi / Site Baru</label>
+                   <select value={bulkLokasi} onChange={(e) => setBulkLokasi(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-blue-500 font-bold text-slate-800">
+                      <option value="">-- Pilih Lokasi Master --</option>
+                      {masterSites.map(site => <option key={site.id} value={site.name}>{site.name} ({site.region})</option>)}
+                   </select>
+                   {/* Feedback kategori otomatis */}
+                   {bulkLokasi && (
+                     <div className="mt-3 bg-blue-50 border border-blue-100 p-3 rounded-xl flex justify-between items-center">
+                       <span className="text-[10px] font-bold text-blue-700 uppercase">Kategori Karyawan:</span>
+                       <span className="text-xs font-black bg-white px-2 py-1 rounded shadow-sm text-slate-800">
+                         {masterSites.find(s => s.name === bulkLokasi)?.kategori_karyawan || '-'}
+                       </span>
+                     </div>
+                   )}
+                </div>
+                <div className="pt-4 flex gap-3">
+                   <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm transition">Batal</button>
+                   <button onClick={executeBulkMutasi} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition shadow-md">Simpan Mutasi</button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL PROFIL LENGKAP (DOSSIER / HRIS RECORD) */}
       {selectedCandidate && (
-        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[50] flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-50 w-full max-w-5xl h-[95vh] md:h-auto md:max-h-[90vh] md:rounded-[2.5rem] rounded-t-[2.5rem] flex flex-col shadow-2xl overflow-hidden relative">
             
             <div className="bg-white px-6 md:px-8 py-4 flex justify-between items-center border-b border-slate-200 sticky top-0 z-20">
@@ -748,7 +796,6 @@ const AdminDashboard = ({ setAuth }) => {
               
               {isEditingProfile ? (
                   <form onSubmit={updateCandidateProfile} className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm mx-auto animate-fade-in max-w-4xl">
-                     
                      {currentView.module === 'HRIS' && (
                        <>
                          <h3 className="font-black text-blue-700 mb-4 text-sm uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><Layers size={16}/> Data Kepegawaian (HRIS)</h3>
@@ -800,7 +847,7 @@ const AdminDashboard = ({ setAuth }) => {
                            <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Kerja Pasangan</label><input type="text" value={editProfileData.pasangan_pekerjaan || ''} onChange={e => setEditProfileData({...editProfileData, pasangan_pekerjaan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-blue-500" /></div>
                         </div>
                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                           <div><label className="block text-[10px] font-bold text-red-400 uppercase mb-1 px-1">Kontak Darurat (Nama)</label><input type="text" value={editProfileData.kontak_darurat_nama || ''} onChange={e => setEditProfileData({...editProfileData, Epilepsy_nama: e.target.value})} className="w-full bg-white border border-red-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-red-500" /></div>
+                           <div><label className="block text-[10px] font-bold text-red-400 uppercase mb-1 px-1">Kontak Darurat (Nama)</label><input type="text" value={editProfileData.kontak_darurat_nama || ''} onChange={e => setEditProfileData({...editProfileData, kontak_darurat_nama: e.target.value})} className="w-full bg-white border border-red-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-red-500" /></div>
                            <div><label className="block text-[10px] font-bold text-red-400 uppercase mb-1 px-1">Hubungan</label><input type="text" value={editProfileData.kontak_darurat_hub || ''} onChange={e => setEditProfileData({...editProfileData, kontak_darurat_hub: e.target.value})} className="w-full bg-white border border-red-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-red-500" /></div>
                            <div><label className="block text-[10px] font-bold text-red-400 uppercase mb-1 px-1">No Telp Darurat</label><input type="number" value={editProfileData.kontak_darurat_telp || ''} onChange={e => setEditProfileData({...editProfileData, kontak_darurat_telp: e.target.value})} className="w-full bg-white border border-red-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-red-500" /></div>
                         </div>
@@ -1062,24 +1109,20 @@ const AdminDashboard = ({ setAuth }) => {
                      <div className="bg-blue-50 p-5 md:p-6 rounded-3xl border border-blue-100 relative overflow-hidden">
                        <div className="w-1.5 h-full bg-blue-500 absolute left-0 top-0"></div>
                        <h3 className="font-black text-blue-800 mb-4 text-xs uppercase tracking-widest border-b border-blue-200/50 pb-2 flex items-center gap-2"><FileText size={16}/> 7. Update Penempatan & Mutasi</h3>
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                         <div>
-                           <label className="block text-[10px] font-black text-blue-800/70 uppercase mb-1.5">Kategori / Tipe Pekerja</label>
-                           <select value={kategoriInput} onChange={(e) => setKategoriInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl p-3 w-full text-sm font-bold text-slate-800 focus:outline-none">
-                             <option value="Internal HO">Internal Syntegra</option>
-                             <option value="Pekerja Site">Pekerja Site / Client</option>
-                           </select>
-                         </div>
-                         <div>
-                           <label className="block text-[10px] font-black text-blue-800/70 uppercase mb-1.5">NIK Karyawan</label>
-                           <input type="text" value={nikInput} onChange={(e) => setNikInput(e.target.value)} placeholder="Contoh: 2026001" className="bg-white border border-blue-200 rounded-xl p-3 w-full text-sm font-bold text-slate-800 focus:outline-none" />
-                         </div>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                            <label className="block text-[10px] font-black text-blue-800/70 uppercase mb-1.5">Lokasi Cabang / Site Baru</label>
                            <select value={lokasiInput} onChange={(e) => setLokasiInput(e.target.value)} className="bg-white border border-blue-200 rounded-xl p-3 w-full text-sm font-bold text-slate-800 focus:outline-none">
                               <option value="">-- Pilih Lokasi Master --</option>
                               {masterSites.map(site => <option key={site.id} value={site.name}>{site.name} ({site.region})</option>)}
                            </select>
+                           {lokasiInput && (
+                             <p className="text-[10px] text-blue-600 mt-2">Kategori Otomatis: <b className="bg-white px-1 py-0.5 rounded shadow-sm">{masterSites.find(s => s.name === lokasiInput)?.kategori_karyawan || '-'}</b></p>
+                           )}
+                         </div>
+                         <div>
+                           <label className="block text-[10px] font-black text-blue-800/70 uppercase mb-1.5">NIK Karyawan</label>
+                           <input type="text" value={nikInput} onChange={(e) => setNikInput(e.target.value)} placeholder="Contoh: 2026001" className="bg-white border border-blue-200 rounded-xl p-3 w-full text-sm font-bold text-slate-800 focus:outline-none" />
                          </div>
                        </div>
                        <button onClick={() => saveCandidateInfo(selectedCandidate.id)} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-black py-3 px-6 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 w-full md:w-auto"><Save size={16}/> Simpan Data Penempatan (Mutasi)</button>
