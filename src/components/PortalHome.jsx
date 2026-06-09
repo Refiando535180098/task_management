@@ -397,6 +397,64 @@ const PortalHome = () => {
            </div>
         </div>
 
+        {(announcements.length > 0 || canManageInfo) && (
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-3 px-2">
+               <h3 className="font-black text-slate-800 text-sm md:text-lg flex items-center gap-2">
+                 <Bell size={18} className="text-amber-500" /> Pengumuman
+               </h3>
+               {canManageInfo && (
+                 <button 
+                   onClick={() => setIsInfoModalOpen(true)}
+                   className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
+                 >
+                   <PlusCircle size={14} /> Tambah Info
+                 </button>
+               )}
+            </div>
+
+            {announcements.length > 0 ? (
+              <div className="space-y-3">
+                {announcements.map((info) => (
+                  <div key={info.id} className="bg-white border-l-4 border-amber-500 border-y border-r border-slate-200 p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md">
+                    {/* Tombol Hapus (Khusus Admin) */}
+                    {user.role === 'admin' && (
+                      <button 
+                        onClick={() => deleteInfo(info.id)}
+                        className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors"
+                        title="Hapus Informasi"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+
+                    <h4 className="font-bold text-slate-900 text-sm md:text-base pr-8 mb-1">{info.title}</h4>
+                    <p className="text-slate-600 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{info.content}</p>
+                    
+                    {/* Tampilkan Lampiran Jika Ada */}
+                    {info.attachment_url && (
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <a 
+                          href={info.attachment_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-lg transition-colors"
+                        >
+                          <Paperclip size={12} /> Buka Lampiran
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-white/50 text-slate-400 text-xs font-medium">
+                Belum ada pengumuman tertulis.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* BANNER SLIDESHOW */}
         {(banners.length > 0 || user.role === 'admin') && (
           <div className="mb-10 relative">
@@ -457,64 +515,7 @@ const PortalHome = () => {
         )}
 
         {/* PAPAN INFORMASI TERTULIS */}
-        {(announcements.length > 0 || canManageInfo) && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-3 px-2">
-               <h3 className="font-black text-slate-800 text-sm md:text-lg flex items-center gap-2">
-                 <Bell size={18} className="text-amber-500" /> Pengumuman
-               </h3>
-               {canManageInfo && (
-                 <button 
-                   onClick={() => setIsInfoModalOpen(true)}
-                   className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
-                 >
-                   <PlusCircle size={14} /> Tambah Info
-                 </button>
-               )}
-            </div>
-
-            {announcements.length > 0 ? (
-              <div className="space-y-3">
-                {announcements.map((info) => (
-                  <div key={info.id} className="bg-white border-l-4 border-amber-500 border-y border-r border-slate-200 p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md">
-                    
-                    {/* Tombol Hapus (Khusus Admin) */}
-                    {user.role === 'admin' && (
-                      <button 
-                        onClick={() => deleteInfo(info.id)}
-                        className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors"
-                        title="Hapus Informasi"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-
-                    <h4 className="font-bold text-slate-900 text-sm md:text-base pr-8 mb-1">{info.title}</h4>
-                    <p className="text-slate-600 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{info.content}</p>
-                    
-                    {/* Tampilkan Lampiran Jika Ada */}
-                    {info.attachment_url && (
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <a 
-                          href={info.attachment_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-lg transition-colors"
-                        >
-                          <Paperclip size={12} /> Buka Lampiran
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-white/50 text-slate-400 text-xs font-medium">
-                Belum ada pengumuman tertulis.
-              </div>
-            )}
-          </div>
-        )}
+        
 
         {/* GRID MENU UTAMA APLIKASI */}
         <h3 className="font-black text-slate-800 text-sm md:text-lg mb-4 px-2">Menu Layanan</h3>

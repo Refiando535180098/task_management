@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import html2pdf from 'html2pdf.js';
 import { 
   Camera, LayoutDashboard, CheckSquare, Users, Plus, LogOut, Clock, CheckCircle2, AlertCircle,
   Search, Menu, X, ChevronDown, ChevronRight, MessageSquare, Paperclip, Send, FileText,
@@ -11,8 +12,8 @@ import {
 // ==========================================
 // 2. KOMPONEN UI PENDUKUNG
 // ==========================================
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-slate-200/60 ${className}`}>
+const Card = ({ children, className = '', id }) => (
+  <div id={id} className={`bg-white rounded-2xl shadow-sm border border-slate-200/60 ${className}`}>
     {children}
   </div>
 );
@@ -43,6 +44,7 @@ export default function TaskManagement() {
   const navigate = useNavigate(); // <--- TAMBAHKAN INI
   const [currentUser, setCurrentUser] = useState(null);
   
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]); 
   const [notifications, setNotifications] = useState([]); 
@@ -825,7 +827,44 @@ export default function TaskManagement() {
     }
   };
   
-  const handleDownloadPDF = () => window.print();
+  const handleDownloadPDF = () => {
+    // 1. Sembunyikan tombol dan ubah UI ke mode cetak
+    setIsGeneratingPDF(true);
+
+    // 2. Beri jeda agar React selesai merender perubahan UI
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById('report-pdf-content');
+        
+        if (!element) {
+          alert('Gagal memproses: Elemen tabel laporan tidak ditemukan.');
+          setIsGeneratingPDF(false);
+          return;
+        }
+
+        const opt = {
+          margin:       [10, 10, 15, 10], // Margin disesuaikan agar tidak terlalu sempit
+          filename:     reportTargetUserId === 'ALL' ? 'Laporan_Kinerja_Global.pdf' : `Laporan_Kinerja_Karyawan.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          // Pengaturan pagebreak dihapus sementara karena sering menyebabkan crash pada tabel kompleks
+        };
+
+        // 3. Eksekusi pembuatan PDF
+        await html2pdf().set(opt).from(element).save();
+
+        // 4. Munculkan tombol kembali setelah berhasil download
+        setIsGeneratingPDF(false); 
+
+      } catch (error) {
+        console.error("Error pembuatan PDF:", error);
+        alert("Terjadi kendala saat membuat PDF. Silakan coba lagi.");
+        // PASTIKAN tombol kembali muncul walau terjadi error
+        setIsGeneratingPDF(false); 
+      }
+    }, 800); // Waktu jeda dinaikkan sedikit (800ms) agar render logo/tanda tangan benar-benar selesai
+  };
 
   const handleDownloadTemplateCSV = () => {
     const headers = "nik,password,name,role,division,position\n";
@@ -1418,7 +1457,7 @@ export default function TaskManagement() {
                <div className="bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col md:flex-row items-center gap-2">
                  <div className="flex w-full items-center bg-slate-50 rounded-xl px-4 py-2 border border-slate-100 focus-within:border-blue-300 focus-within:bg-white transition-colors">
                    <Search className="w-5 h-5 text-slate-400 shrink-0" />
-                   <input type="text" placeholder="Cari nama pekerjaan..." value={taskSearchQuery} onChange={(e) => setTaskSearchQuery(e.target.value)} className="w-full bg-transparent border-none outline-none pl-3 text-sm font-bold text-slate-700 placeholder:text-slate-400" />
+                   <input type="text" placeholder="Cari nama karyawan / judul pekerjaan..." value={taskSearchQuery} onChange={(e) => setTaskSearchQuery(e.target.value)} className="w-full bg-transparent border-none outline-none pl-3 text-sm font-bold text-slate-700 placeholder:text-slate-400" />
                  </div>
                  
                  <div className="flex w-full md:w-auto gap-2">
@@ -1433,7 +1472,16 @@ export default function TaskManagement() {
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
                  <div className="space-y-1 overflow-y-auto custom-scrollbar">
                   {myTasks.filter(t => {
-                    if (taskSearchQuery && !t.title.toLowerCase().includes(taskSearchQuery.toLowerCase())) return false;
+                    if (taskSearchQuery) {
+                      const query = taskSearchQuery.toLowerCase();
+                      const matchTitle = t.title.toLowerCase().includes(query);
+                      // Mengambil nama-nama karyawan yang ditugaskan, lalu ubah ke huruf kecil
+                      const assigneesNames = getAssigneesNames(t.assignedTo).toLowerCase();
+                      const matchAssignee = assigneesNames.includes(query);
+                      
+                      // Jika tidak cocok dengan judul tugas DAN tidak cocok dengan nama karyawan, maka sembunyikan
+                      if (!matchTitle && !matchAssignee) return false;
+                    }
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
                     if (taskFilterDate && !t.dueDate.startsWith(taskFilterDate)) return false;
                     return true;
@@ -1551,120 +1599,128 @@ export default function TaskManagement() {
                   : new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
                 return (
-                  <div className="max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar print:max-h-none print:overflow-visible pb-10 print:pb-0">
-                    <Card className="p-0 border-0 shadow-sm bg-white print:shadow-none print:border-none print:w-full overflow-hidden print-page">
-                      <div className="p-3 md:p-5 print:p-0 print:pb-2 border-b-2 md:border-b-4 border-amber-600 bg-white print:border-b-2 print:border-black flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0">
-                        <div className="flex items-start md:items-center gap-3 w-full md:w-auto">
-                          <div className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center text-white print:shadow-none shrink-0 print:rounded-none mt-1 md:mt-0">
+                  <div className={`${isGeneratingPDF ? '' : 'max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar'} pb-10`}>
+                    
+                    {/* INI TARGET ELEMEN YANG AKAN JADI PDF */}
+                    <Card id="report-pdf-content" className={`p-4 md:p-6 border-0 shadow-sm bg-white overflow-hidden ${isGeneratingPDF ? 'text-black' : ''}`}>
+                      
+                      {/* HEADER KOP SURAT */}
+                      <div className="border-b-4 border-amber-600 pb-4 mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="flex items-center gap-4 w-full md:w-auto">
+                          <div className={`${isGeneratingPDF ? 'w-20 h-20' : 'w-12 h-12 md:w-16 md:h-16'} flex items-center justify-center shrink-0`}>
                             <img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" />
                           </div>
                           <div className="flex-1">
-                            <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight print:text-black uppercase print:text-lg leading-tight">{sysConfig.brandName}</h1>
-                            <p className="text-[8px] md:text-[12px] font-bold text-slate-500 print:text-black mt-0.5 leading-tight">Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br className="hidden md:block" /> WetanTangerang, Kec. Serpong, Banten 15310</p>
-                            <p className="text-[8px] md:text-[12px] text-slate-500 print:text-black">Telp: 0800 1778889</p>
+                            {/* Ukuran Font otomatis membesar saat didownload */}
+                            <h1 className={`${isGeneratingPDF ? 'text-3xl' : 'text-lg md:text-xl'} font-black text-slate-900 tracking-tight uppercase leading-tight`}>{sysConfig.brandName}</h1>
+                            <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[8px] md:text-[12px]'} font-bold text-slate-600 mt-1 leading-snug`}>Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br /> WetanTangerang, Kec. Serpong, Banten 15310</p>
+                            <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[8px] md:text-[12px]'} font-bold text-slate-600`}>Telp: 0800 1778889</p>
                           </div>
                         </div>
 
-                        <div className="flex w-full md:w-auto justify-end print:hidden shrink-0 border-t border-slate-100 md:border-0 pt-3 md:pt-0">
-                          <button type="button" onClick={handleDownloadPDF} className="flex items-center justify-center gap-2 px-4 py-2.5 w-full md:w-auto bg-yellow-400 text-white hover:bg-amber-700 rounded-xl font-bold text-xs md:text-sm transition-colors shadow-sm active:scale-95">
-                            <Printer className="w-4 h-4 md:w-4 md:h-4"/> Cetak PDF
-                          </button>
-                        </div>
+                        {!isGeneratingPDF && (
+                          <div className="flex w-full md:w-auto justify-end shrink-0 pt-3 md:pt-0">
+                            <button type="button" onClick={handleDownloadPDF} className="flex items-center justify-center gap-2 px-6 py-3 w-full md:w-auto bg-blue-600 text-white hover:bg-blue-700 rounded-xl font-bold text-xs md:text-sm shadow-md transition-all">
+                              <Download className="w-4 h-4 md:w-5 md:h-5"/> Unduh PDF
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="text-center py-3 md:py-4 print:py-2 bg-white">
-                        <h2 className="text-base md:text-lg font-black text-slate-800 uppercase tracking-widest print:text-black print:text-base underline underline-offset-2 decoration-2">
+                      <div className="text-center py-2 mb-4">
+                        <h2 className={`${isGeneratingPDF ? 'text-2xl' : 'text-base md:text-lg'} font-black text-slate-800 uppercase tracking-widest underline underline-offset-4 decoration-2`}>
                           {isGlobalMode ? 'Laporan Kinerja Global' : 'Laporan Kinerja Karyawan'}
                         </h2>
-                        <p className="text-[10px] md:text-xs text-slate-500 font-bold mt-1 print:text-black print:text-[10px]">Periode: {periodeCetak}</p>
+                        <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[10px] md:text-xs'} text-slate-500 font-bold mt-2`}>Periode: {periodeCetak}</p>
                       </div>
 
-                      <div className="px-3 md:px-5 print:px-0 pb-3 print:pb-2 bg-white">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] md:text-xs border border-slate-200 print:border print:border-black rounded-xl print:rounded-none p-2.5 md:p-3 print:p-2">
-                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Karyawan / Target</span><span className="font-black text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.name}</span></div>
-                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Posisi Jabatan</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.position}</span></div>
-                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Departemen</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.division}</span></div>
+                      <div className="mb-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border border-slate-300 rounded-xl p-3 md:p-4">
+                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Karyawan / Target</span><span className={`font-black text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.name}</span></div>
+                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Posisi Jabatan</span><span className={`font-bold text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.position}</span></div>
+                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Departemen</span><span className={`font-bold text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.division}</span></div>
                           <div>
-                            <span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Penyelesaian (KPI)</span>
-                            <span className="font-black text-emerald-600 text-sm md:text-base print:text-black print:text-sm">{tRate}%</span>
-                            <span className="block text-[7px] md:text-[8px] font-bold text-slate-500 print:text-black mt-0.5">Tepat: {tDoneOnTime} | Telat: {tDoneLate} | Total: {tTotal}</span>
+                            <span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Penyelesaian (KPI)</span>
+                            <span className={`font-black text-emerald-600 ${isGeneratingPDF ? 'text-xl' : 'text-sm md:text-base'} block`}>{tRate}%</span>
+                            <span className={`block ${isGeneratingPDF ? 'text-[10px]' : 'text-[7px] md:text-[8px]'} font-bold text-slate-500 mt-1`}>Tepat: {tDoneOnTime} | Telat: {tDoneLate} | Total: {tTotal}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="px-3 md:px-5 print:px-0 pb-4 md:pb-6 bg-white">
-                        <h3 className="text-xs md:text-sm font-black text-slate-800 mb-2 print:text-black flex items-center gap-2 print:text-xs"><FileText className="w-3.5 h-3.5 print:w-3 print:h-3"/> Rincian Aktivitas Pekerjaan</h3>
-                        <div className="overflow-x-auto print:overflow-visible w-full custom-scrollbar">
-                          <table className="w-full text-left border-collapse border border-slate-200 print:border-black min-w-[650px]">
-                            <thead>
-                              <tr className="bg-slate-50 print:bg-gray-100 text-slate-800 print:text-black text-[8px] md:text-[9px] uppercase tracking-widest font-black border-b border-slate-200 print:border-black print:text-[8px]">
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black w-6 text-center print:p-1">No</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Deskripsi Tugas & Pekerjaan</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Dikerjakan Oleh</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Timeline Pekerjaan</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1">Data Approval</th>
-                                <th className="px-2 py-1.5 md:px-3 md:py-2 border-slate-200 print:border-black text-center print:p-1 w-16">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {targetTasks.map((task, index) => { 
-                                const nowLocalStr = getNowStr();
-                                
-                                // Belum selesai & melewati batas
-                                const isNotDoneOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
-                                
-                                // Sudah selesai TAPI melebihi batas (Telat)
-                                const isDoneLate = task.status === 'done' && task.completed_at && task.completed_at > task.dueDate;
-                                
-                                return (
-                                  <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight align-top">{task.title}</td>
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-bold text-blue-600 border-r border-slate-200 print:border-black print:text-black print:p-1 align-top whitespace-nowrap">{getAssigneesNames(task.assignedTo)}</td>
-                                    
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
-                                        <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1 align-top">
-                                          <span className="print:hidden flex flex-col items-center gap-1">
-                                              <Badge type={task.status}>{String(task.status).toUpperCase()}</Badge>
-                                              {isDoneLate && <span className="text-[7px] bg-orange-100 text-orange-700 border border-orange-200 px-1 py-0.5 rounded shadow-sm">SELESAI TELAT</span>}
-                                          </span>
-                                          <span className="hidden print:flex flex-col items-center">
-                                              <span>{task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}</span>
-                                              {isDoneLate && <span className="text-[7px] text-orange-600 mt-0.5">TELAT</span>}
-                                          </span>
-                                        </td>
-                                      </div>
-                                    </td>
+                      <div className="w-full">
+                        <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><FileText className="w-4 h-4"/> Rincian Aktivitas Pekerjaan</h3>
+                        <table className="w-full text-left border-collapse border border-slate-300">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-800 uppercase tracking-widest font-black border-b border-slate-300">
+                              <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>No</th>
+                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Deskripsi Tugas</th>
+                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Dikerjakan Oleh</th>
+                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Pemberi Tugas & Waktu</th>
+                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Data Approval</th>
+                              <th className={`px-3 py-2 border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {targetTasks.map((task, index) => { 
+                              const nowLocalStr = getNowStr();
+                              const isNotDoneOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
+                              const isDoneLate = task.status === 'done' && task.completed_at && task.completed_at > task.dueDate;
+                              
+                              return (
+                                /* Tambahkan break-inside-avoid agar row tabel tidak terpotong di tengah halaman PDF */
+                                <tr key={task.id} className="border-b border-slate-300 break-inside-avoid">
+                                  <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 text-center align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{index + 1}</td>
+                                  <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{task.title}</td>
+                                  <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{getAssigneesNames(task.assignedTo)}</td>
+                                  
+                                  <td className="px-3 py-2 border-r border-slate-300 align-top">
+                                    <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
+                                      <span className="text-slate-600">Oleh: <span className="font-bold text-blue-600">{getUserName(task.assignedBy)}</span></span>
+                                      <span className="text-slate-600">Diberikan: <span className="font-bold text-slate-800">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
+                                      <span className="text-slate-600">Deadline: <span className={`font-bold ${isNotDoneOverdue ? 'text-red-600' : 'text-slate-800'}`}>{task.dueDate ? formatDateTime(task.dueDate) : '-'}</span></span>
+                                    </div>
+                                  </td>
 
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Selesai: <span className="font-bold text-emerald-600 print:text-black">{task.completed_at ? formatDateTime(task.completed_at) : '-'}</span></span>
-                                        <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Oleh: <span className="font-bold text-blue-600 print:text-black">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
-                                      </div>
-                                    </td>
+                                  <td className="px-3 py-2 border-r border-slate-300 align-top">
+                                    <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
+                                      <span className="text-slate-600">Selesai: <span className="font-bold text-emerald-600">{task.completed_at ? formatDateTime(task.completed_at) : '-'}</span></span>
+                                      <span className="text-slate-600">Approve: <span className="font-bold text-blue-600">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
+                                    </div>
+                                  </td>
 
-                                    <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1 align-top">
-                                        <span className="print:hidden"><Badge type={task.status}>{String(task.status).toUpperCase()}</Badge></span>
-                                        <span className="hidden print:inline">{task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}</span>
-                                    </td>
-                                  </tr>
-                                 )
-                              })}
-                            </tbody>
-                          </table>
+                                  <td className={`px-3 py-2 text-center border-slate-300 font-black uppercase tracking-wider align-top ${isGeneratingPDF ? 'text-xs' : 'text-[8px]'}`}>
+                                    <div className="flex flex-col items-center justify-center gap-1.5 h-full">
+                                      {/* Di mode PDF, kita tampilkan teks biasa tanpa background bubble agar rapi */}
+                                      {isGeneratingPDF ? (
+                                         <span className={`font-black ${task.status === 'done' ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                           {task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}
+                                         </span>
+                                      ) : (
+                                         <Badge type={task.status}>{String(task.status).toUpperCase()}</Badge>
+                                      )}
+                                      
+                                      {isDoneLate && <span className={`bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded shadow-sm w-fit mx-auto ${isGeneratingPDF ? 'text-[9px]' : 'text-[7px]'}`}>SELESAI TELAT</span>}
+                                      {isNotDoneOverdue && <span className={`bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded shadow-sm w-fit mx-auto ${isGeneratingPDF ? 'text-[9px]' : 'text-[7px]'}`}>TERLAMBAT</span>}
+                                    </div>
+                                  </td>
+                                </tr>
+                               )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className={`${isGeneratingPDF ? 'flex' : 'hidden md:flex'} justify-between mt-16 pt-8 break-inside-avoid px-8`}>
+                        <div className="text-center w-48">
+                           <p className={`mb-20 font-bold text-slate-800 ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>Mengetahui,<br/>{isGlobalMode ? 'Direktur Utama' : 'Manager Divisi'}</p>
+                           <p className={`font-bold text-slate-800 border-t border-slate-400 pt-2 uppercase ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>
+                              ( ......................................... )
+                           </p>
                         </div>
-                        
-                        <div className="hidden print:flex justify-between mt-12 pt-4">
-                          <div className="text-center w-48">
-                             <p className="mb-16 font-bold text-black text-[10px] md:text-xs">Mengetahui,<br/>{isGlobalMode ? 'Direktur Utama' : 'Manager Divisi'}</p>
-                             <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px] md:text-xs"></p>
-                          </div>
-                          <div className="text-center w-48">
-                             <p className="mb-16 font-bold text-black text-[10px] md:text-xs">Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}<br/>{isGlobalMode ? 'System Admin' : 'Pembuat Laporan'}</p>
-                             <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px] md:text-xs">{isGlobalMode ? currentUser.name : targetUser.name}</p>
-                          </div>
+                        <div className="text-center w-48">
+                           <p className={`mb-20 font-bold text-slate-800 ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}<br/>{isGlobalMode ? 'System Admin' : 'Pembuat Laporan'}</p>
+                           <p className={`font-bold text-slate-800 border-t border-slate-400 pt-2 uppercase ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>
+                              {isGlobalMode ? currentUser.name : targetUser.name}
+                           </p>
                         </div>
                       </div>
                     </Card>
