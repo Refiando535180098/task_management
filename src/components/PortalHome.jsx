@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Users, LogOut, Settings, X, Search, LayoutDashboard, ImagePlus, Trash2, Calendar, UserCircle, RefreshCw, KeyRound, ShieldAlert } from 'lucide-react';
+import { ClipboardList, Users, LogOut, Settings, X, Search, LayoutDashboard, ImagePlus, Trash2, Calendar, UserCircle, RefreshCw, KeyRound, ShieldAlert, Bell, Paperclip, PlusCircle } from 'lucide-react';
 import { supabase } from '../supabase';
 
 const PortalHome = () => {
@@ -24,6 +24,75 @@ const PortalHome = () => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  // --- STATE UNTUK INFORMASI/PENGUMUMAN ---
+  const [announcements, setAnnouncements] = useState([]);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [infoForm, setInfoForm] = useState({ title: '', content: '', file: null });
+  const [isSubmittingInfo, setIsSubmittingInfo] = useState(false);
+
+  // Fungsi mengambil data pengumuman
+  const fetchAnnouncements = async () => {
+    const { data } = await supabase
+      .from('portal_announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+    setAnnouncements(data || []);
+  };
+
+  // Panggil fetchAnnouncements di dalam useEffect yang sudah ada
+  useEffect(() => {
+    // ... kode yang sudah ada ...
+    fetchAnnouncements();
+  }, []);
+
+  // Fungsi Tambah Informasi
+  const handleAddInfo = async (e) => {
+    e.preventDefault();
+    setIsSubmittingInfo(true);
+    try {
+      let attachmentUrl = null;
+
+      // Jika ada file yang diunggah
+      if (infoForm.file) {
+        const fileExt = infoForm.file.name.split('.').pop();
+        const fileName = `attach_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('portal_attachments')
+          .upload(fileName, infoForm.file);
+        
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('portal_attachments').getPublicUrl(fileName);
+        attachmentUrl = data.publicUrl;
+      }
+
+      // Simpan ke database
+      const { error } = await supabase.from('portal_announcements').insert([{
+        title: infoForm.title,
+        content: infoForm.content,
+        attachment_url: attachmentUrl
+      }]);
+
+      if (error) throw error;
+
+      alert('Informasi berhasil dipublikasikan!');
+      setIsInfoModalOpen(false);
+      setInfoForm({ title: '', content: '', file: null });
+      fetchAnnouncements();
+    } catch (err) {
+      alert('Gagal menambahkan informasi: ' + err.message);
+    } finally {
+      setIsSubmittingInfo(false);
+    }
+  };
+
+  // Fungsi Hapus Informasi
+  const deleteInfo = async (id) => {
+    if (!window.confirm('Hapus informasi ini dari portal?')) return;
+    const { error } = await supabase.from('portal_announcements').delete().eq('id', id);
+    if (!error) fetchAnnouncements();
+  };
 
   const refreshUserData = async () => {
   const session = JSON.parse(
@@ -257,6 +326,8 @@ const PortalHome = () => {
 
   if (!user) return null;
 
+  const canManageInfo = user.role === 'admin' || user.can_manage_portal_info === true;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24 md:pb-10">
       
@@ -342,34 +413,36 @@ const PortalHome = () => {
 
             {/* Slideshow Area */}
             {banners.length > 0 ? (
-              /* KUNCI: Container menggunakan h-auto dan max-h untuk membatasi tinggi maksimal */
-              <div className="relative w-full h-auto max-h-[200px] md:max-h-[350px] bg-slate-200 rounded-3xl overflow-hidden shadow-lg border border-slate-200 group flex items-center justify-center">
+              <div className="relative w-full h-auto bg-slate-100/50 rounded-3xl overflow-hidden shadow-md border border-slate-200 group flex items-center justify-center">
                 <img 
                   src={banners[currentSlide].url} 
                   alt="Banner Internal" 
-                  /* KUNCI: Gambar akan menyesuaikan lebar penuh, tinggi proporsional otomatis, tidak melebihi batas max-h */
-                  className="w-full h-auto max-h-[200px] md:max-h-[350px] object-cover transition-all duration-500 ease-in-out"
+                  /* PERUBAHAN UTAMA: 
+                     1. Hapus max-h agar tinggi menyesuaikan otomatis.
+                     2. Ganti object-cover menjadi object-contain.
+                     3. Pastikan w-full dan h-auto. */
+                  className="w-full h-auto object-contain transition-all duration-500 ease-in-out"
                 />
                 
                 {/* Tombol Hapus (Khusus Admin) - Muncul saat di hover */}
                 {user.role === 'admin' && (
                    <button 
                      onClick={() => deleteBanner(banners[currentSlide].name)}
-                     className="absolute top-4 right-4 bg-red-600 text-white p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                     className="absolute top-4 right-4 bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all z-10"
                      title="Hapus Banner Ini"
                    >
-                     <Trash2 size={14} />
+                     <Trash2 size={16} />
                    </button>
                 )}
 
                 {/* Indikator Titik (Dots) */}
                 {banners.length > 1 && (
-                  <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10">
+                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10 bg-gradient-to-t from-black/20 to-transparent pt-4 pb-2">
                     {banners.map((_, idx) => (
                       <div 
                         key={idx} 
                         onClick={() => setCurrentSlide(idx)}
-                        className={`w-2 h-2 rounded-full cursor-pointer transition-all ${idx === currentSlide ? 'bg-amber-500 w-5' : 'bg-white/60'}`}
+                        className={`h-1.5 rounded-full cursor-pointer transition-all duration-300 ${idx === currentSlide ? 'bg-amber-400 w-6' : 'bg-white/60 w-1.5 hover:bg-white'}`}
                       />
                     ))}
                   </div>
@@ -378,6 +451,66 @@ const PortalHome = () => {
             ) : (
               <div className="w-full h-[140px] border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400 bg-white p-4 text-center">
                  <p className="font-bold text-xs">Belum ada papan pengumuman digital yang diunggah.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PAPAN INFORMASI TERTULIS */}
+        {(announcements.length > 0 || canManageInfo) && (
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-3 px-2">
+               <h3 className="font-black text-slate-800 text-sm md:text-lg flex items-center gap-2">
+                 <Bell size={18} className="text-amber-500" /> Pengumuman
+               </h3>
+               {canManageInfo && (
+                 <button 
+                   onClick={() => setIsInfoModalOpen(true)}
+                   className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
+                 >
+                   <PlusCircle size={14} /> Tambah Info
+                 </button>
+               )}
+            </div>
+
+            {announcements.length > 0 ? (
+              <div className="space-y-3">
+                {announcements.map((info) => (
+                  <div key={info.id} className="bg-white border-l-4 border-amber-500 border-y border-r border-slate-200 p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md">
+                    
+                    {/* Tombol Hapus (Khusus Admin) */}
+                    {user.role === 'admin' && (
+                      <button 
+                        onClick={() => deleteInfo(info.id)}
+                        className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors"
+                        title="Hapus Informasi"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+
+                    <h4 className="font-bold text-slate-900 text-sm md:text-base pr-8 mb-1">{info.title}</h4>
+                    <p className="text-slate-600 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{info.content}</p>
+                    
+                    {/* Tampilkan Lampiran Jika Ada */}
+                    {info.attachment_url && (
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <a 
+                          href={info.attachment_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-lg transition-colors"
+                        >
+                          <Paperclip size={12} /> Buka Lampiran
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center p-6 border border-dashed border-slate-200 rounded-2xl bg-white/50 text-slate-400 text-xs font-medium">
+                Belum ada pengumuman tertulis.
               </div>
             )}
           </div>
@@ -581,6 +714,23 @@ const PortalHome = () => {
                               }
                             />
                           </td>
+                          <td className="flex items-center gap-1 bg-white px-2 py-1 rounded border border-slate-200">
+                            <input
+                              type="checkbox"
+                              id={`manage_info_${u.id}`}
+                              checked={u.can_manage_portal_info || false}
+                              onChange={(e) =>
+                                updatePermission(
+                                  u.id,
+                                  'can_manage_portal_info',
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            <label htmlFor={`manage_info_${u.id}`} className="text-[9px] font-bold text-slate-600 uppercase cursor-pointer">
+                              Kelola Info
+                            </label>
+                          </td>
                         </tr>
                       </div>
                     ))}
@@ -593,6 +743,41 @@ const PortalHome = () => {
               )}
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH INFORMASI (KHUSUS ADMIN) */}
+      {isInfoModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-black text-slate-900 text-sm tracking-tight uppercase">Buat Pengumuman Baru</h3>
+              <button onClick={() => setIsInfoModalOpen(false)} className="text-slate-400 hover:text-slate-800"><X size={20}/></button>
+            </div>
+            
+            <form onSubmit={handleAddInfo} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Judul Informasi</label>
+                <input required type="text" value={infoForm.title} onChange={e => setInfoForm({...infoForm, title: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:border-amber-500" placeholder="Contoh: Jadwal Maintenance Server" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Isi Pesan</label>
+                <textarea required rows="4" value={infoForm.content} onChange={e => setInfoForm({...infoForm, content: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:border-amber-500" placeholder="Tuliskan detail informasi..." />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Lampiran File / Gambar (Opsional)</label>
+                <input type="file" onChange={e => setInfoForm({...infoForm, file: e.target.files[0]})} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer" />
+              </div>
+
+              <div className="pt-2">
+                <button type="submit" disabled={isSubmittingInfo} className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition-all text-xs uppercase tracking-wider">
+                  {isSubmittingInfo ? 'Memproses...' : 'Publikasikan Sekarang'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

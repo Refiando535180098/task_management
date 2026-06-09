@@ -563,7 +563,14 @@ export default function TaskManagement() {
       try {
         const { data, error } = await supabase.from('settings').select('*').eq('id', 1).single();
         if (data) {
-          const mappedSettings = { brandName: data.brand_name, autoEmail: data.auto_email, maintenanceMode: data.maintenance_mode };
+          const mappedSettings = { 
+            brandName: data.brand_name, 
+            autoEmail: data.auto_email, 
+            maintenanceMode: data.maintenance_mode,
+            maxUploadSize: data.max_upload_size, // Tambahkan ini
+            sessionTimeout: data.session_timeout, // Tambahkan ini
+            strictMode: data.strict_mode         // Tambahkan ini
+          };
           setSysConfig(mappedSettings);
           setConfigForm(mappedSettings); 
         }
@@ -572,7 +579,7 @@ export default function TaskManagement() {
       }
     };
     fetchSettings();
-  }, []); 
+  }, []);
 
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
