@@ -1525,9 +1525,27 @@ export default function TaskManagement() {
                   targetTasks = targetTasks.filter(t => t.dueDate.startsWith(reportFilterMonth));
                 }
 
-                const tDone = targetTasks.filter(t => t.status === 'done').length;
                 const tTotal = targetTasks.length;
-                const tRate = tTotal === 0 ? 0 : Math.round((tDone / tTotal) * 100);
+                let totalKpiScore = 0;
+                let tDoneOnTime = 0;
+                let tDoneLate = 0;
+
+                targetTasks.forEach(t => {
+                  if (t.status === 'done') {
+                    // Membandingkan waktu selesai dengan deadline
+                    if (t.completed_at && t.completed_at > t.dueDate) {
+                      tDoneLate++;
+                      totalKpiScore += 0.5; // Poin KPI 50% untuk tugas yang diselesaikan terlambat
+                    } else {
+                      tDoneOnTime++;
+                      totalKpiScore += 1;   // Poin KPI 100% untuk tugas tepat waktu
+                    }
+                  }
+                });
+
+                // Kalkulasi persentase akhir
+                const tRate = tTotal === 0 ? 0 : Math.round((totalKpiScore / tTotal) * 100);
+                const tDoneTotal = tDoneOnTime + tDoneLate;
                 const periodeCetak = reportFilterMonth 
                   ? new Date(reportFilterMonth + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) 
                   : new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
@@ -1566,7 +1584,11 @@ export default function TaskManagement() {
                           <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Karyawan / Target</span><span className="font-black text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.name}</span></div>
                           <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Posisi Jabatan</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.position}</span></div>
                           <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Departemen</span><span className="font-bold text-slate-800 text-xs md:text-sm print:text-black print:text-xs truncate block">{targetUser.division}</span></div>
-                          <div><span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Penyelesaian (KPI)</span><span className="font-black text-emerald-600 text-sm md:text-base print:text-black print:text-sm">{tRate}% ({tDone}/{tTotal})</span></div>
+                          <div>
+                            <span className="block text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest print:text-black print:text-[8px]">Penyelesaian (KPI)</span>
+                            <span className="font-black text-emerald-600 text-sm md:text-base print:text-black print:text-sm">{tRate}%</span>
+                            <span className="block text-[7px] md:text-[8px] font-bold text-slate-500 print:text-black mt-0.5">Tepat: {tDoneOnTime} | Telat: {tDoneLate} | Total: {tTotal}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -1586,9 +1608,15 @@ export default function TaskManagement() {
                             </thead>
                             <tbody>
                               {targetTasks.map((task, index) => { 
-                                 const nowLocalStr = getNowStr();
-                                 const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
-                                 return (
+                                const nowLocalStr = getNowStr();
+                                
+                                // Belum selesai & melewati batas
+                                const isNotDoneOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
+                                
+                                // Sudah selesai TAPI melebihi batas (Telat)
+                                const isDoneLate = task.status === 'done' && task.completed_at && task.completed_at > task.dueDate;
+                                
+                                return (
                                   <tr key={task.id} className="border-b border-slate-200 print:border-black print:text-[9px] hover:bg-slate-50 transition-colors">
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 text-[10px] md:text-xs font-bold text-slate-600 border-r border-slate-200 print:border-black print:text-black text-center print:p-1 align-top">{index + 1}</td>
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 font-bold text-slate-800 border-r border-slate-200 print:border-black print:text-black text-[10px] md:text-xs print:p-1 leading-tight align-top">{task.title}</td>
@@ -1597,10 +1625,16 @@ export default function TaskManagement() {
                                     <td className="px-2 py-1.5 md:px-3 md:py-2 border-r border-slate-200 print:border-black print:p-1 align-top whitespace-nowrap">
                                       <div className="flex flex-col gap-0.5">
                                         <span className="text-[9px] md:text-[10px] text-slate-500 print:text-black">Diberikan: <span className="font-bold text-slate-700 print:text-black">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
-                                        <span className={`text-[9px] md:text-[10px] ${isOverdue ? 'text-red-600 print:text-red-600 font-black' : 'text-slate-500 print:text-black'}`}>
-                                          Deadline: <span className="font-bold">{formatDateTime(task.dueDate)}</span>
-                                        </span>
-                                        {isOverdue && <span className="text-[8px] bg-red-100 text-red-700 px-1 py-0.5 rounded border border-red-200 w-fit font-bold mt-0.5 print:border-none print:p-0 print:text-red-600">TERLAMBAT</span>}
+                                        <td className="px-2 py-1.5 md:px-3 md:py-2 text-center border-slate-200 print:border-black print:text-black font-black uppercase text-[8px] md:text-[9px] tracking-wider print:p-1 align-top">
+                                          <span className="print:hidden flex flex-col items-center gap-1">
+                                              <Badge type={task.status}>{String(task.status).toUpperCase()}</Badge>
+                                              {isDoneLate && <span className="text-[7px] bg-orange-100 text-orange-700 border border-orange-200 px-1 py-0.5 rounded shadow-sm">SELESAI TELAT</span>}
+                                          </span>
+                                          <span className="hidden print:flex flex-col items-center">
+                                              <span>{task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}</span>
+                                              {isDoneLate && <span className="text-[7px] text-orange-600 mt-0.5">TELAT</span>}
+                                          </span>
+                                        </td>
                                       </div>
                                     </td>
 
