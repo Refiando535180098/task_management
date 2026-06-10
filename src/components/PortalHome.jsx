@@ -71,7 +71,8 @@ const PortalHome = () => {
       const { error } = await supabase.from('portal_announcements').insert([{
         title: infoForm.title,
         content: infoForm.content,
-        attachment_url: attachmentUrl
+        attachment_url: attachmentUrl,
+        author_id: user.id // <-- Tambahkan baris ini untuk mencatat siapa pembuatnya
       }]);
 
       if (error) throw error;
@@ -417,8 +418,8 @@ const PortalHome = () => {
               <div className="space-y-3">
                 {announcements.map((info) => (
                   <div key={info.id} className="bg-white border-l-4 border-amber-500 border-y border-r border-slate-200 p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md">
-                    {/* Tombol Hapus (Khusus Admin) */}
-                    {user.role === 'admin' && (
+                    {/* Tombol Hapus (Admin bisa hapus semua, User hanya bisa hapus buatannya sendiri) */}
+                    {(user.role === 'admin' || (user.can_manage_portal_info && info.author_id === user.id)) && (
                       <button 
                         onClick={() => deleteInfo(info.id)}
                         className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors"
@@ -459,7 +460,7 @@ const PortalHome = () => {
         {(banners.length > 0 || user.role === 'admin') && (
           <div className="mb-10 relative">
             <div className="flex justify-between items-center mb-3 px-2">
-               <h3 className="font-black text-slate-800 text-sm md:text-lg">Banner Informasi</h3>
+               <h3 className="font-black text-slate-800 text-sm md:text-lg">Banner Informasi Event</h3>
                {user.role === 'admin' && (
                  <label className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow-sm transition-all">
                     {isUploading ? <RefreshCw size={14} className="animate-spin" /> : <ImagePlus size={14} />}
