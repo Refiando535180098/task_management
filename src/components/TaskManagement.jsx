@@ -902,12 +902,12 @@ export default function TaskManagement() {
     console.log("Mencoba mengirim notif ke ID User:", externalIds); 
 
     try {
-      // 1. UBAH URL MENJADI TEROWONGAN LOKAL VITE
-      const response = await fetch('/api/onesignal/notifications', {
+      // TEMBAK LANGSUNG KE ONESIGNAL SECARA ABSOLUT (Tanpa lewat Vercel)
+      const response = await fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // 2. Pastikan REST API Key kamu sudah dimasukkan di sini
+          // Pastikan sandi panjangmu yang berawalan os_v2_app... tetap ada di sini
           'Authorization': 'Basic os_v2_app_6g3tdf7fvzgdla4cffwxevwydyng6sqn55de3enahshsmjbd6omxmmkbh245epkmqmk3pgt4rpj5jpvxfdqeay3ytf6zbtiq4vwdgzy' 
         },
         body: JSON.stringify({
