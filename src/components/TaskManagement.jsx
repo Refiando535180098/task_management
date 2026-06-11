@@ -903,20 +903,11 @@ export default function TaskManagement() {
 
     try {
       // TEMBAK LANGSUNG KE ONESIGNAL SECARA ABSOLUT (Tanpa lewat Vercel)
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          // Pastikan sandi panjangmu yang berawalan os_v2_app... tetap ada di sini
-          'Authorization': 'Basic os_v2_app_6g3tdf7fvzgdla4cffwxevwydyspnej6crgu4vvxnpyzjjsk22434ci5a4ohfm4t7avowokzhrosgi5og2ebmynkitqlmfokovaqpjy' 
-        },
-        body: JSON.stringify({
-          app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
-          include_external_user_ids: externalIds, 
-          headings: { en: title },
-          contents: { en: message },
-        })
-      });
+      const response = await fetch('/api/sendNotif', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ targetUserIds: externalIds, title, message })
+    });
 
       const data = await response.json();
       console.log("Respon dari Server OneSignal:", data);
