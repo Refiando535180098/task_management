@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import OneSignal from 'react-onesignal';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import html2pdf from 'html2pdf.js';
@@ -72,6 +73,26 @@ export default function TaskManagement() {
     }
     prevUnreadCount.current = currentUnread;
   }, [notifications, currentUser]);
+
+  useEffect(() => {
+    const runOneSignal = async () => {
+      // GANTI APP_ID INI DENGAN MILIKMU (f1b73197...)
+      await OneSignal.init({
+        appId: "MASUKKAN_APP_ID_ONESIGNAL_KAMU_DI_SINI",
+        allowLocalhostAsSecureOrigin: true, 
+      });
+      
+      OneSignal.Slidedown.promptPush();
+
+      if (currentUser && currentUser.id) {
+         OneSignal.login(String(currentUser.id));
+      }
+    };
+
+    if (currentUser) {
+       runOneSignal();
+    }
+  }, [currentUser]);
 
   const [roles, setRoles] = useState(['admin', 'direksi', 'manager', 'staff']);
   const [newRoleName, setNewRoleName] = useState('');
@@ -759,6 +780,7 @@ export default function TaskManagement() {
         attachments: cleaningPhotos
       };
     } 
+    
     // ==========================================
     // JALUR 2: LOGIKA REQUEST TIKET IT
     // ==========================================
@@ -836,6 +858,30 @@ export default function TaskManagement() {
       alert("Error gagal terhubung ke server.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const sendPushNotification = async (targetUserIds, title, message) => {
+    const externalIds = targetUserIds.map(id => String(id));
+
+    try {
+      await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          // GANTI REST API KEY DI BAWAH INI DENGAN MILIKMU
+          'Authorization': 'Basic MASUKKAN_REST_API_KEY_ONESIGNAL_DI_SINI' 
+        },
+        body: JSON.stringify({
+          app_id: "MASUKKAN_APP_ID_ONESIGNAL_KAMU_DI_SINI",
+          include_aliases: { external_id: externalIds }, 
+          target_channel: "push",
+          headings: { en: title },
+          contents: { en: message },
+        })
+      });
+    } catch (error) {
+      console.error("Gagal mengirim Push Notif OneSignal:", error);
     }
   };
 
