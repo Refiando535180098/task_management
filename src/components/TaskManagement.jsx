@@ -855,11 +855,12 @@ export default function TaskManagement() {
           }));
           if (notifsToInsert.length > 0) {
              await supabase.from('notifications').insert(notifsToInsert);
-             
-             // MEMICU PUSH NOTIFICATION KE HP/DESKTOP
-             const notifTitle = taskFormType === 'ticketing' ? "🚨 Tiket IT Baru" : "Tugas Baru";
-             await sendPushNotification(assignedUserIds, notifTitle, insertedTask.title);
           }
+          
+          // KITA KELUARKAN DARI BLOK 'IF'
+          // Agar saat kamu ngetes bikin tugas buat diri sendiri, notifnya tetap jalan!
+          const notifTitle = taskFormType === 'ticketing' ? "🚨 Tiket IT Baru" : "Tugas Baru";
+          await sendPushNotification(assignedUserIds, notifTitle, insertedTask.title);
           
           if (taskFormType === 'ticketing') alert("Tiket IT berhasil dikirim. Tim akan segera mengecek!");
         } else {
