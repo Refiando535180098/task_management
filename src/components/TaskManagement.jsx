@@ -877,21 +877,21 @@ export default function TaskManagement() {
   };
 
   const sendPushNotification = async (targetUserIds, title, message) => {
+    // Ubah ID target menjadi string
     const externalIds = targetUserIds.map(id => String(id));
 
     try {
-      // TAMBAHKAN link corsproxy.io di depan URL api onesignal
-      await fetch('https://corsproxy.io/?https://api.onesignal.com/notifications', {
+      // 1. HAPUS proxy dan gunakan URL API V1 yang terbukti jauh lebih stabil
+      await fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // Pastikan REST API KEY kamu yang panjang masih ada di sini
+          // 2. PASTIKAN INI ADALAH REST API KEY (Bukan Key ID). Biasanya panjangnya 40+ karakter.
           'Authorization': 'Basic keou4qy2ae74vs4mxn65oknt2' 
         },
         body: JSON.stringify({
           app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
-          include_aliases: { external_id: externalIds }, 
-          target_channel: "push",
+          include_external_user_ids: externalIds, // 3. Format V1 untuk menandai user tujuan
           headings: { en: title },
           contents: { en: message },
         })
