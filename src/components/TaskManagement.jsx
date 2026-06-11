@@ -76,13 +76,34 @@ export default function TaskManagement() {
 
   useEffect(() => {
     const runOneSignal = async () => {
-      // Gunakan App ID asli milikmu
       await OneSignal.init({
         appId: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
         allowLocalhostAsSecureOrigin: true, 
+        
+        // 1. AKTIFKAN LONCENG DARURAT (Mencegah pop-up diblokir permanen oleh browser)
+        notifyButton: {
+          enable: true,
+          position: 'bottom-right',
+          size: 'medium',
+          theme: 'default',
+        }
       });
       
-      OneSignal.Slidedown.promptPush();
+      // 2. PAKSA MUNCULKAN POP-UP NATIVE BROWSER
+      try {
+        // Untuk SDK OneSignal versi terbaru (V16+)
+        if (OneSignal.Notifications) {
+          const isEnabled = OneSignal.Notifications.permission === "granted";
+          if (!isEnabled) {
+            await OneSignal.Notifications.requestPermission();
+          }
+        } else {
+          // Fallback untuk SDK versi lama (V15)
+          OneSignal.Slidedown.promptPush({ force: true });
+        }
+      } catch (error) {
+        console.warn("Browser memblokir pop-up otomatis. User harus klik lonceng merah.");
+      }
 
       if (currentUser && currentUser.id) {
          OneSignal.login(String(currentUser.id));
