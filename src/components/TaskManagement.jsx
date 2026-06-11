@@ -76,9 +76,9 @@ export default function TaskManagement() {
 
   useEffect(() => {
     const runOneSignal = async () => {
-      // GANTI APP_ID INI DENGAN MILIKMU (f1b73197...)
+      // Gunakan App ID asli milikmu
       await OneSignal.init({
-        appId: "MASUKKAN_APP_ID_ONESIGNAL_KAMU_DI_SINI",
+        appId: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
         allowLocalhostAsSecureOrigin: true, 
       });
       
@@ -347,7 +347,15 @@ export default function TaskManagement() {
     });
 
     try {
-      if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+      if (notifsToInsert.length > 0) {
+         await supabase.from('notifications').insert(notifsToInsert);
+         
+         // MEMICU PUSH NOTIFICATION UNTUK CHAT BARU
+         const targetIds = Array.from(relevantUserIds).filter(id => String(id) !== String(currentUser.id));
+         if (targetIds.length > 0) {
+            await sendPushNotification(targetIds, `Pesan dari ${currentUser.name}`, newComment.substring(0, 50));
+         }
+      }
       await supabase.from('initial_tasks').update({ comments: updatedCommentsArray }).eq('id', targetTaskId);
     } catch (err) {
       console.error("Koneksi error saat simpan chat", err);
@@ -845,7 +853,13 @@ export default function TaskManagement() {
             userId: id, type: 'task', message: taskFormType === 'ticketing' ? `🚨 Tiket IT Baru: "${insertedTask.title}"` : `Tugas Baru: "${insertedTask.title}"`, read_status: false,
             time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), taskId: insertedTask.id
           }));
-          if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+          if (notifsToInsert.length > 0) {
+             await supabase.from('notifications').insert(notifsToInsert);
+             
+             // MEMICU PUSH NOTIFICATION KE HP/DESKTOP
+             const notifTitle = taskFormType === 'ticketing' ? "🚨 Tiket IT Baru" : "Tugas Baru";
+             await sendPushNotification(assignedUserIds, notifTitle, insertedTask.title);
+          }
           
           if (taskFormType === 'ticketing') alert("Tiket IT berhasil dikirim. Tim akan segera mengecek!");
         } else {
@@ -869,11 +883,12 @@ export default function TaskManagement() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // GANTI REST API KEY DI BAWAH INI DENGAN MILIKMU
-          'Authorization': 'Basic MASUKKAN_REST_API_KEY_ONESIGNAL_DI_SINI' 
+          // GANTI tulisan di bawah dengan REST API Key yang kamu copy tadi
+          // JANGAN hapus kata 'Basic ' di depannya (biarkan ada spasi)
+          'Authorization': 'Basic f1b73197-e5ae-4c35-8382-296d7256d81e' 
         },
         body: JSON.stringify({
-          app_id: "MASUKKAN_APP_ID_ONESIGNAL_KAMU_DI_SINI",
+          app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", // App ID asli
           include_aliases: { external_id: externalIds }, 
           target_channel: "push",
           headings: { en: title },
