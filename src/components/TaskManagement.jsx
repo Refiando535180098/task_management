@@ -903,7 +903,7 @@ export default function TaskManagement() {
 
     try {
       // TEMBAK LANGSUNG KE ONESIGNAL SECARA ABSOLUT (Tanpa lewat Vercel)
-      const response = await fetch('/api/sendNotif', {
+      const response = await fetch('/api/notif', { // Sesuaikan nama file barunya
        method: 'POST',
        headers: { 'Content-Type': 'application/json' },
        body: JSON.stringify({ targetUserIds: externalIds, title, message })
