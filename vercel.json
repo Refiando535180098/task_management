@@ -1,3 +1,12 @@
 {
-  "rewrites": [ { "source": "/(.*)", "destination": "/index.html" } ]
+  "rewrites": [
+    {
+      "source": "/api/onesignal/:match*",
+      "destination": "https://onesignal.com/api/v1/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
