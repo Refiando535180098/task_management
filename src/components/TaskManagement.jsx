@@ -898,27 +898,41 @@ export default function TaskManagement() {
   };
 
   const sendPushNotification = async (targetUserIds, title, message) => {
-    // Ubah ID target menjadi string
     const externalIds = targetUserIds.map(id => String(id));
+    
+    // PELACAK 1: Pastikan ID target terbaca
+    console.log("Mencoba mengirim notif ke ID User:", externalIds); 
 
     try {
-      // 1. HAPUS proxy dan gunakan URL API V1 yang terbukti jauh lebih stabil
-      await fetch('https://onesignal.com/api/v1/notifications', {
+      const response = await fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // 2. PASTIKAN INI ADALAH REST API KEY (Bukan Key ID). Biasanya panjangnya 40+ karakter.
-          'Authorization': 'Basic keou4qy2ae74vs4mxn65oknt2' 
+          // PASTIKAN REST API KEY KAMU BENAR DI SINI
+          'Authorization': 'Basic MASUKKAN_REST_API_KEY_YANG_PANJANG_DISINI' 
         },
         body: JSON.stringify({
           app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
-          include_external_user_ids: externalIds, // 3. Format V1 untuk menandai user tujuan
+          include_external_user_ids: externalIds, 
           headings: { en: title },
           contents: { en: message },
         })
       });
+
+      // PELACAK 2: Menangkap balasan dari server OneSignal
+      const data = await response.json();
+      console.log("Respon dari Server OneSignal:", data);
+
+      // Jika ada error dari OneSignal, munculkan pop-up merah
+      if (data.errors) {
+         alert("GAGAL KIRIM NOTIF. Alasan OneSignal: " + JSON.stringify(data.errors));
+      } else {
+         console.log("Notifikasi SUKSES terkirim!");
+      }
+
     } catch (error) {
-      console.error("Gagal mengirim Push Notif OneSignal:", error);
+      console.error("Gagal total menembus API OneSignal:", error);
+      alert("Error Jaringan / CORS Browser. Cek Console F12.");
     }
   };
 
