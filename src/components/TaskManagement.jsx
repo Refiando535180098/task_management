@@ -899,16 +899,15 @@ export default function TaskManagement() {
 
   const sendPushNotification = async (targetUserIds, title, message) => {
     const externalIds = targetUserIds.map(id => String(id));
-    
-    // PELACAK 1: Pastikan ID target terbaca
     console.log("Mencoba mengirim notif ke ID User:", externalIds); 
 
     try {
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
+      // 1. UBAH URL MENJADI TEROWONGAN LOKAL VITE
+      const response = await fetch('/api/onesignal/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // PASTIKAN REST API KEY KAMU BENAR DI SINI
+          // 2. Pastikan REST API Key kamu sudah dimasukkan di sini
           'Authorization': 'Basic MASUKKAN_REST_API_KEY_YANG_PANJANG_DISINI' 
         },
         body: JSON.stringify({
@@ -919,13 +918,11 @@ export default function TaskManagement() {
         })
       });
 
-      // PELACAK 2: Menangkap balasan dari server OneSignal
       const data = await response.json();
       console.log("Respon dari Server OneSignal:", data);
 
-      // Jika ada error dari OneSignal, munculkan pop-up merah
       if (data.errors) {
-         alert("GAGAL KIRIM NOTIF. Alasan OneSignal: " + JSON.stringify(data.errors));
+         alert("GAGAL KIRIM NOTIF. Alasan: " + JSON.stringify(data.errors));
       } else {
          console.log("Notifikasi SUKSES terkirim!");
       }
