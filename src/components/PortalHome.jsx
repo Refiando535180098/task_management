@@ -7,7 +7,7 @@ const PortalHome = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState('profile'); // 'profile' atau 'access'
+  const [activeSettingsTab, setActiveSettingsTab] = useState('profile');
   const [allUsers, setAllUsers] = useState([]);
   const [search, setSearch] = useState('');
   
@@ -72,7 +72,7 @@ const PortalHome = () => {
         title: infoForm.title,
         content: infoForm.content,
         attachment_url: attachmentUrl,
-        author_id: user.id // <-- Tambahkan baris ini untuk mencatat siapa pembuatnya
+        author_id: user.id
       }]);
 
       if (error) throw error;
@@ -475,11 +475,7 @@ const PortalHome = () => {
               <div className="relative w-full h-auto bg-slate-100/50 rounded-3xl overflow-hidden shadow-md border border-slate-200 group flex items-center justify-center">
                 <img 
                   src={banners[currentSlide].url} 
-                  alt="Banner Internal" 
-                  /* PERUBAHAN UTAMA: 
-                     1. Hapus max-h agar tinggi menyesuaikan otomatis.
-                     2. Ganti object-cover menjadi object-contain.
-                     3. Pastikan w-full dan h-auto. */
+                  alt="Banner Internal"
                   className="w-full h-auto object-contain transition-all duration-500 ease-in-out"
                 />
                 
