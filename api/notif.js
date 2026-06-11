@@ -4,12 +4,12 @@ export default async function handler(req, res) {
   const { targetUserIds, title, message } = req.body;
 
   try {
-    const response = await fetch('https://onesignal.com', {
+    const response = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         // GANTI INI DENGAN REST API KEY YANG ASLI (LIHAT LANGKAH 3)
-        'Authorization': 'Basic os_v2_app_6g3tdf7fvzgdla4cffwxevwyd2uwqadq6c6ugceju6723bq2hqb2uaitvn6c6f3ytqzqv2j5cdg6zrii7jrg3wcpmj4d7bfg4bqxszy'
+        'Authorization': 'Basic os_v2_app_6g3tdf7fvzgdla4cffwxevwydz2aonqqw2auwinl6izhgueslnblwsib547gqdsqzn5cd5ircbb2nkvovya3zd5iujb5zlrusgvflxa'
       },
       body: JSON.stringify({
         app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e",
