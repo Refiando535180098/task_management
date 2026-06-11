@@ -908,7 +908,7 @@ export default function TaskManagement() {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           // 2. Pastikan REST API Key kamu sudah dimasukkan di sini
-          'Authorization': 'Basic MASUKKAN_REST_API_KEY_YANG_PANJANG_DISINI' 
+          'Authorization': 'Basic keou4qy2ae74vs4mxn65oknt2' 
         },
         body: JSON.stringify({
           app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
