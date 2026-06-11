@@ -153,14 +153,27 @@ export default function TaskManagement() {
   const [recipientSearchQuery, setRecipientSearchQuery] = useState(''); // State baru untuk pencarian penerima
 
   // --- 1. FUNGSI PEMBANTU (PAKSA WAKTU LOKAL INDONESIA) ---
-  const getNowStr = () => {
-    return new Date().toISOString(); 
+  const getLocalTimeWithOffset = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) return null;
+    const offset = dateObj.getTimezoneOffset();
+    const sign = offset > 0 ? '-' : '+';
+    const absOffset = Math.abs(offset);
+    const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+    const minutes = String(absOffset % 60).padStart(2, '0');
+    const pad = (n) => String(n).padStart(2, '0');
+    
+    // Menghasilkan format: YYYY-MM-DDTHH:mm:ss+07:00 (Sangat aman untuk database)
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}${sign}${hours}:${minutes}`;
   };
+
+  const getNowStr = () => getLocalTimeWithOffset(new Date());
 
   const formatDateTime = (val) => {
     if (!val) return '-';
     
     try {
+      // Biarkan JavaScript membaca format aslinya tanpa dipotong.
+      // JavaScript akan otomatis mengonversi jam dari database ke jam lokal perangkat (WIB/WITA/WIT).
       const dateObj = new Date(val);
       
       // Jika data tidak valid, kembalikan teks aslinya
@@ -725,8 +738,10 @@ export default function TaskManagement() {
     let taskData = {};
     let assignedUserIds = [];
 
+    // ==========================================
+    // JALUR 1: LOGIKA KHUSUS LAPORAN OB / CLEANING
+    // ==========================================
     if (taskFormType === 'cleaning') {
-      // 1. Validasi Khusus Cleaning
       if (cleaningPhotos.length === 0) {
         setIsSubmitting(false);
         return alert("Mohon lampirkan minimal 1 foto laporan hasil kerja!");
@@ -734,16 +749,45 @@ export default function TaskManagement() {
       taskData = {
         title: newTask.title,
         description: newTask.description,
-        assignedTo: [currentUser.id], // Otomatis ke diri sendiri
+        assignedTo: [currentUser.id], 
         assignedBy: currentUser.id,
         priority: 'low',
-        dueDate: getNowStr(), // Dummy date agar database tidak error
-        status: 'laporan-cleaning', // Label status khusus OB
+        dueDate: getNowStr(), 
+        completed_at: getNowStr(), 
+        status: 'laporan-cleaning', 
         comments: [],
         attachments: cleaningPhotos
       };
-    } else {
-      // 2. Validasi Tugas Reguler
+    } 
+    // ==========================================
+    // JALUR 2: LOGIKA REQUEST TIKET IT
+    // ==========================================
+    else if (taskFormType === 'ticketing') {
+      // Cari semua akun Admin (Tim IT)
+      const adminUsers = users.filter(u => u.role === 'admin').map(u => u.id);
+      
+      if (adminUsers.length === 0) {
+        setIsSubmitting(false);
+        return alert("Maaf, belum ada akun Admin/IT yang aktif untuk menerima tiket.");
+      }
+
+      assignedUserIds = adminUsers;
+      taskData = {
+        title: `[TIKET IT] ${newTask.title}`, // Ditambah prefix agar mudah difilter
+        description: newTask.description,
+        assignedTo: assignedUserIds,
+        assignedBy: currentUser.id,
+        priority: newTask.priority,
+        dueDate: getNowStr(), // Tiket IT dibuat dengan target diselesaikan hari ini (opsional)
+        status: 'pending', 
+        comments: [],
+        attachments: []
+      };
+    }
+    // ==========================================
+    // JALUR 3: LOGIKA TUGAS REGULER
+    // ==========================================
+    else {
       assignedUserIds = currentUser.role === 'staff' ? [currentUser.id] : newTask.assignedTo;
       if (currentUser.role !== 'staff' && assignedUserIds.length === 0) {
          setIsSubmitting(false);
@@ -755,30 +799,33 @@ export default function TaskManagement() {
         assignedTo: assignedUserIds,
         assignedBy: currentUser.id,
         priority: newTask.priority,
-        dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : null, 
+        dueDate: newTask.dueDate ? getLocalTimeWithOffset(new Date(newTask.dueDate)) : null, 
         status: 'pending',
         comments: [],
         attachments: []
       };
     }
 
+    // PROSES SIMPAN KE DATABASE
     try {
       const { data: newTasks, error } = await supabase.from('initial_tasks').insert([taskData]).select();
       if (!error && newTasks && newTasks.length > 0) {
         setIsModalOpen(false);
         setNewTask({ title: '', description: '', assignedTo: [], priority: 'medium', dueDate: '' });
-        setCleaningPhotos([]); // Kosongkan state foto
-        setTaskFormType('regular'); // Kembalikan form ke awal
+        setCleaningPhotos([]); 
+        setTaskFormType('regular'); 
         loadTasksFromDB();
 
-        // Notifikasi khusus tugas reguler
+        // Notifikasi untuk Tugas Reguler & Tiket IT
         if (taskFormType !== 'cleaning') {
           const insertedTask = newTasks[0];
           const notifsToInsert = assignedUserIds.filter(id => String(id) !== String(currentUser.id)).map(id => ({
-            userId: id, type: 'task', message: `Tugas Baru: "${insertedTask.title}"`, read_status: false,
+            userId: id, type: 'task', message: taskFormType === 'ticketing' ? `🚨 Tiket IT Baru: "${insertedTask.title}"` : `Tugas Baru: "${insertedTask.title}"`, read_status: false,
             time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), taskId: insertedTask.id
           }));
           if (notifsToInsert.length > 0) await supabase.from('notifications').insert(notifsToInsert);
+          
+          if (taskFormType === 'ticketing') alert("Tiket IT berhasil dikirim. Tim akan segera mengecek!");
         } else {
           alert("Laporan Cleaning berhasil dikirim!");
         }
@@ -2144,40 +2191,58 @@ export default function TaskManagement() {
                       
                       <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
                       
-                      {selectedTask.status !== 'laporan-cleaning' && (
-                      <>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
-                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
-                            {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
-                          </span>
-                        </div>
-                        
-                        <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu</span>
-                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
-                            <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
-                          </span>
-                        </div>
-                        
-                        <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
-                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                            <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
-                          </span>
-                        </div>
-                        
-                        <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
-                          <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-blue-600' : 'text-slate-400'}`}>
-                            <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
-                          </span>
-                        </div>
-                      </div>
-                      </>
-                      )}
+                      {/* TAMPILAN KOTAK WAKTU DINAMIS */}
+                        {selectedTask.status === 'laporan-cleaning' ? (
+                          /* KOTAK KHUSUS LAPORAN OB (Tanpa Deadline) */
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dikirim / Diselesaikan Pada</span>
+                              <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5"/> 
+                                {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : (selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-')}
+                              </span>
+                            </div>
+                            <div className="flex flex-col border-t md:border-t-0 md:border-l border-emerald-200 pt-3 md:pt-0 md:pl-4">
+                              <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dilaporkan Oleh</span>
+                              <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5"/> 
+                                {getUserName(selectedTask.assignedBy)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          /* KOTAK TUGAS REGULER (Ada Deadline & Approval) */
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
+                                {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu (Deadline)</span>
+                              <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                                <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                              <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                              <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-blue-600' : 'text-slate-400'}`}>
+                                <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
 
                       <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
                         <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Instruksi Detail:</span>
@@ -2327,23 +2392,25 @@ export default function TaskManagement() {
                 </div>
                 
                 {/* PILIHAN MODE FORM (Hanya muncul jika punya akses) */}
-                {currentUser?.cleaningAccess && (
-                  <div className="flex bg-slate-100 p-1 mx-5 mt-5 rounded-xl shrink-0">
-                    <button type="button" onClick={() => setTaskFormType('regular')} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${taskFormType === 'regular' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>Tugas Reguler</button>
-                    <button type="button" onClick={() => setTaskFormType('cleaning')} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${taskFormType === 'cleaning' ? 'bg-emerald-500 shadow-sm text-white' : 'text-slate-500 hover:text-slate-700'}`}>Laporan OB / Cleaning</button>
-                  </div>
-                )}
+                {/* PILIHAN MODE FORM */}
+                <div className="flex bg-slate-100 p-1 mx-5 mt-5 rounded-xl shrink-0 overflow-x-auto custom-scrollbar">
+                  <button type="button" onClick={() => setTaskFormType('regular')} className={`flex-1 min-w-[100px] py-2 text-xs font-black rounded-lg transition-all ${taskFormType === 'regular' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>Tugas Reguler</button>
+                  <button type="button" onClick={() => setTaskFormType('ticketing')} className={`flex-1 min-w-[100px] py-2 text-xs font-black rounded-lg transition-all ${taskFormType === 'ticketing' ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500 hover:text-slate-700'}`}>Request IT</button>
+                  {currentUser?.cleaningAccess && (
+                    <button type="button" onClick={() => setTaskFormType('cleaning')} className={`flex-1 min-w-[100px] py-2 text-xs font-black rounded-lg transition-all ${taskFormType === 'cleaning' ? 'bg-emerald-500 shadow-sm text-white' : 'text-slate-500 hover:text-slate-700'}`}>Laporan OB</button>
+                  )}
+                </div>
                 
                 <form id="createTaskForm" onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0">
                   <div className="overflow-y-auto custom-scrollbar flex-1 bg-white p-5 md:p-8 space-y-4 md:space-y-6">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">{taskFormType === 'cleaning' ? 'Area / Judul Pembersihan' : 'Judul Pekerjaan'}</label>
-                        <input required type="text" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})}/>
-                      </div>
-
-                      {taskFormType === 'regular' ? (
+                      
+                      {/* === FORM TUGAS REGULER === */}
+                      {taskFormType === 'regular' && (
                         <>
-                          {/* FORM REGULER */}
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Judul Pekerjaan</label>
+                            <input required type="text" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})}/>
+                          </div>
                           <div className="grid grid-cols-2 gap-3 md:gap-5">
                             <div>
                               <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Prioritas</label>
@@ -2354,7 +2421,6 @@ export default function TaskManagement() {
                               <input required type="datetime-local" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})}/>
                             </div>
                           </div>
-                          
                           {currentUser.role !== 'staff' && (
                             <div>
                               <div className="flex justify-between items-end mb-1.5">
@@ -2370,7 +2436,6 @@ export default function TaskManagement() {
                                    if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
                                    else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || u.role === 'manager'); 
                                    else hasAccess = (u.role === 'staff');
-                                   
                                    if (!hasAccess) return false;
                                    if (recipientSearchQuery) return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
                                    return true;
@@ -2383,15 +2448,45 @@ export default function TaskManagement() {
                               </div>
                             </div>
                           )}
-
                           <div>
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Instruksi Detail</label>
                             <textarea required rows="3" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none resize-none font-medium min-h-[100px]" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})}></textarea>
                           </div>
                         </>
-                      ) : (
+                      )}
+
+                      {/* === FORM REQUEST TIKET IT === */}
+                      {taskFormType === 'ticketing' && (
                         <>
-                          {/* FORM KHUSUS CLEANING */}
+                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-2">
+                             <p className="text-xs font-bold text-purple-800">Sistem akan mengirimkan laporan kendala ini secara langsung ke tim IT Pusat.</p>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Kategori / Judul Kendala</label>
+                            <input required type="text" placeholder="Contoh: Printer Error, Lupa Password, Jaringan Lambat..." className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-purple-500 text-xs md:text-sm outline-none font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})}/>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Tingkat Urgensi (Prioritas)</label>
+                            <select className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-purple-500 text-xs md:text-sm outline-none font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
+                              <option value="low">Biasa (Tidak Mengganggu Kerja Utama)</option>
+                              <option value="medium">Sedang (Butuh Bantuan Segera)</option>
+                              <option value="high">Darurat (Sistem Mati / Operasional Terhenti)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Detail Masalah</label>
+                            <textarea required rows="4" placeholder="Jelaskan secara detail masalah yang Anda alami..." className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-purple-500 text-xs md:text-sm outline-none resize-none font-medium" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})}></textarea>
+                          </div>
+                        </>
+                      )}
+
+                      {/* === FORM KHUSUS CLEANING === */}
+                      {taskFormType === 'cleaning' && (
+                        <>
+                          <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Area / Judul Pembersihan</label>
+                            <input required type="text" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 text-xs md:text-sm outline-none font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})}/>
+                          </div>
                           <div>
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Keterangan Tambahan (Opsional)</label>
                             <textarea rows="3" placeholder="Contoh: Lantai lobi sudah dipel dan kaca dibersihkan..." className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 text-xs md:text-sm outline-none resize-none font-medium" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})}></textarea>
@@ -2425,8 +2520,8 @@ export default function TaskManagement() {
                   </div>
                   <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
                       <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
-                      <button type="submit" disabled={isSubmitting} className={`px-4 py-2.5 md:px-5 md:py-2.5 text-white rounded-xl font-bold text-xs md:text-sm shadow-md ${taskFormType === 'cleaning' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                        {taskFormType === 'cleaning' ? 'Kirim Laporan OB' : 'Simpan Pekerjaan'}
+                      <button type="submit" disabled={isSubmitting} className={`px-4 py-2.5 md:px-5 md:py-2.5 text-white rounded-xl font-bold text-xs md:text-sm shadow-md ${taskFormType === 'cleaning' ? 'bg-emerald-600 hover:bg-emerald-700' : taskFormType === 'ticketing' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                        {taskFormType === 'cleaning' ? 'Kirim Laporan OB' : taskFormType === 'ticketing' ? 'Kirim Tiket IT' : 'Simpan Pekerjaan'}
                       </button>
                   </div>
                 </form>
