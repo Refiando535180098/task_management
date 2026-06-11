@@ -879,16 +879,16 @@ export default function TaskManagement() {
     const externalIds = targetUserIds.map(id => String(id));
 
     try {
-      await fetch('https://api.onesignal.com/notifications', {
+      // TAMBAHKAN link corsproxy.io di depan URL api onesignal
+      await fetch('https://corsproxy.io/?https://api.onesignal.com/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          // GANTI tulisan di bawah dengan REST API Key yang kamu copy tadi
-          // JANGAN hapus kata 'Basic ' di depannya (biarkan ada spasi)
+          // Pastikan REST API KEY kamu yang panjang masih ada di sini
           'Authorization': 'Basic keou4qy2ae74vs4mxn65oknt2' 
         },
         body: JSON.stringify({
-          app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", // App ID asli
+          app_id: "f1b73197-e5ae-4c35-8382-296d7256d81e", 
           include_aliases: { external_id: externalIds }, 
           target_channel: "push",
           headings: { en: title },
