@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OneSignal from 'react-onesignal';
 import { 
   ClipboardList, Users, LogOut, Settings, X, Search, LayoutDashboard, ImagePlus, 
   Trash2, Calendar, UserCircle, RefreshCw, KeyRound, ShieldAlert, Bell, BellOff, // <-- Tambahkan BellOff
@@ -61,13 +62,16 @@ const PortalHome = () => {
 
   // Load preferensi saat user login
   useEffect(() => {
-    if (user?.id) {
-      const savedPrefs = localStorage.getItem(`syntegra_notif_prefs_${user.id}`);
-      if (savedPrefs) {
-        setMenuNotifPrefs(JSON.parse(savedPrefs));
-      }
-    }
-  }, [user]);
+  if (user?.id) {
+    OneSignal.init({
+      appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f",
+      safari_web_id: "web.onesignal.auto.3d9f0610-6ae1-419f-862e-705396ff3ef1",
+      allowLocalhostAsSecureOrigin: true,
+    }).then(() => {
+      OneSignal.login(String(user.id));
+    });
+  }
+}, [user]);
 
   // Fungsi toggle per menu
   const handleToggleMenuNotif = async (e, menuKey, menuName) => {
