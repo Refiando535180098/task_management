@@ -59,14 +59,16 @@ const PortalHome = () => {
 
   // Load preferensi saat user login
   useEffect(() => {
-    if (currentUser?.id) { 
+    // GANTI currentUser menjadi user
+    if (user?.id) { 
       OneSignal.init({
         appId: "69d9f780-2a9f-4498-8aef-a7e8fa96fe2f",
       }).then(() => {
-        OneSignal.login(String(currentUser?.id)); 
+        // GANTI currentUser menjadi user
+        OneSignal.login(String(user?.id)); 
       });
     }
-  }, [currentUser]);
+  }, [user]); // GANTI currentUser menjadi user
 
   // Fungsi toggle per menu
   const handleToggleMenuNotif = async (e, menuKey, menuName) => {
@@ -136,17 +138,40 @@ const PortalHome = () => {
     }
   };
 
+  // Pengecekan status notifikasi setiap kali login / refresh
+  useEffect(() => {
+    if ("Notification" in window) {
+      // Jika belum diizinkan ATAU malah diblokir, paksa munculkan modal
+      if (Notification.permission === "default" || Notification.permission === "denied") {
+        setShowNotifPrompt(true); 
+      } else {
+        setShowNotifPrompt(false);
+      }
+    } else {
+      alert("Peringatan Sistem: Browser HP ini tidak mendukung Notifikasi. Pastikan Anda menggunakan Google Chrome / Safari terbaru.");
+    }
+  }, []);
+
+  // Fungsi saat tombol Izinkan diklik
   const handleAllowNotification = async () => {
     try {
-      // Meminta izin langsung menggunakan OneSignal
+      // Meminta izin lewat OneSignal
       await OneSignal.Notifications.requestPermission();
-      setShowNotifPrompt(false);
+      
+      // Cek apakah karyawan mengeklik "Allow" atau "Block" di browser
+      if (Notification.permission === "granted") {
+        setShowNotifPrompt(false);
+        // FORCE REFRESH: Otomatis memuat ulang halaman agar update terbaru Vercel masuk
+        window.location.reload(); 
+      } else if (Notification.permission === "denied") {
+        // Jika ditolak, modal tetap menahan layar (tidak bisa ditutup)
+        setShowNotifPrompt(true);
+      }
     } catch (error) {
       console.error("Gagal meminta izin:", error);
-      setShowNotifPrompt(false);
     }
   };
-
+  
   // Opsional: Hapus token saat logout agar tidak menerima notif jika sudah "tidak login"
   const handleLogout = async () => {
     if (user?.id) {
@@ -1271,17 +1296,27 @@ const PortalHome = () => {
 
       {/* --- MODAL PUSH NOTIFICATION --- */}
       {showNotifPrompt && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 text-center animate-fade-in-up">
-            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 text-center animate-fade-in-up border border-slate-200">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce shadow-inner">
               <Bell size={32} />
             </div>
-            <h3 className="font-black text-slate-900 text-xl mb-2">Nyalakan Notifikasi</h3>
-            <p className="text-sm text-slate-500 mb-6 font-medium">Agar Anda tidak ketinggalan informasi tugas dan instruksi penting dari operasional perusahaan.</p>
-            <div className="space-y-3">
-              <button onClick={handleAllowNotification} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg transition-all">Ya, Izinkan Notifikasi</button>
-              <button onClick={() => setShowNotifPrompt(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold py-3.5 rounded-xl transition-all">Nanti Saja</button>
-            </div>
+            <h3 className="font-black text-slate-900 text-xl mb-2">Akses Notifikasi Wajib</h3>
+            <p className="text-sm text-slate-500 mb-6 font-medium">Sistem mewajibkan Anda mengaktifkan notifikasi agar tidak tertinggal instruksi tugas dan update operasional dari perusahaan.</p>
+            
+            {Notification.permission === "denied" ? (
+               <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold mb-4 border border-red-200 text-left">
+                 <span className="block font-black uppercase tracking-widest mb-1 text-center">Akses Terblokir 🔒</span>
+                 Anda telah memblokir notifikasi sebelumnya. Silakan klik ikon <b>Gembok/Pengaturan</b> di samping kiri URL browser Anda (di bagian atas layar), lalu ubah izin Notifikasi menjadi <b>"Allow / Izinkan"</b>.
+               </div>
+            ) : (
+               <div className="space-y-3">
+                 <button onClick={handleAllowNotification} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-[0_8px_20px_rgba(37,99,235,0.3)] transition-all flex items-center justify-center gap-2 transform hover:-translate-y-1">
+                   <Bell size={18}/> Aktifkan Sekarang
+                 </button>
+                 <p className="text-[10px] font-bold text-slate-400 mt-3">* Anda tidak dapat menutup layar ini sebelum izin diberikan.</p>
+               </div>
+            )}
           </div>
         </div>
       )}
