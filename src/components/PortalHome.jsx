@@ -7,9 +7,6 @@ import {
   Paperclip, PlusCircle, CreditCard, FileText, Car, Store, Mail 
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
-
-import { onMessage } from "firebase/messaging";
-import { requestForToken, messaging } from '../firebase';
 import * as XLSX from 'xlsx';
 
 const PortalHome = () => {
@@ -62,16 +59,14 @@ const PortalHome = () => {
 
   // Load preferensi saat user login
   useEffect(() => {
-  if (user?.id) {
-    OneSignal.init({
-      appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f",
-      safari_web_id: "web.onesignal.auto.3d9f0610-6ae1-419f-862e-705396ff3ef1",
-      allowLocalhostAsSecureOrigin: true,
-    }).then(() => {
-      OneSignal.login(String(user.id));
-    });
-  }
-}, [user]);
+    if (currentUser?.id) { 
+      OneSignal.init({
+        appId: "69d9f780-2a9f-4498-8aef-a7e8fa96fe2f",
+      }).then(() => {
+        OneSignal.login(String(currentUser?.id)); 
+      });
+    }
+  }, [currentUser]);
 
   // Fungsi toggle per menu
   const handleToggleMenuNotif = async (e, menuKey, menuName) => {
@@ -141,60 +136,11 @@ const PortalHome = () => {
     }
   };
 
-  useEffect(() => {
-    if (!("Notification" in window)) {
-      alert("Peringatan Sistem: Browser HP ini tidak mendukung Notifikasi. Pastikan Anda menggunakan koneksi HTTPS atau 'Add to Home Screen' (jika iOS).");
-      return; 
-    }
-
-    if (Notification.permission === "default") {
-      setShowNotifPrompt(true); 
-    } else if (Notification.permission === "granted") {
-      requestForToken().then(token => {
-        if(token) console.log("Token aktif sedia kala:", token);
-      });
-    } else if (Notification.permission === "denied") {
-      console.log("Izin notifikasi sudah pernah ditolak oleh pengguna.");
-    }
-    if (messaging) {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        console.log("Pesan masuk saat aplikasi terbuka:", payload);
-        if (Notification.permission === 'granted') {
-          new Notification(payload.notification.title, {
-            body: payload.notification.body,
-            icon: '/Logo_apps.png',
-            vibrate: [200, 100, 200] 
-          });
-        }
-      });
-      return () => {
-        unsubscribe(); 
-      };
-    }
-  }, []);
-
   const handleAllowNotification = async () => {
     try {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        const token = await requestForToken(); // Fungsi dari firebase.js
-        console.log("Token Baru User:", token);
-        
-        // --- TAMBAHKAN KODE INI ---
-        if (token && user?.id) {
-          const { error } = await supabase
-            .from('initial_users')
-            .update({ fcm_token: token })
-            .eq('id', user.id);
-            
-          if (error) console.error("Gagal simpan token:", error.message);
-        }
-        // -------------------------
-
-        setShowNotifPrompt(false);
-      } else {
-        setShowNotifPrompt(false);
-      }
+      // Meminta izin langsung menggunakan OneSignal
+      await OneSignal.Notifications.requestPermission();
+      setShowNotifPrompt(false);
     } catch (error) {
       console.error("Gagal meminta izin:", error);
       setShowNotifPrompt(false);

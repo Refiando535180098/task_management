@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import OneSignal from 'react-onesignal';
 import { 
   Inbox, Send, Edit3, Paperclip, Link as LinkIcon, ArrowLeft, 
   Search, Users, User, Clock, CheckCheck, FileText, X, AlertCircle,

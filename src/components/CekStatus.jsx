@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 // --- MODIFIKASI: Import Supabase Client ---
 import { supabase } from '../supabase';
+import OneSignal from 'react-onesignal';
 
 const CekStatus = () => {
   const [nik, setNik] = useState('');

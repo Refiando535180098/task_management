@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import OneSignal from 'react-onesignal';
 import { supabase } from '../supabase';
 import html2pdf from 'html2pdf.js';
 import { 
@@ -58,10 +59,12 @@ export default function TaskManagement() {
 
   // --- MINTA IZIN BROWSER UNTUK PUSH NOTIFICATION ---
   useEffect(() => {
-    if (currentUser && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission();
-      }
+    if (currentUser?.id) { 
+      OneSignal.init({
+        appId: "69d9f780-2a9f-4498-8aef-a7e8fa96fe2f", 
+      }).then(() => {
+        OneSignal.login(String(currentUser?.id)); 
+      });
     }
   }, [currentUser]);
 
