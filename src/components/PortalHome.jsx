@@ -59,16 +59,18 @@ const PortalHome = () => {
 
   // Load preferensi saat user login
   useEffect(() => {
-    // GANTI currentUser menjadi user
-    if (user?.id) { 
-      OneSignal.init({
-        appId: "69d9f780-2a9f-4498-8aef-a7e8fa96fe2f",
-      }).then(() => {
-        // GANTI currentUser menjadi user
-        OneSignal.login(String(user?.id)); 
-      });
+    if (user?.id) { // <-- Diubah menjadi user
+      try {
+        OneSignal.init({
+          appId: "69d9f780-2a9f-4498-8aef-a7e8fa96fe2f",
+        }).then(() => {
+          OneSignal.login(String(user.id)); // <-- Diubah menjadi user
+        });
+      } catch (error) {
+        console.error("OneSignal error:", error);
+      }
     }
-  }, [user]); // GANTI currentUser menjadi user
+  }, [user]); // <-- Diubah menjadi user
 
   // Fungsi toggle per menu
   const handleToggleMenuNotif = async (e, menuKey, menuName) => {
