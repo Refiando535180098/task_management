@@ -61,7 +61,7 @@ export default function TaskManagement() {
   useEffect(() => {
     if (currentUser?.id) { 
       OneSignal.init({
-        appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f", // <-- 4498 sudah diganti jadi 4490
+        appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f",
       }).then(() => {
         OneSignal.login(String(currentUser?.id)); 
       });

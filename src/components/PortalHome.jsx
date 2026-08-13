@@ -4,7 +4,7 @@ import OneSignal from 'react-onesignal';
 import { 
   ClipboardList, Users, LogOut, Settings, X, Search, LayoutDashboard, ImagePlus, 
   Trash2, Calendar, UserCircle, RefreshCw, KeyRound, ShieldAlert, Bell, BellOff, // <-- Tambahkan BellOff
-  Paperclip, PlusCircle, CreditCard, FileText, Car, Store, Mail 
+  Paperclip, PlusCircle, CreditCard, FileText, Car, Store, Mail, MessageSquare, CheckSquare
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
 import * as XLSX from 'xlsx';
