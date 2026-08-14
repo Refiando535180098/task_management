@@ -544,7 +544,7 @@ export default function TaskManagement() {
   };
 
   const handleDeleteTask = async (taskId, taskTitle) => {
-    if (currentUser.role !== 'admin') return alert("Akses ditolak. Hanya Admin yang dapat menghapus tugas.");
+    if (currentUser.role !== 'admin' && !currentUser.tm_delete_tasks) return alert("Akses ditolak. Anda tidak memiliki hak untuk menghapus tugas.");
     if (!window.confirm(`PERINGATAN: Yakin ingin menghapus tugas "${taskTitle}"?`)) return;
 
     try {
@@ -935,7 +935,16 @@ export default function TaskManagement() {
     try {
       const nameParts = (newUser.name || 'User').trim().split(/\s+/);
       const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-      const userToInsert = { ...newUser, avatar: initials };
+      const userToInsert = { 
+        ...newUser, 
+        avatar: initials,
+        tm_access_all_tasks: newUser.tm_access_all_tasks || false,
+        tm_delete_tasks: newUser.tm_delete_tasks || false,
+        tm_helpdesk_viewer: newUser.tm_helpdesk_viewer || false,
+        tm_monitor_division: newUser.tm_monitor_division || false,
+        tm_print_reports: newUser.tm_print_reports || false,
+        tm_manage_system: newUser.tm_manage_system || false,
+      };
       const { data, error } = await supabase.from('initial_users').insert([userToInsert]).select();
       
       if (!error && data) {
@@ -959,7 +968,13 @@ export default function TaskManagement() {
         position: editingUser.position, crossDivision: editingUser.crossDivision,
         accessible_divisions: editingUser.accessible_divisions,
         avatar: initials,
-        cleaningAccess: editingUser.cleaningAccess
+        cleaningAccess: editingUser.cleaningAccess,
+        tm_access_all_tasks: editingUser.tm_access_all_tasks || false,
+        tm_delete_tasks: editingUser.tm_delete_tasks || false,
+        tm_helpdesk_viewer: editingUser.tm_helpdesk_viewer || false,
+        tm_monitor_division: editingUser.tm_monitor_division || false,
+        tm_print_reports: editingUser.tm_print_reports || false,
+        tm_manage_system: editingUser.tm_manage_system || false,
       };
 
       const { error } = await supabase.from('initial_users').update(userToUpdate).eq('id', editingUser.id);
@@ -1143,37 +1158,31 @@ export default function TaskManagement() {
     const creator = users.find(u => String(u.id) === String(t.assignedBy)) || {};
     const assigneesData = assignees.map(id => users.find(u => String(u.id) === String(id)) || {});
 
-    if (currentUser.role === 'admin') return true;
+    if (currentUser.role === 'admin' || currentUser.tm_access_all_tasks) return true;
 
-    if (currentUser.role === 'direksi') {
+    const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
+
+    if (currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) {
       const isTaskAdmin = creator.role === 'admin' || assigneesData.some(u => u.role === 'admin');
-      if (isTaskAdmin) return false; 
+      if (isTaskAdmin && !isMyOwnTask && !currentUser.tm_access_all_tasks) return false; 
+      
       if (currentUser.crossDivision) return true;
 
       const allowedDivs = currentUser.accessible_divisions || [];
-      const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
-      const isAllowedDivision = allowedDivs.includes(creator.division) || assigneesData.some(u => allowedDivs.includes(u.division));
-      return isMyOwnTask || isAllowedDivision;
-    }
-
-    if (currentUser.role === 'manager') {
-      const isMyOwnTask = assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
-      const isMyDivision = creator.division === currentUser.division || assigneesData.some(u => u.division === currentUser.division);
-      if (currentUser.crossDivision) {
-        const isStaffTask = assigneesData.some(u => u.role === 'staff');
-        return isMyOwnTask || isMyDivision || isStaffTask;
+      if (allowedDivs.length > 0) {
+        const isAllowedDivision = allowedDivs.includes(creator.division) || assigneesData.some(u => allowedDivs.includes(u.division));
+        if (isAllowedDivision) return true;
       }
-      return isMyOwnTask || isMyDivision;
+
+      const isMyDivision = creator.division === currentUser.division || assigneesData.some(u => u.division === currentUser.division);
+      if (isMyDivision) return true;
     }
 
-    if (currentUser.role === 'staff') {
-      return assignees.includes(currentUser.id) || String(t.assignedBy) === String(currentUser.id);
-    }
-    return false;
+    return isMyOwnTask;
   });
 
   const activeTasks = myTasks;
-  const isHelpdeskViewer = currentUser?.division?.toLowerCase() === 'it' || ['admin', 'direksi', 'manager'].includes(currentUser?.role);
+  const isHelpdeskViewer = currentUser?.division?.toLowerCase() === 'it' || ['admin', 'direksi', 'manager'].includes(currentUser?.role) || currentUser?.tm_helpdesk_viewer;
   const urgentTasks = activeTasks.filter(t => {
     if (t.status === 'done') return false; 
     
@@ -1256,21 +1265,21 @@ export default function TaskManagement() {
               </button>
             )}
 
-            {currentUser.role === 'staff' && (
+            {!(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_print_reports) && (
               <button type="button" title="Laporan Hasil Saya" onClick={() => navigateTo('laporan')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <FileText className="w-5 h-5 shrink-0" /> 
                 {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan Hasil Saya</span>}
               </button>
             )}
             
-            {(currentUser.role !== 'staff') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_print_reports) && (
               <button type="button" title="Laporan & Cetak" onClick={() => navigateTo('laporan', () => setReportTargetUserId('ALL'))} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'laporan' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <Printer className="w-5 h-5 shrink-0" /> 
                 {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
               </button>
             )}
             
-            {(currentUser.role !== 'staff') && (
+            {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (
               <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
                 {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Organisasi</p>}
                 
@@ -1288,7 +1297,7 @@ export default function TaskManagement() {
                 <div className={`transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-[400px] overflow-y-auto custom-scrollbar mt-2' : 'max-h-0 overflow-hidden'}`}>
                   <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1 pr-1">
                     {(currentUser.role === 'direksi' || currentUser.role === 'admin') && <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Divisi</button>}
-                    {divisions.filter(div => currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(div)) || div === currentUser.division).map(div => (
+                    {divisions.filter(div => currentUser.role === 'admin' || currentUser.tm_access_all_tasks || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(div)) || div === currentUser.division).map(div => (
                       <button type="button" key={div} onClick={() => { navigateTo('division'); setSelectedDivision(div); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div}</button>
                     ))}
                   </div>
@@ -1296,7 +1305,7 @@ export default function TaskManagement() {
               </div>
             )}
 
-            {currentUser.role === 'admin' && (
+            {(currentUser.role === 'admin' || currentUser.tm_manage_system) && (
               <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
                  {isSidebarOpen && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-3 whitespace-nowrap">Sistem Super Admin</p>}
                  <button type="button" title="Kelola Pengguna" onClick={() => navigateTo('admin_users')} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'admin_users' ? 'bg-blue-50 text-blue-700 border border-blue-100/50 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><UserPlus className="w-5 h-5 shrink-0" /> {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Kelola Pengguna</span>}</button>
@@ -1334,7 +1343,7 @@ export default function TaskManagement() {
             <div>
               <h1 className="text-xl md:text-4xl font-black text-slate-900 tracking-tight">
                 {activeTab === 'dashboard' && 'Beranda Kinerja'}
-                {activeTab === 'tasks' && (currentUser.role === 'admin' ? 'Seluruh Daftar Pekerjaan' : 'Daftar Pekerjaan')}
+                {activeTab === 'tasks' && (currentUser.role === 'admin' || currentUser.tm_access_all_tasks ? 'Seluruh Daftar Pekerjaan' : 'Daftar Pekerjaan')}
                 {activeTab === 'laporan' && 'Laporan Kinerja'}
                 {activeTab === 'division' && `Pantauan: ${selectedDivision}`}
                 {activeTab === 'admin_users' && 'Manajemen Pengguna'}
@@ -1769,12 +1778,12 @@ export default function TaskManagement() {
                     </div>
                   </div>
 
-                  {(currentUser.role !== 'staff') && (
+                  {(currentUser.role !== 'staff' || currentUser.tm_print_reports) && (
                     <div className="w-full md:w-1/2">
                       <h3 className="font-black text-sm md:text-base text-slate-800 mb-3 md:mb-4 flex items-center gap-2"><Users className="w-4 h-4 md:w-5 md:h-5 text-blue-500"/> Pilih Laporan Karyawan</h3>
                       <select value={reportTargetUserId} onChange={(e) => setReportTargetUserId(e.target.value)} className="w-full px-3 py-2 md:px-4 md:py-3 border border-slate-300 flex items-center rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
                          <option value="ALL">-- CETAK LAPORAN SEMUA KARYAWAN --</option>
-                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division)).map(u => (
+                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.tm_access_all_tasks || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division)).map(u => (
                            <option key={u.id} value={u.id}>{u.name} - {u.role.toUpperCase()} (Divisi {u.division})</option>
                          ))}
                       </select>
@@ -1784,12 +1793,12 @@ export default function TaskManagement() {
               </Card>
 
               {(() => {
-                const isGlobalMode = (currentUser.role !== 'staff') && (reportTargetUserId === 'ALL');
+                const isGlobalMode = (currentUser.role !== 'staff' || currentUser.tm_print_reports) && (reportTargetUserId === 'ALL');
                 let targetUser = null;
 
                 if (isGlobalMode) {
                   targetUser = { id: 'ALL', name: 'Semua Karyawan & Staff', position: 'Berbagai Posisi', division: 'Seluruh Divisi' };
-                } else if (currentUser.role === 'staff') {
+                } else if (currentUser.role === 'staff' && !currentUser.tm_print_reports) {
                   targetUser = currentUser; 
                 } else {
                   targetUser = users.find(u => String(u.id) === String(reportTargetUserId));
@@ -1957,12 +1966,12 @@ export default function TaskManagement() {
           )}
 
           {/* TAB: TIM DIVISI */}
-          {activeTab === 'division' && (currentUser.role !== 'staff') && (
+          {activeTab === 'division' && (currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 print:hidden animate-in fade-in duration-300 md:p-10">
               {users.filter(u => 
                  (u.role === 'staff' || u.role === 'manager') && 
                  (selectedDivision === 'Semua Divisi' ? 
-                     (currentUser.role === 'admin' || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division) : 
+                     (currentUser.role === 'admin' || currentUser.tm_access_all_tasks || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division) : 
                      u.division === selectedDivision
                  )
               ).map(staff => {
@@ -1988,7 +1997,7 @@ export default function TaskManagement() {
           )}
 
           {/* TAB: KELOLA PENGGUNA */}
-          {activeTab === 'admin_users' && currentUser.role === 'admin' && (
+          {activeTab === 'admin_users' && (currentUser.role === 'admin' || currentUser.tm_manage_system) && (
             <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 md:p-10 pb-28 md:pb-0">
               <Card className="border-0 shadow-sm overflow-hidden bg-white">
                  <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2074,7 +2083,7 @@ export default function TaskManagement() {
           )}
 
           {/* TAB: PENGATURAN */}
-          {activeTab === 'admin_settings' && currentUser.role === 'admin' && (
+          {activeTab === 'admin_settings' && (currentUser.role === 'admin' || currentUser.tm_manage_system) && (
             <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300 md:p-8 pb-32 md:pb-10">
               <div className="px-2 md:px-0 mb-2">
                 <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
@@ -2284,7 +2293,7 @@ export default function TaskManagement() {
                   <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-2 md:gap-3">
                       <h3 className="font-black text-sm md:text-xl text-slate-800 tracking-tight">Info Pekerjaan</h3>
-                      {currentUser?.role === 'admin' && (
+                      {(currentUser?.role === 'admin' || currentUser?.tm_delete_tasks) && (
                         <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm">
                           <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus</span>
                         </button>
@@ -2394,7 +2403,7 @@ export default function TaskManagement() {
                         </div>
                       )}
 
-                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && selectedTask.status === 'waiting-approval' && (
+                    {((String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin' || currentUser.tm_access_all_tasks) && selectedTask.status === 'waiting-approval') && (
                       <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
                         <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
                         <div className="grid grid-cols-2 gap-3">
@@ -2685,6 +2694,54 @@ export default function TaskManagement() {
                       <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser?.position || ''} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
                     </div>
 
+                    <div className="border-t border-slate-100 pt-5 mt-4">
+                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">Kustomisasi Hak Akses Task Manager</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_access_all_tasks || false} onChange={e => setNewUser({...newUser, tm_access_all_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Akses Semua Pekerjaan</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat melihat tugas seluruh divisi tanpa batas wilayah.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_delete_tasks || false} onChange={e => setNewUser({...newUser, tm_delete_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Hapus Tugas (Bypass)</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat menghapus data tugas dari database secara permanen.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_helpdesk_viewer || false} onChange={e => setNewUser({...newUser, tm_helpdesk_viewer: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Admin Helpdesk IT</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Membuka menu & menerima notifikasi laporan kendala IT.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_monitor_division || false} onChange={e => setNewUser({...newUser, tm_monitor_division: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Pantau Tim Divisi</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Mengizinkan melihat menu pantauan KPI anggota tim.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_print_reports || false} onChange={e => setNewUser({...newUser, tm_print_reports: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Cetak Laporan Global</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat mengakses menu laporan KPI dan mengunduh rekap PDF.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_manage_system || false} onChange={e => setNewUser({...newUser, tm_manage_system: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Akses Super Admin</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Membuka menu Kelola Pengguna dan Konfigurasi Sistem.</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
                   </div>
                   <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
                     <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
@@ -2748,6 +2805,54 @@ export default function TaskManagement() {
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
                       <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser.position} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-5 mt-4">
+                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">Kustomisasi Hak Akses Task Manager</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_access_all_tasks || false} onChange={e => setEditingUser({...editingUser, tm_access_all_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Akses Semua Pekerjaan</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat melihat tugas seluruh divisi tanpa batas wilayah.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_delete_tasks || false} onChange={e => setEditingUser({...editingUser, tm_delete_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Hapus Tugas (Bypass)</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat menghapus data tugas dari database secara permanen.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_helpdesk_viewer || false} onChange={e => setEditingUser({...editingUser, tm_helpdesk_viewer: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Admin Helpdesk IT</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Membuka menu & menerima notifikasi laporan kendala IT.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_monitor_division || false} onChange={e => setEditingUser({...editingUser, tm_monitor_division: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Pantau Tim Divisi</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Mengizinkan melihat menu pantauan KPI anggota tim.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_print_reports || false} onChange={e => setEditingUser({...editingUser, tm_print_reports: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Cetak Laporan Global</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat mengakses menu laporan KPI dan mengunduh rekap PDF.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_manage_system || false} onChange={e => setEditingUser({...editingUser, tm_manage_system: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Akses Super Admin</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Membuka menu Kelola Pengguna dan Konfigurasi Sistem.</span>
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
                     <label className="flex items-start gap-3 p-4 mt-2 border-2 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors">
@@ -2864,7 +2969,7 @@ export default function TaskManagement() {
                  </button>
               </div>
 
-              {(currentUser.role === 'staff') ? (
+              {(currentUser.role === 'staff' && !currentUser.tm_print_reports) ? (
                 <button type="button" onClick={() => navigateTo('laporan')} className="flex flex-col items-center justify-center w-14 h-full gap-1.5 transition-colors">
                   <FileText className={`w-6 h-6 ${activeTab === 'laporan' ? 'text-blue-600 fill-blue-50' : 'text-slate-400'}`} />
                   <span className={`text-[10px] font-black tracking-wide ${activeTab === 'laporan' ? 'text-blue-600' : 'text-slate-400'}`}>Laporan</span>

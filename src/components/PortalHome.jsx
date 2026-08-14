@@ -94,14 +94,14 @@ const PortalHome = () => {
   };
 
   // ==========================================
-  // FITUR: SLIP GAJI PRIBADI KARYAWAN
+  //     FITUR: SLIP GAJI PRIBADI KARYAWAN
   // ==========================================
   const [myPayslips, setMyPayslips] = useState([]);
   const [showMyPayslipsModal, setShowMyPayslipsModal] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
 
   // ==========================================
-  // FITUR BARU: HITUNG KENDARAAN PASAR
+  //     FITUR BARU: HITUNG KENDARAAN PASAR
   // ==========================================
   const [isMarketModalOpen, setIsMarketModalOpen] = useState(false);
   const [motorIn, setMotorIn] = useState(0);
