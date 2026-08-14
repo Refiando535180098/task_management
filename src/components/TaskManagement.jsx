@@ -61,7 +61,7 @@ export default function TaskManagement() {
   useEffect(() => {
     if (currentUser?.id) { 
       OneSignal.init({
-        appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f",
+        appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f", 
       }).then(() => {
         OneSignal.login(String(currentUser?.id)); 
       });
@@ -166,20 +166,11 @@ export default function TaskManagement() {
 
   // --- EFEK UNTUK MEMBUKA TASK DARI LINK URL ---
   useEffect(() => {
-    // Pastikan ID dari URL ada dan data tasks sudah selesai dimuat dari Supabase
     if (taskIdFromUrl && tasks.length > 0) {
-      
-      // Cari tugas yang ID-nya cocok
       const taskToOpen = tasks.find(t => String(t.id) === String(taskIdFromUrl));
-      
       if (taskToOpen) {
-        // Pindah ke tab 'tasks'
         setActiveTab('tasks');
-        
-        // Buka modal detail tugas
         setSelectedTask(taskToOpen);
-        
-        // (Opsional) Bersihkan URL agar jika user me-refresh halaman, modal tidak terbuka terus-menerus
         searchParams.delete('taskId');
         setSearchParams(searchParams, { replace: true });
       }
@@ -410,16 +401,13 @@ export default function TaskManagement() {
     if (!task) return;
 
     // ===== TAMBAHAN: VALIDASI MODE DISIPLIN =====
-    // Jika status diubah menjadi 'done' dan mode disiplin aktif, pastikan ada attachment
     if (newStatus === 'done' && sysConfig.strictMode) {
       if (!task.attachments || task.attachments.length === 0) {
         alert("MODE DISIPLIN AKTIF: Anda wajib melampirkan minimal 1 bukti (foto/dokumen) sebelum menyelesaikan tugas ini!");
-        
-        // Memaksa dropdown kembali ke status aslinya
         if (selectedTask && selectedTask.id === taskId) {
           setSelectedTask({ ...task }); 
         }
-        return; // Hentikan eksekusi ke database
+        return; 
       }
     }
     // ============================================
@@ -453,7 +441,6 @@ export default function TaskManagement() {
           setSelectedTask({ ...selectedTask, ...updatePayload });
         }
 
-        // Kirim notifikasi ke pembuat tugas (AssignedBy) jika yang mengubah status adalah staff/orang lain
         if (String(task.assignedBy) !== String(currentUser.id)) {
            await supabase.from('notifications').insert([{
               userId: task.assignedBy,
@@ -603,26 +590,21 @@ export default function TaskManagement() {
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
            fetchNotifications();
 
-           // Pastikan push notifikasi ini hanya muncul di layar user yang dituju
            if (String(payload.new.userId) === String(currentUser.id)) {
-              
-              // Putar suara notifikasi
               const notifSound = new Audio('/Notif_suara.mp3');
               notifSound.play().catch(e => console.log("Suara standby"));
 
-              // TEMBAKKAN PUSH NOTIFICATION KE HP / DESKTOP
               if ("Notification" in window && Notification.permission === "granted") {
                  const notifTitle = payload.new.type === 'chat' ? "Pesan Baru" : "Tugas Baru";
                  new Notification(notifTitle, {
                     body: payload.new.message,
-                    icon: '/Logo_apps.png', // Menggunakan logo aplikasimu
+                    icon: '/Logo_apps.png', 
                     badge: '/Logo_apps.png',
-                    vibrate: [200, 100, 200] // Efek getar untuk HP
+                    vibrate: [200, 100, 200] 
                  });
               }
            }
         })
-        // 2. Jika notifikasi hanya dibaca (Delete/Update), jangan bunyikan pop-up
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => fetchNotifications())
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'notifications' }, () => fetchNotifications())
         .subscribe();
@@ -834,7 +816,6 @@ export default function TaskManagement() {
       };
     } 
     else if (taskFormType === 'ticketing') {
-      // Cari semua akun Admin dan SEMUA Karyawan di Divisi IT
       const itUsers = users.filter(u => u.role === 'admin' || (u.division && u.division.toLowerCase() === 'it')).map(u => u.id);
       
       if (itUsers.length === 0) {
@@ -857,8 +838,8 @@ export default function TaskManagement() {
       };
     }
     else {
-      assignedUserIds = currentUser.role === 'staff' ? [currentUser.id] : newTask.assignedTo;
-      if (currentUser.role !== 'staff' && assignedUserIds.length === 0) {
+      assignedUserIds = (currentUser.role === 'staff' && !currentUser.tm_assign_tasks) ? [currentUser.id] : newTask.assignedTo;
+      if ((currentUser.role !== 'staff' || currentUser.tm_assign_tasks) && assignedUserIds.length === 0) {
          setIsSubmitting(false);
          return alert("Pilih minimal satu anggota atau tim!");
       }
@@ -944,6 +925,7 @@ export default function TaskManagement() {
         tm_monitor_division: newUser.tm_monitor_division || false,
         tm_print_reports: newUser.tm_print_reports || false,
         tm_manage_system: newUser.tm_manage_system || false,
+        tm_assign_tasks: newUser.tm_assign_tasks || false,
       };
       const { data, error } = await supabase.from('initial_users').insert([userToInsert]).select();
       
@@ -975,6 +957,7 @@ export default function TaskManagement() {
         tm_monitor_division: editingUser.tm_monitor_division || false,
         tm_print_reports: editingUser.tm_print_reports || false,
         tm_manage_system: editingUser.tm_manage_system || false,
+        tm_assign_tasks: editingUser.tm_assign_tasks || false,
       };
 
       const { error } = await supabase.from('initial_users').update(userToUpdate).eq('id', editingUser.id);
@@ -1407,7 +1390,7 @@ export default function TaskManagement() {
 
                {activeTab !== 'laporan' && activeTab !== 'admin_users' && activeTab !== 'admin_settings' && (
                  <button type="button" onClick={() => setIsModalOpen(true)} className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 md:px-6 md:py-3 rounded-xl font-bold items-center justify-center gap-2 shadow-lg transition-all flex-1 md:flex-none text-xs md:text-sm">
-                   <Plus className="w-4 h-4 md:w-5 md:h-5" /> {currentUser.role === 'staff' ? 'Tugas Baru' : 'Instruksi Baru'}
+                   <Plus className="w-4 h-4 md:w-5 md:h-5" /> {(currentUser.role === 'staff' && !currentUser.tm_assign_tasks) ? 'Tugas Baru' : 'Instruksi Baru'}
                  </button>
                )}
                {activeTab === 'admin_users' && (
@@ -2515,7 +2498,7 @@ export default function TaskManagement() {
               <Card className="w-full h-[90vh] md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full md:zoom-in duration-300 border-0 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] md:shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white"> 
                 <div className="px-5 py-4 md:px-8 md:py-6 border-b border-blue-500 flex justify-between items-center bg-blue-600 text-white shrink-0">
                   <div>
-                     <h3 className="font-black text-base md:text-xl tracking-tight">{currentUser.role === 'staff' ? 'Catat Tugas Mandiri' : 'Form Instruksi Baru'}</h3>
+                     <h3 className="font-black text-base md:text-xl tracking-tight">{(currentUser.role === 'staff' && !currentUser.tm_assign_tasks) ? 'Catat Tugas Mandiri' : 'Form Instruksi Baru'}</h3>
                      <p className="text-blue-200 text-[9px] md:text-[10px] font-medium mt-0.5">Isi rincian detail pekerjaan.</p>
                   </div>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
@@ -2550,7 +2533,7 @@ export default function TaskManagement() {
                               <input required type="datetime-local" className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newTask.dueDate} onChange={e => setNewTask({...newTask, dueDate: e.target.value})}/>
                             </div>
                           </div>
-                          {currentUser.role !== 'staff' && (
+                          {(currentUser.role !== 'staff' || currentUser.tm_assign_tasks) && (
                             <div>
                               <div className="flex justify-between items-end mb-1.5">
                                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Pilih Penerima Instruksi</label>
@@ -2562,8 +2545,8 @@ export default function TaskManagement() {
                               <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-slate-200 rounded-xl p-2 space-y-1 bg-slate-50 custom-scrollbar">
                                 {users.filter(u => {
                                    let hasAccess = false;
-                                   if (currentUser.role === 'direksi' || currentUser.role === 'admin') hasAccess = (u.role === 'manager' || u.role === 'staff');
-                                   else if (currentUser.role === 'manager') hasAccess = (u.role === 'staff' || u.role === 'manager'); 
+                                   if (currentUser.role === 'direksi' || currentUser.role === 'admin' || currentUser.tm_access_all_tasks) hasAccess = (u.role === 'manager' || u.role === 'staff');
+                                   else if (currentUser.role === 'manager' || currentUser.tm_monitor_division) hasAccess = (u.role === 'staff' || u.role === 'manager'); 
                                    else hasAccess = (u.role === 'staff');
                                    if (!hasAccess) return false;
                                    if (recipientSearchQuery) return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
@@ -2661,7 +2644,7 @@ export default function TaskManagement() {
           {/* === MODAL 3: TAMBAH PENGGUNA === */}
           {isUserModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex justify-end md:justify-center items-end md:items-center md:p-4 print:hidden">
-              <Card className="w-full h-[90vh] md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full md:zoom-in duration-300 border-0 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] md:shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white">
+              <Card className="w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-full md:zoom-in duration-300 border-0 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] md:shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white">
                 <div className="px-5 py-4 md:px-8 md:py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 text-white shrink-0">
                   <div>
                      <h3 className="font-black text-base md:text-xl tracking-tight">Tambah Pengguna</h3>
@@ -2691,12 +2674,19 @@ export default function TaskManagement() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Posisi Jabatan</label>
-                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={editingUser?.position || ''} onChange={e => setEditingUser({...editingUser, position: e.target.value})}/>
+                      <input required type="text" className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold" value={newUser.position || ''} onChange={e => setNewUser({...newUser, position: e.target.value})}/>
                     </div>
 
                     <div className="border-t border-slate-100 pt-5 mt-4">
                         <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">Kustomisasi Hak Akses Task Manager</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={newUser.tm_assign_tasks || false} onChange={e => setNewUser({...newUser, tm_assign_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Beri & Delegasi Tugas</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat memberikan instruksi/tugas ke pengguna lain.</span>
+                                </div>
+                            </label>
                             <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
                                 <input type="checkbox" checked={newUser.tm_access_all_tasks || false} onChange={e => setNewUser({...newUser, tm_access_all_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
                                 <div>
@@ -2742,18 +2732,19 @@ export default function TaskManagement() {
                         </div>
                     </div>
 
+                    <label className="flex items-center gap-3 p-4 mt-2 border-2 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors mb-2">
+                      <input type="checkbox" checked={newUser.cleaningAccess || false} onChange={(e) => setNewUser({...newUser, cleaningAccess: e.target.checked})} className="w-5 h-5 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 mt-0.5 cursor-pointer"/>
+                      <div>
+                        <span className="text-xs md:text-sm font-black text-emerald-900 block">Beri Akses Fitur Laporan OB/Cleaning</span>
+                        <span className="text-[10px] md:text-[11px] font-medium text-emerald-600 block mt-0.5">Pengguna dapat mengirim laporan kebersihan cepat tanpa batas waktu/deadline.</span>
+                      </div>
+                    </label>
                   </div>
-                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
+                  
+                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 shrink-0">
                     <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
                     <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Pengguna</button>
                   </div>
-                  <label className="flex items-center gap-3 p-4 mt-2 border-2 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors mx-5 mb-5">
-                    <input type="checkbox" checked={newUser.cleaningAccess || false} onChange={(e) => setNewUser({...newUser, cleaningAccess: e.target.checked})} className="w-5 h-5 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500 mt-0.5 cursor-pointer"/>
-                    <div>
-                      <span className="text-xs md:text-sm font-black text-emerald-900 block">Beri Akses Fitur Laporan OB/Cleaning</span>
-                      <span className="text-[10px] md:text-[11px] font-medium text-emerald-600 block mt-0.5">Pengguna dapat mengirim laporan kebersihan cepat tanpa batas waktu/deadline.</span>
-                    </div>
-                  </label>
                 </form>
               </Card>
             </div>
@@ -2761,8 +2752,8 @@ export default function TaskManagement() {
 
           {/* === MODAL 4: EDIT PENGGUNA === */}
           {isEditUserModalOpen && editingUser && (
-            <div className="fixed inset-0 bg-slate-900/70 z-[80] flex justify-center md:items-center md:p-4 print:hidden">
-              <Card className="w-full h-full md:h-auto md:max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in duration-300 border-0 shadow-2xl md:rounded-2xl">
+            <div className="fixed inset-0 bg-slate-900/70 z-[80] flex justify-end md:justify-center items-end md:items-center md:p-4 print:hidden">
+              <Card className="w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in duration-300 border-0 shadow-2xl rounded-t-[2rem] rounded-b-none md:rounded-2xl mt-auto md:mt-0 relative bg-white">
                 <div className="px-5 py-4 md:px-8 md:py-6 border-b border-blue-600 flex justify-between items-center bg-blue-600 text-white shrink-0">
                   <div>
                      <h3 className="font-black text-base md:text-xl tracking-tight">Edit Data Pengguna</h3>
@@ -2811,6 +2802,13 @@ export default function TaskManagement() {
                         <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">Kustomisasi Hak Akses Task Manager</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
+                                <input type="checkbox" checked={editingUser.tm_assign_tasks || false} onChange={e => setEditingUser({...editingUser, tm_assign_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
+                                <div>
+                                    <span className="text-[11px] font-black text-slate-800 block mb-0.5">Beri & Delegasi Tugas</span>
+                                    <span className="text-[9px] font-medium text-slate-500 leading-tight block">Dapat memberikan instruksi/tugas ke pengguna lain.</span>
+                                </div>
+                            </label>
+                            <label className="flex items-start gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-200 hover:bg-white hover:border-blue-300 transition-colors shadow-sm">
                                 <input type="checkbox" checked={editingUser.tm_access_all_tasks || false} onChange={e => setEditingUser({...editingUser, tm_access_all_tasks: e.target.checked})} className="w-4 h-4 text-blue-600 rounded mt-0.5"/>
                                 <div>
                                     <span className="text-[11px] font-black text-slate-800 block mb-0.5">Akses Semua Pekerjaan</span>
@@ -2855,7 +2853,7 @@ export default function TaskManagement() {
                         </div>
                     </div>
 
-                    <label className="flex items-start gap-3 p-4 mt-2 border-2 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors">
+                    <label className="flex items-start gap-3 p-4 mt-2 border-2 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors mb-2">
                       <input 
                         type="checkbox" 
                         checked={editingUser.cleaningAccess || false} 
@@ -2869,7 +2867,7 @@ export default function TaskManagement() {
                     </label>
 
                   </div>
-                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
+                  <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 shrink-0">
                     <button type="button" onClick={() => setIsEditUserModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
                     <button type="submit" className="px-4 py-2.5 md:px-5 md:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs md:text-sm shadow-md">Simpan Perubahan</button>
                   </div>
