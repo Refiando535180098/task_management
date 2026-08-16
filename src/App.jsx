@@ -11,6 +11,7 @@ import CekStatus from './components/CekStatus';
 import PortalHome from './components/PortalHome';
 import FinanceDashboard from './components/FinanceDashboard';
 import Communication from './components/Communication';
+import ParkingDashboard from './components/ParkingDashboard';
 
 // Komponen Proteksi Rute Umum
 const ProtectedRoute = ({ children }) => {
@@ -84,6 +85,13 @@ export default function App() {
           <FinanceRoute>
             <FinanceDashboard />
           </FinanceRoute>
+        } />
+
+        {/* Modul Parking */}
+        <Route path="/parking" element={
+          <ProtectedRoute>
+            <ParkingDashboard />
+          </ProtectedRoute>
         } />
 
         {/* Rute Publik (QR Code) */}
