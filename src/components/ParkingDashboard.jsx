@@ -257,7 +257,7 @@ const ParkingDashboard = () => {
   if (!user) return ( <div className="flex h-screen w-full items-center justify-center bg-slate-50"><RefreshCw className="w-8 h-8 animate-spin text-purple-500" /></div> );
 
   const processPayload = async (payloads) => {
-    setIsSubmitting(true);
+    setIsSubmitting(true); 
     try {
       const uniqueMarkets = [...new Set(payloads.map(p => p.nama_pasar))];
       const newMarkets = uniqueMarkets.filter(m => !marketList.includes(m) && m !== "Pasar Tidak Diketahui");
