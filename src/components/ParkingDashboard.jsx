@@ -5,7 +5,7 @@ import { supabase } from '../supabase';
 import { 
   ArrowLeft, LayoutDashboard, Plus, PlusCircle, X, RefreshCw, FileText, Menu, Save, 
   Upload, Search, BarChart3, Car, Calendar, MapPin, ClipboardList, Clock, Store,
-  Wallet, Users, TrendingUp, FileSpreadsheet, Trash2
+  Wallet, Users, TrendingUp, FileSpreadsheet, Trash2, Settings, Download, FileImage, Image as ImageIcon
 } from 'lucide-react';
 
 const ParkingDashboard = () => {
@@ -16,107 +16,147 @@ const ParkingDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [lastSync, setLastSync] = useState(new Date());
 
-  // Data
   const [incomes, setIncomes] = useState([]);
   const [marketList, setMarketList] = useState([]);
   
-  // Filter States
-  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [filterMonth, setFilterMonth] = useState('');
   const [filterMarket, setFilterMarket] = useState('');
   
-  // Input Form States
   const [inputMode, setInputMode] = useState('manual');
-  const [manualForm, setManualForm] = useState({ tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Pagi', shift_start: '08:00', shift_end: '16:00', income_casual: '', income_langganan: '' });
+  
+  const [manualForm, setManualForm] = useState({ 
+    tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', 
+    inc_motor: '', inc_manual_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '',
+    qty_motor: '', qty_manual_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '',
+    tm_qty: '', tm_nominal: '', tm_photo: null
+  });
+  
+  const [massInputRows, setMassInputRows] = useState([{ 
+    id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', 
+    inc_motor: '', inc_manual_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '',
+    qty_motor: '', qty_manual_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '' 
+  }]);
+  
   const [pasteData, setPasteData] = useState('');
-  const [massInputRows, setMassInputRows] = useState([{ id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Pagi', income_casual: '', income_langganan: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Cek Autentikasi
+  const [markups, setMarkups] = useState({});
+  const [markupForm, setMarkupForm] = useState({ month: new Date().toISOString().slice(0, 7), percentage: 10 });
+  const [isSavingMarkup, setIsSavingMarkup] = useState(false);
+
+  const fetchMarkups = async () => {
+    try {
+      const { data } = await supabase.from('parking_markups').select('*');
+      if (data) {
+        const markupObj = {};
+        data.forEach(item => { markupObj[item.month] = item.percentage; });
+        setMarkups(markupObj);
+      }
+    } catch (e) { console.warn("Tabel markups blm ada.", e); }
+  };
+
+  const handleSaveMarkup = async (e) => {
+    e.preventDefault();
+    setIsSavingMarkup(true);
+    try {
+      await supabase.from('parking_markups').delete().eq('month', markupForm.month);
+      const { error } = await supabase.from('parking_markups').insert([{ month: markupForm.month, percentage: Number(markupForm.percentage) }]);
+      if (error) throw error;
+      alert(`Markup ${markupForm.percentage}% untuk bulan ${markupForm.month} berhasil diterapkan!`);
+      setMarkups(prev => ({...prev, [markupForm.month]: Number(markupForm.percentage)}));
+    } catch (err) { alert('Gagal: ' + err.message); } finally { setIsSavingMarkup(false); }
+  };
+
+  const handleDeleteMarkup = async (month) => {
+    if(!window.confirm(`Yakin hapus markup bulan ${month}?`)) return;
+    try {
+      await supabase.from('parking_markups').delete().eq('month', month);
+      const newMarkups = {...markups}; delete newMarkups[month]; setMarkups(newMarkups);
+    } catch (err) { alert('Gagal: ' + err.message); }
+  };
+
   useEffect(() => {
     const session = JSON.parse(localStorage.getItem('syntegra_user_session'));
     if (!session) { navigate('/login'); return; }
-    
     const isAdmin = session.role === 'admin' || session.role === 'direksi';
-    if (!session.pkr_access_menu && !isAdmin) {
-      alert('Anda tidak memiliki izin mengakses Modul Parkir.');
-      navigate('/'); return;
-    }
+    if (!session.pkr_access_menu && !isAdmin) { alert('Akses Ditolak.'); navigate('/'); return; }
     setUser(session);
   }, [navigate]);
 
-  // 2. Fetch Data & Auto-Refresh 1 Menit
   useEffect(() => {
     if (!user) return;
-
     const fetchMarkets = async () => {
-      try {
-        const { data } = await supabase.from('portal_markets').select('name').order('name');
-        if (data) setMarketList(data.map(m => m.name));
-      } catch (e) { console.error(e); }
+      try { const { data } = await supabase.from('portal_markets').select('name').order('name');
+            if (data) setMarketList(data.map(m => m.name)); } catch (e) {}
     };
-
     const fetchData = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('parking_incomes')
-          .select('*, initial_users(name)')
-          .order('tanggal', { ascending: false });
-
-        if (error) throw error;
-        setIncomes(data || []);
-        setLastSync(new Date());
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
+        const { data, error } = await supabase.from('parking_incomes').select('*, initial_users(name)').order('tanggal', { ascending: false });
+        if (error) throw error; setIncomes(data || []); setLastSync(new Date());
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     };
-
-    fetchMarkets();
-    fetchData();
-
-    const intervalId = setInterval(() => {
-      fetchData();
-    }, 60000);
-
+    fetchMarkets(); fetchMarkups(); fetchData();
+    const intervalId = setInterval(() => { fetchData(); }, 60000);
     return () => clearInterval(intervalId);
   }, [user]);
 
-  const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka || 0);
-
-  // =====================================
-  // FUNGSI AUTO-CORRECT NAMA PASAR
-  // =====================================
   const standardizeMarketName = (inputName) => {
     if (!inputName) return "Pasar Tidak Diketahui";
-    const inputLower = String(inputName).toLowerCase();
+    const rawString = String(inputName).trim();
+    const inputClean = rawString.toLowerCase().replace(/pasar|jaya|parkir/g, '').trim();
     
+    let bestMatch = null;
+    let maxMatchScore = 0;
+
     for (let market of marketList) {
-      const marketLower = market.toLowerCase();
-      const keywords = marketLower.replace(/pasar|jaya|parkir/g, '').trim().split(' ');
+      const marketClean = market.toLowerCase().replace(/pasar|jaya|parkir/g, '').trim();
+      if (inputClean === marketClean) return market;
       
+      const keywords = marketClean.split(' ').filter(w => w.length > 2);
+      if (keywords.length === 0) continue;
+      
+      let allMatch = true;
       for (let word of keywords) {
-        if (word.length > 2 && inputLower.includes(word)) {
-          return market; 
+        if (!inputClean.includes(word)) {
+          allMatch = false;
+          break;
+        }
+      }
+      
+      if (allMatch && keywords.length > maxMatchScore) {
+        const inputKeywords = inputClean.split(' ').filter(w => w.length > 2);
+        if (inputKeywords.length === keywords.length) {
+            maxMatchScore = keywords.length;
+            bestMatch = market;
         }
       }
     }
-    return inputName; 
+    
+    if (!bestMatch) {
+        return rawString.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase());
+    }
+    return bestMatch; 
   };
 
-  // =====================================
-  // SECURITY & VISIBILITY (BERDASARKAN AKSES)
-  // =====================================
   const isAdmin = user?.role === 'admin' || user?.role === 'direksi';
-  const canViewDashboard = isAdmin || user?.pkr_view_dashboard || user?.pkr_view_monthly || user?.pkr_view_daily || user?.pkr_view_shift || user?.pkr_view_global;
+  const canViewDashboard = isAdmin || user?.pkr_view_dashboard || user?.pkr_view_chart_daily || user?.pkr_view_chart_shift || user?.pkr_view_chart_market || user?.pkr_view_chart_monthly;
   const canSubmit = isAdmin || user?.pkr_submit_report;
   const canViewGlobal = isAdmin || user?.pkr_view_global;
-  const canViewMonthly = isAdmin || user?.pkr_view_monthly;
-  const canViewDaily = isAdmin || user?.pkr_view_daily;
-  const canViewShift = isAdmin || user?.pkr_view_shift;
+  const canViewChartDaily = isAdmin || user?.pkr_view_chart_daily;
+  const canViewChartShift = isAdmin || user?.pkr_view_chart_shift;
+  const canViewChartMarket = isAdmin || user?.pkr_view_chart_market;
+  const canViewChartMonthly = isAdmin || user?.pkr_view_chart_monthly;
+  const canViewLog = isAdmin || user?.pkr_view_log_harian;
+  const canAccessSetting = isAdmin || user?.pkr_access_setting;
+  const isMarkupViewer = user?.pkr_view_markup;
+  const canViewQty = isAdmin || user?.pkr_view_qty; 
 
-  // Filter List Tabel Data
+  const [chartMetric, setChartMetric] = useState('income'); 
+
+  const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka || 0);
+  const formatGrafik = (angka) => chartMetric === 'qty' ? new Intl.NumberFormat('id-ID').format(angka) + ' Unit' : formatRupiah(angka);
+
   const visibleIncomes = useMemo(() => {
     let data = incomes;
     if (!canViewGlobal) data = data.filter(i => String(i.created_by) === String(user?.id));
@@ -128,216 +168,231 @@ const ParkingDashboard = () => {
     return data;
   }, [incomes, canViewGlobal, filterMonth, filterMarket, user?.id]);
 
-  // =====================================
-  // DATA CHART PROCESSING (4 GRAFIK)
-  // =====================================
   const summaryData = useMemo(() => {
-    let totalCasual = 0; let totalLangganan = 0;
+    let incMotor = 0, incManualMotor = 0, incMobil = 0, incBox = 0, incTruck = 0, incPkl = 0, incLangganan = 0, grandTotal = 0;
     visibleIncomes.forEach(i => {
-      totalCasual += Number(i.income_casual || 0);
-      totalLangganan += Number(i.income_langganan || 0);
+      const monthStr = i.tanggal?.slice(0, 7);
+      const multiplier = (isMarkupViewer && monthStr && markups[monthStr]) ? (1 - (markups[monthStr] / 100)) : 1;
+      incMotor += Number(i.inc_motor || 0) * multiplier;
+      incManualMotor += Number(i.inc_manual_motor || 0) * multiplier;
+      incMobil += Number(i.inc_mobil || 0) * multiplier;
+      incBox += Number(i.inc_box || 0) * multiplier;
+      incTruck += Number(i.inc_truck || 0) * multiplier;
+      incPkl += Number(i.inc_pkl || 0) * multiplier;
+      incLangganan += Number(i.income_langganan || 0) * multiplier;
+      grandTotal += Number(i.total_income || 0) * multiplier;
     });
-    return { totalCasual, totalLangganan, grandTotal: totalCasual + totalLangganan };
+    return { incMotor, incManualMotor, incMobil, incBox, incTruck, incPkl, incLangganan, grandTotal };
+  }, [visibleIncomes, isMarkupViewer, markups]);
+
+  const qtySummaryData = useMemo(() => {
+    let totalMotor = 0, totalManualMotor = 0, totalMobil = 0, totalBox = 0, totalTruck = 0, totalPkl = 0, totalLangganan = 0;
+    visibleIncomes.forEach(i => {
+       totalMotor += Number(i.qty_motor || 0); totalManualMotor += Number(i.qty_manual_motor || 0); totalMobil += Number(i.qty_mobil || 0);
+       totalBox += Number(i.qty_box || 0); totalTruck += Number(i.qty_truck || 0); totalPkl += Number(i.qty_pkl || 0);
+       totalLangganan += Number(i.qty_langganan || 0);
+    });
+    return { totalMotor, totalManualMotor, totalMobil, totalBox, totalTruck, totalPkl, totalLangganan, grandTotalQty: totalMotor + totalManualMotor + totalMobil + totalBox + totalTruck + totalPkl + totalLangganan };
   }, [visibleIncomes]);
 
-  // 1. Grafik Harian
   const dailyChartData = useMemo(() => {
     const grouped = visibleIncomes.reduce((acc, curr) => {
       if (!curr.tanggal) return acc;
-      if (!acc[curr.tanggal]) acc[curr.tanggal] = 0;
-      acc[curr.tanggal] += Number(curr.total_income || 0);
+      const monthStr = curr.tanggal.slice(0, 7);
+      const multiplier = (isMarkupViewer && markups[monthStr]) ? (1 - (markups[monthStr] / 100)) : 1;
+      const val = chartMetric === 'qty' ? Number(curr.qty_total || 0) : Number(curr.total_income || 0) * multiplier;
+      if (!acc[curr.tanggal]) acc[curr.tanggal] = 0; acc[curr.tanggal] += val;
       return acc;
     }, {});
-    const sortedDates = Object.keys(grouped).sort().slice(-7); 
-    return sortedDates.map(date => ({
-       label: date.slice(8, 10) + '/' + date.slice(5, 7), 
-       value: grouped[date]
-    }));
-  }, [visibleIncomes]);
+    return Object.keys(grouped).sort().slice(-7).map(date => ({ label: date.slice(8, 10) + '/' + date.slice(5, 7), value: grouped[date] }));
+  }, [visibleIncomes, isMarkupViewer, markups, chartMetric]);
 
-  // 2. Grafik Shift
   const shiftChartData = useMemo(() => {
     const grouped = visibleIncomes.reduce((acc, curr) => {
+      const monthStr = curr.tanggal?.slice(0, 7);
+      const multiplier = (isMarkupViewer && monthStr && markups[monthStr]) ? (1 - (markups[monthStr] / 100)) : 1;
+      const val = chartMetric === 'qty' ? Number(curr.qty_total || 0) : Number(curr.total_income || 0) * multiplier;
       const s = curr.shift || 'Lainnya';
-      if (!acc[s]) acc[s] = 0;
-      acc[s] += Number(curr.total_income || 0);
+      if (!acc[s]) acc[s] = 0; acc[s] += val;
       return acc;
     }, {});
     return Object.entries(grouped).map(([label, value]) => ({ label, value }));
-  }, [visibleIncomes]);
+  }, [visibleIncomes, isMarkupViewer, markups, chartMetric]);
 
-  // 3. Grafik Per Pasar
   const marketChartData = useMemo(() => {
     const grouped = visibleIncomes.reduce((acc, curr) => {
+      const monthStr = curr.tanggal?.slice(0, 7);
+      const multiplier = (isMarkupViewer && monthStr && markups[monthStr]) ? (1 - (markups[monthStr] / 100)) : 1;
+      const val = chartMetric === 'qty' ? Number(curr.qty_total || 0) : Number(curr.total_income || 0) * multiplier;
       const m = curr.nama_pasar || 'Unknown';
-      if (!acc[m]) acc[m] = 0;
-      acc[m] += Number(curr.total_income || 0);
+      if (!acc[m]) acc[m] = 0; acc[m] += val;
       return acc;
     }, {});
     return Object.entries(grouped).map(([label, value]) => ({ label, value })).sort((a,b) => b.value - a.value);
-  }, [visibleIncomes]);
+  }, [visibleIncomes, isMarkupViewer, markups, chartMetric]);
 
-  // 4. Grafik Bulanan 12 Bulan Terakhir
   const monthlyChartData = useMemo(() => {
     const grouped = visibleIncomes.reduce((acc, curr) => {
       if (!curr.tanggal) return acc;
-      const month = curr.tanggal.slice(0, 7); 
-      if (!acc[month]) acc[month] = 0;
-      acc[month] += Number(curr.total_income || 0);
+      const monthStr = curr.tanggal.slice(0, 7);
+      const multiplier = (isMarkupViewer && markups[monthStr]) ? (1 - (markups[monthStr] / 100)) : 1;
+      const val = chartMetric === 'qty' ? Number(curr.qty_total || 0) : Number(curr.total_income || 0) * multiplier;
+      if (!acc[monthStr]) acc[monthStr] = 0; acc[monthStr] += val;
       return acc;
     }, {});
-    
     const result = [];
     for(let i = 11; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
+      const d = new Date(); d.setMonth(d.getMonth() - i);
       const mStr = d.toISOString().slice(0, 7);
-      result.push({
-         label: d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }),
-         value: grouped[mStr] || 0
-      });
+      result.push({ label: d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' }), value: grouped[mStr] || 0 });
     }
     return result;
-  }, [visibleIncomes]);
+  }, [visibleIncomes, isMarkupViewer, markups, chartMetric]);
 
-  // --- INI PENYEBAB ERROR KEMARIN (SEKARANG SUDAH ADA) ---
   const maxDailyValue = Math.max(...dailyChartData.map(d => d.value), 1);
   const maxShiftValue = Math.max(...shiftChartData.map(d => d.value), 1);
   const maxMarketValue = Math.max(...marketChartData.map(d => d.value), 1);
   const maxMonthlyValue = Math.max(...monthlyChartData.map(d => d.value), 1);
 
-  // Tahan layar agar Hooks berurutan sempurna
-  if (!user) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Memuat Sistem...</span>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return ( <div className="flex h-screen w-full items-center justify-center bg-slate-50"><RefreshCw className="w-8 h-8 animate-spin text-purple-500" /></div> );
 
-  // =====================================
-  // FUNGSI SUBMIT (SINGLE, EXCEL, COPY-PASTE)
-  // =====================================
   const processPayload = async (payloads) => {
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('parking_incomes').insert(payloads);
-      if (error) throw error;
-      alert(`Berhasil menyimpan ${payloads.length} baris data laporan parkir!`);
+      const uniqueMarkets = [...new Set(payloads.map(p => p.nama_pasar))];
+      const newMarkets = uniqueMarkets.filter(m => !marketList.includes(m) && m !== "Pasar Tidak Diketahui");
       
-      setManualForm({ tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Pagi', shift_start: '08:00', shift_end: '16:00', income_casual: '', income_langganan: '' });
-      setMassInputRows([{ id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Pagi', income_casual: '', income_langganan: '' }]);
-      setPasteData('');
+      let currentMarkets = [...marketList];
+      for (let m of newMarkets) {
+         const { error: marketErr } = await supabase.from('portal_markets').insert([{ name: m }]);
+         if (!marketErr) currentMarkets.push(m);
+      }
+      if (newMarkets.length > 0) setMarketList(currentMarkets);
+
+      for (const p of payloads) {
+         const { data: existing, error: selectErr } = await supabase.from('parking_incomes')
+           .select('id')
+           .eq('tanggal', p.tanggal)
+           .eq('nama_pasar', p.nama_pasar)
+           .eq('shift', p.shift)
+           .maybeSingle();
+
+         if (selectErr) throw selectErr;
+
+         if (existing) {
+             const updateData = {};
+             if (p.isIncomeFile === true) {
+                 if (p.isLangganan) {
+                     updateData.income_langganan = p.updates.income_langganan;
+                     updateData.total_income = p.updates.total_income;
+                 } else {
+                     updateData.inc_motor = p.updates.inc_motor; updateData.inc_mobil = p.updates.inc_mobil;
+                     updateData.inc_box = p.updates.inc_box; updateData.inc_truck = p.updates.inc_truck; updateData.inc_pkl = p.updates.inc_pkl;
+                     updateData.income_casual = p.updates.income_casual;
+                     updateData.total_income = p.updates.total_income;
+                 }
+             } else if (p.isIncomeFile === false) {
+                 if (p.isLangganan) {
+                     updateData.qty_langganan = p.updates.qty_langganan;
+                     updateData.qty_total = p.updates.qty_total;
+                 } else {
+                     updateData.qty_motor = p.updates.qty_motor; updateData.qty_mobil = p.updates.qty_mobil;
+                     updateData.qty_box = p.updates.qty_box; updateData.qty_truck = p.updates.qty_truck; updateData.qty_pkl = p.updates.qty_pkl;
+                     updateData.qty_total = p.updates.qty_total;
+                 }
+             } else {
+                 Object.assign(updateData, p.updates); 
+             }
+             const { error: upErr } = await supabase.from('parking_incomes').update(updateData).eq('id', existing.id);
+             if (upErr) throw upErr;
+         } else {
+             const insertData = { tanggal: p.tanggal, nama_pasar: p.nama_pasar, shift: p.shift, created_by: user.id, ...p.updates };
+             const { error: inErr } = await supabase.from('parking_incomes').insert([insertData]);
+             if (inErr) throw inErr;
+         }
+      }
+
+      alert(`Berhasil memproses dan mensinkronkan ${payloads.length} entri data!`);
+      
+      setManualForm({ tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '', tm_qty: '', tm_nominal: '', tm_photo: null });
+      setMassInputRows([{ id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '' }]);
       
       const { data } = await supabase.from('parking_incomes').select('*, initial_users(name)').order('tanggal', { ascending: false });
-      setIncomes(data || []);
-      setLastSync(new Date());
-    } catch (err) {
-      alert('Gagal menyimpan data: ' + err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+      setIncomes(data || []); setLastSync(new Date());
+    } catch (err) { alert('Gagal memproses data: ' + err.message); } finally { setIsSubmitting(false); }
   };
 
-  const handleManualSubmit = (e) => {
+  const handleManualSubmit = async (e) => {
     e.preventDefault();
     if (!manualForm.nama_pasar) return alert('Pilih pasar!');
+    setIsSubmitting(true);
+
+    let photoUrl = null;
+    if (manualForm.tm_photo) {
+      try {
+        const fileExt = manualForm.tm_photo.name.split('.').pop();
+        const fileName = `tm_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('parking_attachments').upload(fileName, manualForm.tm_photo);
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('parking_attachments').getPublicUrl(fileName);
+        photoUrl = data.publicUrl;
+      } catch (err) {
+        alert("Gagal mengupload foto: " + err.message);
+        setIsSubmitting(false); return;
+      }
+    }
+
+    const incM = Number(manualForm.inc_motor||0), incMM = Number(manualForm.inc_manual_motor||0), incMb = Number(manualForm.inc_mobil||0), incB = Number(manualForm.inc_box||0), incT = Number(manualForm.inc_truck||0), incP = Number(manualForm.inc_pkl||0), incL = Number(manualForm.income_langganan||0);
+    const qtyM = Number(manualForm.qty_motor||0), qtyMM = Number(manualForm.qty_manual_motor||0), qtyMb = Number(manualForm.qty_mobil||0), qtyB = Number(manualForm.qty_box||0), qtyT = Number(manualForm.qty_truck||0), qtyP = Number(manualForm.qty_pkl||0), qtyL = Number(manualForm.qty_langganan||0);
+    const tmQ = Number(manualForm.tm_qty||0), tmNom = Number(manualForm.tm_nominal||0);
+
     const payload = [{
-       tanggal: manualForm.tanggal,
-       nama_pasar: standardizeMarketName(manualForm.nama_pasar),
-       shift: manualForm.shift,
-       shift_start: manualForm.shift_start,
-       shift_end: manualForm.shift_end,
-       income_casual: Number(manualForm.income_casual || 0),
-       income_langganan: Number(manualForm.income_langganan || 0),
-       created_by: user.id
+       tanggal: manualForm.tanggal, nama_pasar: standardizeMarketName(manualForm.nama_pasar), shift: manualForm.shift,
+       updates: {
+           inc_motor: incM, inc_manual_motor: incMM, inc_mobil: incMb, inc_box: incB, inc_truck: incT, inc_pkl: incP, income_langganan: incL, income_casual: (incM + incMM + incMb + incB + incT + incP),
+           total_income: (incM + incMM + incMb + incB + incT + incP + incL) - tmNom,
+           qty_motor: qtyM, qty_manual_motor: qtyMM, qty_mobil: qtyMb, qty_box: qtyB, qty_truck: qtyT, qty_pkl: qtyP, qty_langganan: qtyL,
+           qty_total: qtyM + qtyMM + qtyMb + qtyB + qtyT + qtyP + qtyL,
+           tm_qty: tmQ, tm_nominal: tmNom, tm_photo_url: photoUrl, is_manual: true,
+           shift_start: manualForm.shift_start, shift_end: manualForm.shift_end
+       }
     }];
     processPayload(payload);
   };
 
   const handleMassTableSubmit = () => {
     const validRows = massInputRows.filter(r => r.nama_pasar && r.tanggal);
-    if (validRows.length === 0) return alert("Isi minimal 1 baris data dengan Nama Pasar & Tanggal!");
+    if (validRows.length === 0) return alert("Isi minimal 1 baris data!");
 
-    const payloads = validRows.map(row => ({
-       tanggal: row.tanggal,
-       nama_pasar: standardizeMarketName(row.nama_pasar),
-       shift: row.shift,
-       income_casual: Number(row.income_casual || 0),
-       income_langganan: Number(row.income_langganan || 0),
-       created_by: user.id
-    }));
+    const payloads = validRows.map(row => {
+       const incM = Number(row.inc_motor||0), incMM = Number(row.inc_manual_motor||0), incMb = Number(row.inc_mobil||0), incB = Number(row.inc_box||0), incT = Number(row.inc_truck||0), incP = Number(row.inc_pkl||0), incL = Number(row.income_langganan||0);
+       const qtyM = Number(row.qty_motor||0), qtyMM = Number(row.qty_manual_motor||0), qtyMb = Number(row.qty_mobil||0), qtyB = Number(row.qty_box||0), qtyT = Number(row.qty_truck||0), qtyP = Number(row.qty_pkl||0), qtyL = Number(row.qty_langganan||0);
+       return {
+           tanggal: row.tanggal, nama_pasar: standardizeMarketName(row.nama_pasar), shift: row.shift,
+           updates: {
+               inc_motor: incM, inc_manual_motor: incMM, inc_mobil: incMb, inc_box: incB, inc_truck: incT, inc_pkl: incP, income_langganan: incL, income_casual: (incM + incMM + incMb + incB + incT + incP),
+               total_income: incM + incMM + incMb + incB + incT + incP + incL,
+               qty_motor: qtyM, qty_manual_motor: qtyMM, qty_mobil: qtyMb, qty_box: qtyB, qty_truck: qtyT, qty_pkl: qtyP, qty_langganan: qtyL,
+               qty_total: qtyM + qtyMM + qtyMb + qtyB + qtyT + qtyP + qtyL,
+               is_manual: true
+           }
+       };
+    });
     processPayload(payloads);
   };
 
   const parseIndonesianDate = (rawStr) => {
     if(!rawStr) return new Date().toISOString().split('T')[0];
-    if(typeof rawStr === 'number') {
-        const date = new Date(Math.round((rawStr - 25569)*86400*1000));
-        return date.toISOString().split('T')[0];
-    }
+    if(typeof rawStr === 'number') { return new Date(Math.round((rawStr - 25569)*86400*1000)).toISOString().split('T')[0]; }
     const str = String(rawStr).trim();
     const months = { "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "mei": "05", "jun": "06", "jul": "07", "aug": "08", "agu": "08", "sep": "09", "oct": "10", "okt": "10", "nov": "11", "dec": "12", "des": "12" };
     const parts = str.split(' ');
-    if (parts.length === 3) {
-        let day = parts[0].padStart(2, '0');
-        let monthKey = parts[1].toLowerCase().substring(0,3);
-        let month = months[monthKey] || "01";
-        let year = parts[2];
-        return `${year}-${month}-${day}`;
-    }
-    if (str.includes('/')) {
-       const p = str.split('/');
-       if(p.length === 3) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    }
+    if (parts.length === 3) return `${parts[2]}-${months[parts[1].toLowerCase().substring(0,3)] || "01"}-${parts[0].padStart(2, '0')}`;
+    if (str.includes('/')) { const p = str.split('/'); if(p.length === 3) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`; }
     return new Date().toISOString().split('T')[0];
   };
 
-  const handleCopyPasteSubmit = () => {
-    if (!pasteData.trim()) return alert("Teks masih kosong!");
-    
-    const rows = pasteData.trim().split('\n');
-    const payloads = [];
-
-    for (let i = 0; i < rows.length; i++) {
-       const cols = rows[i].split('\t');
-       if (cols.length >= 4) {
-          let tglRaw = cols[0].trim();
-          let pasar = cols[1].trim();
-          let shiftStr = 'Full';
-          let casual = 0;
-          let langganan = 0;
-
-          if (cols.length >= 5) {
-            shiftStr = cols[2].trim();
-            casual = Number(cols[3].replace(/[^0-9.-]+/g, "")) || 0;
-            langganan = Number(cols[4].replace(/[^0-9.-]+/g, "")) || 0;
-          } else if (cols.length === 4) {
-            casual = Number(cols[2].replace(/[^0-9.-]+/g, "")) || 0;
-            langganan = Number(cols[3].replace(/[^0-9.-]+/g, "")) || 0;
-          }
-
-          payloads.push({
-             tanggal: parseIndonesianDate(tglRaw),
-             nama_pasar: standardizeMarketName(pasar),
-             shift: shiftStr,
-             income_casual: casual,
-             income_langganan: langganan,
-             created_by: user.id
-          });
-       }
-    }
-
-    if (payloads.length > 0) {
-      processPayload(payloads);
-    } else {
-      alert("Gagal memproses data. Pastikan format dipisahkan oleh Tab/Kolom Excel.");
-    }
-  };
-
+  // Parser Excel Baru: Dinamis membaca Pivot/Merge Header aslimu (Sudah Fix Tanpa Error)
   const handleExcelUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -348,80 +403,159 @@ const ParkingDashboard = () => {
         const workbook = XLSX.read(evt.target.result, { type: 'binary' });
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: '' });
         
-        let headerRowIndex = -1;
-        for (let i = 0; i < 10; i++) {
-            if (rows[i] && rows[i][0] && String(rows[i][0]).toLowerCase().includes("tanggal")) {
-                headerRowIndex = i; break;
+        // 1. CARI BARIS "SHIFT 1" (Fokus utama ke Shift 1)
+        let headerRowIdx = -1;
+        let s1Idx = -1, s2Idx = -1;
+        
+        for (let i = 0; i < 20; i++) { 
+            if (!rows[i]) continue;
+            const rStr = rows[i].map(c => String(c).toLowerCase().trim());
+            const tempS1 = rStr.findIndex(c => c.includes('shift 1'));
+            
+            // Jika menemukan kata "shift 1", catat barisnya lalu berhenti mencari
+            if (tempS1 > -1) { 
+                headerRowIdx = i; 
+                s1Idx = tempS1;
+                s2Idx = rStr.findIndex(c => c.includes('shift 2') || c.includes('shift 02'));
+                break; 
             }
         }
 
-        if (headerRowIndex === -1) {
-           return alert("Format Excel tidak sesuai! Sistem tidak menemukan kolom 'Tanggal'.");
+        if (headerRowIdx === -1 || s1Idx === -1) {
+           return alert("Gagal menemukan Header 'Shift 1'. Gunakan file Template yang tersedia.");
         }
 
-        const marketNamesRow = rows[headerRowIndex + 1]; 
-        const typesRow = rows[headerRowIndex + 2]; 
+        // 2. CARI NAMA PASAR 
+        let marketRaw = "";
+        for (let i = 0; i <= headerRowIdx; i++) {
+           if(!rows[i]) continue;
+           const rStr = rows[i].map(c => String(c).toLowerCase().trim());
+           const locIdx = rStr.findIndex(c => c.includes('pasar') && !c.includes('nama lokasi'));
+           if (locIdx > -1) { marketRaw = rows[i][locIdx]; break; }
+        }
+        
+        if (!marketRaw) {
+           for(let i = 0; i <= headerRowIdx; i++) {
+               const nameLocIdx = rows[i]?.findIndex(c => String(c).toLowerCase().includes('nama lokasi'));
+               if(nameLocIdx > -1 && rows[i+1]) { marketRaw = rows[i+1][nameLocIdx] || rows[i+1][nameLocIdx + 1]; break; }
+           }
+        }
+        
+        if (!marketRaw && rows[1] && rows[1][1]) {
+           marketRaw = rows[1][1];
+        }
 
-        const colMap = {};
-        let currentMarket = "";
-        for (let col = 1; col < typesRow.length; col++) {
-            if (marketNamesRow[col] && marketNamesRow[col].trim() !== "") {
-                currentMarket = marketNamesRow[col].trim();
+        const marketName = standardizeMarketName(marketRaw);
+
+        // 3. MAPPING KOLOM KOMPONEN KENDARAAN
+        const subHeaderRow = rows[headerRowIdx + 1] || [];
+        const shiftRow = rows[headerRowIdx]; 
+        
+        // MENCARI KOLOM TM
+        let tmIdx = -1;
+        for(let i=0; i<subHeaderRow.length; i++){
+            const val = String(subHeaderRow[i] || '').toLowerCase().trim();
+            if(val === 'tm' || val === 'tiket masalah') {
+                tmIdx = i; break;
             }
-            const typeStr = String(typesRow[col] || "").toLowerCase();
-            if (typeStr.includes("casual") || typeStr.includes("cassual")) {
-                colMap[col] = { market: currentMarket, type: "casual" };
-            } else if (typeStr.includes("langganan")) {
-                colMap[col] = { market: currentMarket, type: "langganan" };
+        }
+        
+        const blocks = [];
+        for(let i = 0; i < subHeaderRow.length; i++) {
+            const val = String(subHeaderRow[i] || '').toLowerCase().trim();
+            if(val.includes('motor') && !val.includes('man.')) {
+                let sName = "Shift " + (blocks.length + 1);
+                for(let k = i; k >= 0; k--) {
+                    const cellVal = String(shiftRow[k] || '').trim();
+                    if(cellVal !== '' && !cellVal.toLowerCase().includes('total') && !cellVal.toLowerCase().includes('pendapatan')) {
+                        sName = cellVal; break;
+                    }
+                }
+                
+                let cols = { motor: i, manual_motor: -1, mobil: -1, box: -1, truck: -1, pkl: -1 };
+                for(let j = i + 1; j < i + 10 && j < subHeaderRow.length; j++) {
+                    const subVal = String(subHeaderRow[j] || '').toLowerCase().trim();
+                    if(subVal.includes('motor') && !subVal.includes('man.')) break; 
+                    if(subVal.includes('man. moto') || subVal.includes('manual motor')) cols.manual_motor = j;
+                    else if(subVal.includes('mobil')) cols.mobil = j;
+                    else if(subVal.includes('box')) cols.box = j;
+                    else if(subVal.includes('truck') || subVal.includes('truk')) cols.truck = j;
+                    else if(subVal.includes('pkl')) cols.pkl = j;
+                }
+                blocks.push({ shiftName: sName, cols });
             }
         }
 
+        // DETEKSI OTOMATIS: File Income (Uang) atau Qty (Unit)?
+        let isIncomeFile = false;
+        if (blocks.length > 0 && rows[headerRowIdx + 2]) {
+           const testValStr = String(rows[headerRowIdx + 2][blocks[0].cols.motor] || '0').replace(/[^0-9]/g, '');
+           if (Number(testValStr) > 20000) isIncomeFile = true; 
+        }
+
+        // BACA DATA PER BARIS & EKSTRAK
         const payloads = [];
-        for (let r = headerRowIndex + 3; r < rows.length; r++) {
-            const rowData = rows[r];
-            const dateRaw = rowData[0];
-            if (!dateRaw || String(dateRaw).toLowerCase().includes("total")) continue;
+        for (let r = headerRowIdx + 2; r < rows.length; r++) {
+            if(!rows[r]) continue;
+            const dateRaw = rows[r][0]; 
+            if (!dateRaw || String(dateRaw).toLowerCase().includes('total')) break; 
+            
+            const tanggal = parseIndonesianDate(dateRaw);
+            const parseVal = (idx) => {
+                if (idx === -1) return 0;
+                const raw = String(rows[r][idx] || '0').trim();
+                if (raw === '-' || raw === '') return 0;
+                return Number(raw.replace(/[^0-9.-]+/g, "")) || 0;
+            };
 
-            let parsedDate = parseIndonesianDate(dateRaw);
-            const rowMarketData = {};
-
-            for (let col = 1; col < rowData.length; col++) {
-                if (colMap[col]) {
-                    const market = colMap[col].market;
-                    const type = colMap[col].type;
-                    const valRaw = rowData[col];
-                    const valNum = (valRaw === '-' || !valRaw) ? 0 : Number(String(valRaw).replace(/[^0-9]/g, ""));
-
-                    if (!rowMarketData[market]) rowMarketData[market] = { casual: 0, langganan: 0 };
-                    if (type === "casual") rowMarketData[market].casual = valNum;
-                    if (type === "langganan") rowMarketData[market].langganan = valNum;
-                }
+            // Baca Nominal TM (Ubah minus jadi positif agar gampang dipotong)
+            let tmNominal = 0;
+            if (tmIdx > -1 && isIncomeFile) {
+                const rawTm = String(rows[r][tmIdx] || '0').trim();
+                tmNominal = Math.abs(Number(rawTm.replace(/[^0-9.-]+/g, "")) || 0);
             }
+            
+            blocks.forEach((block, index) => {
+                const m = parseVal(block.cols.motor);
+                const mm = parseVal(block.cols.manual_motor);
+                const mb = parseVal(block.cols.mobil);
+                const bx = parseVal(block.cols.box);
+                const t = parseVal(block.cols.truck);
+                const p = parseVal(block.cols.pkl);
+                const tot = m + mm + mb + bx + t + p;
 
-            for (const market in rowMarketData) {
-                if (rowMarketData[market].casual > 0 || rowMarketData[market].langganan > 0) {
-                    payloads.push({
-                        tanggal: parsedDate,
-                        nama_pasar: standardizeMarketName(market),
-                        shift: "Full",
-                        income_casual: rowMarketData[market].casual,
-                        income_langganan: rowMarketData[market].langganan,
-                        created_by: user.id
-                    });
+                // Memasukkan data jika ada income/qty ATAU ada TM yang harus dilaporkan
+                if (tot > 0 || (index === 0 && tmNominal > 0)) {
+                    const isLangganan = block.shiftName.toLowerCase().includes('langganan');
+                    
+                    // TM hanya dipotong di Shift pertama agar kerugian tidak dihitung double
+                    const appliedTm = (index === 0 && !isLangganan) ? tmNominal : 0;
+
+                    let updates = {};
+                    if (isIncomeFile) {
+                        if (isLangganan) {
+                            updates = { income_langganan: tot, total_income: tot };
+                        } else {
+                            updates = { 
+                                inc_motor: m, inc_manual_motor: mm, inc_mobil: mb, inc_box: bx, inc_truck: t, inc_pkl: p, 
+                                income_casual: tot, 
+                                tm_nominal: appliedTm,
+                                total_income: tot - appliedTm // PENGURANGAN TM EXCEL
+                            };
+                        }
+                    } else {
+                        if (isLangganan) updates = { qty_langganan: tot, qty_total: tot };
+                        else updates = { qty_motor: m, qty_manual_motor: mm, qty_mobil: mb, qty_box: bx, qty_truck: t, qty_pkl: p, qty_total: tot };
+                    }
+                    payloads.push({ tanggal, nama_pasar: marketName, shift: isLangganan ? 'Langganan' : block.shiftName, isIncomeFile, isLangganan, updates });
                 }
-            }
+            });
         }
 
-        if (payloads.length > 0) {
-          processPayload(payloads);
-        } else {
-          alert("Sistem tidak menemukan data angka yang bisa diproses.");
-        }
-      } catch (err) {
-        alert("Gagal memproses Excel: " + err.message);
-      } finally {
-        e.target.value = null;
-      }
+        if (payloads.length > 0) processPayload(payloads); 
+        else alert("Data kosong / Format kolom Excel tidak cocok.");
+        
+      } catch (err) { alert("Gagal memproses Excel: " + err.message); } finally { e.target.value = null; }
     };
     reader.readAsBinaryString(file);
   };
@@ -460,6 +594,18 @@ const ParkingDashboard = () => {
                <PlusCircle size={18}/> Lapor Income Baru
              </button>
            )}
+
+           {canViewLog && (
+             <button onClick={() => { setActiveTab('summary'); if(window.innerWidth < 768) setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-bold ${activeTab === 'summary' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}>
+               <FileImage size={18}/> Ringkasan Laporan
+             </button>
+           )}
+
+           {canAccessSetting && (
+             <button onClick={() => { setActiveTab('settings'); if(window.innerWidth < 768) setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-bold ${activeTab === 'settings' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}>
+               <Settings size={18}/> Setting Dashboard
+             </button>
+           )}
         </div>
       </aside>
 
@@ -470,7 +616,9 @@ const ParkingDashboard = () => {
            <div className="flex items-center gap-3">
              <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-slate-100 rounded-lg text-slate-600"><Menu size={20}/></button>
              <div>
-                <h2 className="font-black text-lg text-slate-800 uppercase tracking-tight">{activeTab === 'dashboard' ? 'Dashboard Parkir' : 'Input Data Parkir'}</h2>
+                <h2 className="font-black text-lg text-slate-800 uppercase tracking-tight">
+                    {activeTab === 'dashboard' ? 'Dashboard Parkir' : activeTab === 'input' ? 'Input Data Parkir' : activeTab === 'summary' ? 'Ringkasan Laporan Masalah' : 'Setting Dashboard'}
+                </h2>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-wider">Sync: {lastSync.toLocaleTimeString('id-ID')}</span>
                   {loading && <RefreshCw size={10} className="animate-spin text-purple-500"/>}
@@ -498,12 +646,19 @@ const ParkingDashboard = () => {
             <div className="animate-fade-in space-y-6">
               
               {/* FILTERING AREA */}
-              {(canViewMonthly || canViewGlobal) && (
+              {(canViewChartMonthly || canViewGlobal) && (
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
-                   {canViewMonthly && (
+                   {canViewChartMonthly && (
                      <div className="w-full md:w-auto">
-                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Filter Bulan (Data Harian/Shift)</label>
-                       <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500" />
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Filter Bulan Sortir</label>
+                       <div className="flex items-center gap-2">
+                          <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500" />
+                          {filterMonth && (
+                              <button onClick={() => setFilterMonth('')} className="p-2 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-colors" title="Tampilkan Semua">
+                                <X size={16}/>
+                              </button>
+                          )}
+                        </div>
                      </div>
                    )}
                    {canViewGlobal && (
@@ -518,37 +673,77 @@ const ParkingDashboard = () => {
                 </div>
               )}
 
-              {/* KARTU SUMMARY */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-gradient-to-br from-purple-900 to-indigo-900 p-6 rounded-3xl shadow-lg relative overflow-hidden">
-                  <div className="absolute right-0 top-0 opacity-10 p-4"><Wallet size={64}/></div>
-                  <span className="text-[10px] font-black text-purple-300 uppercase tracking-widest block mb-1">Total Income Keseluruhan</span>
-                  <h3 className="text-3xl font-black text-white">{formatRupiah(summaryData.grandTotal)}</h3>
-                </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                  <div className="absolute right-0 top-0 opacity-5 p-4"><Car size={64}/></div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Income Casual (Harian)</span>
-                  <h3 className="text-2xl font-black text-purple-600">{formatRupiah(summaryData.totalCasual)}</h3>
-                </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                  <div className="absolute right-0 top-0 opacity-5 p-4"><Users size={64}/></div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Income Langganan / Member</span>
-                  <h3 className="text-2xl font-black text-indigo-600">{formatRupiah(summaryData.totalLangganan)}</h3>
-                </div>
+              {/* TOGGLE METRIK & KARTU SUMMARY */}
+              <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-2 mt-4">
+                 <h3 className="font-black text-slate-800 text-lg">Ringkasan Data Dashboard</h3>
+                 {canViewQty && (
+                   <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner w-max">
+                      <button onClick={() => setChartMetric('income')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${chartMetric === 'income' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Nominal Income</button>
+                      <button onClick={() => setChartMetric('qty')} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${chartMetric === 'qty' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Qty Kendaraan</button>
+                   </div>
+                 )}
               </div>
+
+              {chartMetric === 'income' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+                    <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-purple-900 to-indigo-900 p-5 rounded-3xl shadow-lg relative overflow-hidden text-white">
+                      <span className="text-[10px] font-black text-purple-300 uppercase tracking-widest block mb-1">Total Keseluruhan Income</span>
+                      <h3 className="text-3xl font-black">{formatRupiah(summaryData.grandTotal)}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Motor</span>
+                      <h3 className="text-lg font-black text-purple-600 truncate" title={formatRupiah(summaryData.incMotor + summaryData.incManualMotor)}>{formatRupiah(summaryData.incMotor + summaryData.incManualMotor).replace('Rp','')}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mobil</span>
+                      <h3 className="text-lg font-black text-purple-600 truncate" title={formatRupiah(summaryData.incMobil)}>{formatRupiah(summaryData.incMobil).replace('Rp','')}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Box & Truck</span>
+                      <h3 className="text-lg font-black text-purple-600 truncate" title={formatRupiah(summaryData.incBox + summaryData.incTruck)}>{formatRupiah(summaryData.incBox + summaryData.incTruck).replace('Rp','')}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Langganan & PKL</span>
+                      <h3 className="text-lg font-black text-purple-600 truncate" title={formatRupiah(summaryData.incLangganan + summaryData.incPkl)}>{formatRupiah(summaryData.incLangganan + summaryData.incPkl).replace('Rp','')}</h3>
+                    </div>
+                  </div>
+              ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+                    <div className="col-span-2 md:col-span-2 bg-gradient-to-br from-emerald-600 to-teal-800 p-5 rounded-3xl shadow-lg relative overflow-hidden text-white">
+                      <span className="text-[10px] font-black text-emerald-200 uppercase tracking-widest block mb-1">Total Qty Kendaraan</span>
+                      <h3 className="text-xl font-black text-slate-800">{new Intl.NumberFormat('id-ID').format(qtySummaryData.totalMotor + qtySummaryData.totalManualMotor)}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Motor</span>
+                      <h3 className="text-xl font-black text-slate-800">{new Intl.NumberFormat('id-ID').format(qtySummaryData.totalMotor)}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mobil</span>
+                      <h3 className="text-xl font-black text-slate-800">{new Intl.NumberFormat('id-ID').format(qtySummaryData.totalMobil)}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Box / Truck</span>
+                      <h3 className="text-xl font-black text-slate-800">{new Intl.NumberFormat('id-ID').format(qtySummaryData.totalBox + qtySummaryData.totalTruck)}</h3>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm text-center">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Langganan & PKL</span>
+                      <h3 className="text-xl font-black text-slate-800">{new Intl.NumberFormat('id-ID').format(qtySummaryData.totalLangganan + qtySummaryData.totalPkl)}</h3>
+                    </div>
+                  </div>
+              )}
 
               {/* AREA GRAFIK */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* 1. Grafik Harian */}
-                {canViewDaily && (
+                {canViewChartDaily && (
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500"/> Grafik Trend 7 Hari Terakhir</h4>
+                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><TrendingUp size={16} className={chartMetric==='qty'?'text-emerald-500':'text-purple-500'}/> Grafik Trend 7 Hari Terakhir</h4>
                     <div className="flex items-end gap-3 h-48 border-b border-slate-100 pb-2">
                        {dailyChartData.length === 0 ? <p className="text-xs text-slate-400 m-auto">Belum ada data.</p> : dailyChartData.map((d, i) => (
                          <div key={i} className="flex-1 flex flex-col justify-end items-center group relative h-full">
-                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatRupiah(d.value)}</div>
-                           <div style={{height: `${Math.max((d.value / maxDailyValue) * 100, 1)}%`}} className="w-full max-w-[40px] bg-emerald-400 rounded-t-md group-hover:bg-emerald-500 transition-all"></div>
+                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatGrafik(d.value)}</div>
+                           <div style={{height: `${Math.max((d.value / maxDailyValue) * 100, 1)}%`}} className={`w-full max-w-[40px] rounded-t-md transition-all ${chartMetric==='qty'?'bg-emerald-400 group-hover:bg-emerald-500':'bg-purple-400 group-hover:bg-purple-500'}`}></div>
                            <span className="text-[9px] font-bold text-slate-500 mt-2">{d.label}</span>
                          </div>
                        ))}
@@ -557,14 +752,14 @@ const ParkingDashboard = () => {
                 )}
 
                 {/* 2. Grafik Shift */}
-                {canViewShift && (
+                {canViewChartShift && (
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Clock size={16} className="text-amber-500"/> Sebaran Income Per Shift</h4>
+                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Clock size={16} className="text-amber-500"/> Sebaran Data Per Shift</h4>
                     <div className="flex items-end justify-around gap-4 h-48 border-b border-slate-100 pb-2 px-4">
                        {shiftChartData.length === 0 ? <p className="text-xs text-slate-400 m-auto">Belum ada data.</p> : shiftChartData.map((d, i) => (
                          <div key={i} className="flex flex-col justify-end items-center group relative h-full w-20">
-                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatRupiah(d.value)}</div>
-                           <div style={{height: `${Math.max((d.value / maxShiftValue) * 100, 1)}%`}} className="w-full bg-amber-400 rounded-t-md group-hover:bg-amber-500 transition-all"></div>
+                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatGrafik(d.value)}</div>
+                           <div style={{height: `${Math.max((d.value / maxShiftValue) * 100, 1)}%`}} className={`w-full rounded-t-md transition-all ${chartMetric==='qty'?'bg-emerald-400 group-hover:bg-emerald-500':'bg-amber-400 group-hover:bg-amber-500'}`}></div>
                            <span className="text-[10px] font-black text-slate-700 mt-2 uppercase">{d.label}</span>
                          </div>
                        ))}
@@ -573,17 +768,17 @@ const ParkingDashboard = () => {
                 )}
 
                 {/* 3. Grafik Semua Pasar */}
-                {canViewDashboard && (
+                {canViewChartMarket && (
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm lg:col-span-2">
-                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Store size={16} className="text-blue-500"/> Laporan Total Pendapatan Seluruh Pasar</h4>
+                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Store size={16} className="text-blue-500"/> Laporan Total Seluruh Pasar</h4>
                     <div className="flex flex-col gap-4 max-h-[300px] overflow-y-auto pr-4 custom-scrollbar">
                        {marketChartData.length === 0 ? <p className="text-xs text-slate-400 m-auto py-10">Belum ada data pasar.</p> : marketChartData.map((d, i) => (
                          <div key={i} className="flex items-center gap-3 w-full">
                            <span className="text-[10px] font-bold text-slate-600 w-32 truncate text-right shrink-0" title={d.label}>{d.label}</span>
                            <div className="flex-1 bg-slate-100 h-6 rounded-full overflow-hidden flex items-center group relative">
-                             <div style={{width: `${Math.max((d.value / maxMarketValue) * 100, 0.5)}%`}} className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-out flex items-center justify-end px-2">
+                             <div style={{width: `${Math.max((d.value / maxMarketValue) * 100, 0.5)}%`}} className={`h-full rounded-full transition-all duration-500 ease-out flex items-center justify-end px-2 ${chartMetric==='qty'?'bg-gradient-to-r from-emerald-400 to-emerald-600':'bg-gradient-to-r from-blue-400 to-blue-600'}`}>
                              </div>
-                             <span className="absolute right-3 text-[10px] font-black text-slate-700">{formatRupiah(d.value)}</span>
+                             <span className="absolute right-3 text-[10px] font-black text-slate-700">{formatGrafik(d.value)}</span>
                            </div>
                          </div>
                        ))}
@@ -592,14 +787,14 @@ const ParkingDashboard = () => {
                 )}
 
                 {/* 4. Grafik Bulanan */}
-                {canViewMonthly && (
+                {canViewChartMonthly && (
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm lg:col-span-2">
-                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Calendar size={16} className="text-purple-500"/> Grafik Pendapatan 12 Bulan Terakhir</h4>
+                    <h4 className="font-black text-slate-800 text-sm mb-6 flex items-center gap-2"><Calendar size={16} className={chartMetric==='qty'?'text-emerald-500':'text-purple-500'}/> Grafik Data 12 Bulan Terakhir</h4>
                     <div className="flex items-end justify-between gap-2 h-64 border-b border-slate-100 pb-2 px-2 overflow-x-auto custom-scrollbar">
                        {monthlyChartData.length === 0 ? <p className="text-xs text-slate-400 m-auto">Belum ada data bulanan.</p> : monthlyChartData.map((d, i) => (
                          <div key={i} className="flex flex-col justify-end items-center group relative h-full flex-1 min-w-[50px]">
-                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatRupiah(d.value)}</div>
-                           <div style={{height: `${Math.max((d.value / maxMonthlyValue) * 100, 1)}%`}} className="w-full max-w-[40px] bg-purple-400 rounded-t-md group-hover:bg-purple-500 transition-all duration-500"></div>
+                           <div className="absolute -top-10 bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 font-bold">{formatGrafik(d.value)}</div>
+                           <div style={{height: `${Math.max((d.value / maxMonthlyValue) * 100, 1)}%`}} className={`w-full max-w-[40px] rounded-t-md transition-all duration-500 ${chartMetric==='qty'?'bg-emerald-400 group-hover:bg-emerald-500':'bg-purple-400 group-hover:bg-purple-500'}`}></div>
                            <span className="text-[9px] font-bold text-slate-500 mt-2 uppercase">{d.label}</span>
                          </div>
                        ))}
@@ -609,47 +804,79 @@ const ParkingDashboard = () => {
 
               </div>
 
-              {/* DAFTAR REALTIME */}
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                  <h4 className="font-black text-slate-800 text-sm flex items-center gap-2"><ClipboardList size={16} className="text-blue-500"/> Log Laporan Realtime</h4>
+              {/* DAFTAR REALTIME LOG */}
+              {canViewLog && (
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mt-6">
+                  <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <h4 className="font-black text-slate-800 text-sm flex items-center gap-2"><ClipboardList size={16} className="text-blue-500"/> Log Laporan Realtime</h4>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10">
+                        <tr>
+                          <th className="px-5 py-3">Tanggal & Shift</th>
+                          <th className="px-5 py-3">Pasar / Lokasi</th>
+                          <th className="px-5 py-3">PIC Lapangan</th>
+                          <th className="px-3 py-3 text-right">Motor</th>
+                          <th className="px-3 py-3 text-right">Mobil</th>
+                          <th className="px-3 py-3 text-right">Box</th>
+                          <th className="px-3 py-3 text-right">Truck</th>
+                          <th className="px-3 py-3 text-right">PKL</th>
+                          <th className="px-3 py-3 text-right">Langganan</th>
+                          <th className="px-5 py-3 text-right border-l border-slate-200 bg-purple-50/50">Total Bersih</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] font-medium divide-y divide-slate-100">
+                        {visibleIncomes.length === 0 ? (
+                          <tr><td colSpan={10} className="py-8 text-center text-xs font-bold text-slate-400">Belum ada data untuk filter ini.</td></tr>
+                        ) : (
+                          visibleIncomes.map(item => (
+                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-5 py-3">
+                                <span className="font-black text-slate-800 block whitespace-nowrap">{item.tanggal}</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">{item.shift}</span>
+                              </td>
+                              <td className="px-5 py-3 font-bold text-slate-700 whitespace-nowrap">{item.nama_pasar}</td>
+                              <td className="px-5 py-3 font-bold text-[10px] text-blue-600 uppercase">{item.initial_users?.name || user?.name || 'Sistem'}</td>
+                              
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.inc_motor).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_motor || 0} Unit</div>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.inc_mobil).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_mobil || 0} Unit</div>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.inc_box).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_box || 0} Unit</div>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.inc_truck).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_truck || 0} Unit</div>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.inc_pkl).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_pkl || 0} Unit</div>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                 <div className="text-slate-800">{formatRupiah(item.income_langganan).replace('Rp','')}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_langganan || 0} Unit</div>}
+                              </td>
+
+                              <td className="px-5 py-2 text-right border-l border-slate-100 bg-purple-50/20">
+                                 <div className="font-black text-purple-600 text-xs">{formatRupiah(item.total_income)}</div>
+                                 {canViewQty && <div className="text-[10px] font-bold text-emerald-600">{item.qty_total || 0} Unit</div>}
+                                 {Number(item.tm_nominal) > 0 && <div className="text-[9px] font-bold text-red-500 mt-1">Dikurangi TM</div>}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10">
-                      <tr>
-                        <th className="px-5 py-3">Tanggal & Waktu</th>
-                        <th className="px-5 py-3">Pasar / Lokasi</th>
-                        <th className="px-5 py-3">Dilaporkan Oleh</th>
-                        <th className="px-5 py-3 text-right">Casual (Rp)</th>
-                        <th className="px-5 py-3 text-right">Langganan (Rp)</th>
-                        <th className="px-5 py-3 text-right">Total (Rp)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm divide-y divide-slate-100">
-                      {visibleIncomes.length === 0 ? (
-                        <tr><td colSpan="6" className="py-8 text-center text-xs font-bold text-slate-400">Belum ada data untuk filter ini.</td></tr>
-                      ) : (
-                        visibleIncomes.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-5 py-3">
-                               <span className="font-black text-slate-800 block">{item.tanggal}</span>
-                               <span className="text-[10px] font-bold text-slate-500 uppercase">
-                                  Shift: {item.shift} {item.shift_start ? `(${item.shift_start} - ${item.shift_end})` : ''}
-                               </span>
-                            </td>
-                            <td className="px-5 py-3 font-bold text-slate-700">{item.nama_pasar}</td>
-                            <td className="px-5 py-3 font-bold text-[10px] text-blue-600 uppercase">{item.initial_users?.name || user?.name || 'Sistem'}</td>
-                            <td className="px-5 py-3 text-right font-medium text-slate-600">{formatRupiah(item.income_casual)}</td>
-                            <td className="px-5 py-3 text-right font-medium text-slate-600">{formatRupiah(item.income_langganan)}</td>
-                            <td className="px-5 py-3 text-right font-black text-purple-600">{formatRupiah(item.total_income)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -658,14 +885,13 @@ const ParkingDashboard = () => {
           {activeTab === 'input' && canSubmit && (
             <div className="animate-fade-in max-w-5xl mx-auto space-y-6">
               
-              {/* SELECT MODE INPUT */}
-              <div className="flex bg-slate-200 p-1.5 rounded-2xl w-max mx-auto shadow-inner">
-                 <button onClick={() => setInputMode('manual')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'manual' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Form Manual</button>
-                 <button onClick={() => setInputMode('tabel')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'tabel' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Tabel Massal</button>
-                 <button onClick={() => setInputMode('excel')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${inputMode === 'excel' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Upload Excel</button>
+              <div className="flex bg-slate-200 p-1.5 rounded-2xl w-max mx-auto shadow-inner overflow-x-auto">
+                 <button onClick={() => setInputMode('manual')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${inputMode === 'manual' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Form Manual</button>
+                 <button onClick={() => setInputMode('tabel')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${inputMode === 'tabel' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Tabel Massal</button>
+                 <button onClick={() => setInputMode('excel')} className={`px-5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${inputMode === 'excel' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Upload Excel</button>
               </div>
 
-              {/* MODE MANUAL */}
+              {/* MODE MANUAL (+ TIKET MASALAH) */}
               {inputMode === 'manual' && (
                 <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
                    <h3 className="font-black text-lg text-slate-800 mb-6">Input Laporan Per Shift</h3>
@@ -675,26 +901,7 @@ const ParkingDashboard = () => {
                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Tanggal Laporan</label>
                            <input type="date" required value={manualForm.tanggal} onChange={e => setManualForm({...manualForm, tanggal: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
                          </div>
-                         <div className="md:col-span-2 grid grid-cols-3 gap-2">
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Shift Kerja</label>
-                             <select required value={manualForm.shift} onChange={e => setManualForm({...manualForm, shift: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500">
-                               <option value="Pagi">Pagi</option>
-                               <option value="Siang">Siang</option>
-                               <option value="Malam">Malam</option>
-                               <option value="Full">Satu Hari Penuh (Full)</option>
-                             </select>
-                           </div>
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Jam Mulai</label>
-                             <input type="time" value={manualForm.shift_start} onChange={e => setManualForm({...manualForm, shift_start: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
-                           </div>
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Jam Selesai</label>
-                             <input type="time" value={manualForm.shift_end} onChange={e => setManualForm({...manualForm, shift_end: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
-                           </div>
-                         </div>
-                         <div className="md:col-span-2">
+                         <div>
                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Nama Pasar / Lokasi</label>
                            <select required value={manualForm.nama_pasar} onChange={e => setManualForm({...manualForm, nama_pasar: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500">
                              <option value="" disabled>-- Pilih Pasar --</option>
@@ -702,16 +909,61 @@ const ParkingDashboard = () => {
                            </select>
                          </div>
                          <div>
-                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pendapatan Casual (Rp)</label>
-                           <input type="number" min="0" required value={manualForm.income_casual} onChange={e => setManualForm({...manualForm, income_casual: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
+                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Shift Kerja (Ketik / Pilih)</label>
+                             <input type="text" list="shift-options" required value={manualForm.shift} onChange={e => setManualForm({...manualForm, shift: e.target.value})} placeholder="Contoh: Shift 3, Shift Malam..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
+                             <datalist id="shift-options">
+                               <option value="Shift 1"/> <option value="Shift 2"/> <option value="Shift 3"/> <option value="Langganan"/>
+                             </datalist>
                          </div>
-                         <div>
-                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pendapatan Langganan (Rp)</label>
-                           <input type="number" min="0" required value={manualForm.income_langganan} onChange={e => setManualForm({...manualForm, income_langganan: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500"/>
+
+                         <div className="md:col-span-2 h-px bg-slate-200 my-2"></div>
+                         <div className="md:col-span-2"><span className="text-xs font-black text-purple-600 uppercase tracking-widest bg-purple-50 px-3 py-1 rounded-lg">1. Nominal Income (Rupiah)</span></div>
+                         
+                         <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-6 gap-3">
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Motor (Rp)</label><input type="number" min="0" value={manualForm.inc_motor} onChange={e => setManualForm({...manualForm, inc_motor: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mobil (Rp)</label><input type="number" min="0" value={manualForm.inc_mobil} onChange={e => setManualForm({...manualForm, inc_mobil: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Box (Rp)</label><input type="number" min="0" value={manualForm.inc_box} onChange={e => setManualForm({...manualForm, inc_box: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Truck (Rp)</label><input type="number" min="0" value={manualForm.inc_truck} onChange={e => setManualForm({...manualForm, inc_truck: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">PKL (Rp)</label><input type="number" min="0" value={manualForm.inc_pkl} onChange={e => setManualForm({...manualForm, inc_pkl: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Langganan (Rp)</label><input type="number" min="0" value={manualForm.income_langganan} onChange={e => setManualForm({...manualForm, income_langganan: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold"/></div>
+                         </div>
+
+                         <div className="md:col-span-2 h-px bg-slate-200 my-2"></div>
+                         <div className="md:col-span-2"><span className="text-xs font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg">2. Quantity (Unit Kendaraan)</span></div>
+                         
+                         <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-6 gap-3">
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mtr (Unit)</label><input type="number" min="0" value={manualForm.qty_motor} onChange={e => setManualForm({...manualForm, qty_motor: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Mbl (Unit)</label><input type="number" min="0" value={manualForm.qty_mobil} onChange={e => setManualForm({...manualForm, qty_mobil: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Box (Unit)</label><input type="number" min="0" value={manualForm.qty_box} onChange={e => setManualForm({...manualForm, qty_box: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Trk (Unit)</label><input type="number" min="0" value={manualForm.qty_truck} onChange={e => setManualForm({...manualForm, qty_truck: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">PKL (Unit)</label><input type="number" min="0" value={manualForm.qty_pkl} onChange={e => setManualForm({...manualForm, qty_pkl: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                            <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Langganan (Unit)</label><input type="number" min="0" value={manualForm.qty_langganan} onChange={e => setManualForm({...manualForm, qty_langganan: e.target.value})} placeholder="0" className="w-full px-3 py-2 border rounded-xl text-sm font-bold bg-emerald-50/30"/></div>
+                         </div>
+
+                         {/* SEKSI TIKET MASALAH (TM) */}
+                         <div className="md:col-span-2 h-px bg-slate-200 my-2"></div>
+                         <div className="md:col-span-2 flex items-center justify-between">
+                             <span className="text-xs font-black text-red-600 uppercase tracking-widest bg-red-50 px-3 py-1 rounded-lg">3. Tiket Masalah (TM) / Kerugian (Opsional)</span>
+                             <span className="text-[10px] font-bold text-slate-400">*Otomatis mengurangi Total Income</span>
+                         </div>
+                         
+                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Jumlah Qty TM</label>
+                               <input type="number" min="0" value={manualForm.tm_qty} onChange={e => setManualForm({...manualForm, tm_qty: e.target.value})} placeholder="0 Unit" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                            </div>
+                            <div>
+                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Nominal Kerugian TM (Rp)</label>
+                               <input type="number" min="0" value={manualForm.tm_nominal} onChange={e => setManualForm({...manualForm, tm_nominal: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                            </div>
+                            <div>
+                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Bukti Foto TM (Jika Ada)</label>
+                               <input type="file" accept="image/*" onChange={e => setManualForm({...manualForm, tm_photo: e.target.files[0]})} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer border border-slate-200 bg-white" />
+                            </div>
                          </div>
                       </div>
-                      <button type="submit" disabled={isSubmitting} className="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl shadow-[0_8px_20px_rgba(147,51,234,0.3)] transition-all">
-                        {isSubmitting ? 'Menyimpan...' : 'Simpan Laporan'}
+                      <button type="submit" disabled={isSubmitting} className="w-full mt-6 bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl shadow-[0_8px_20px_rgba(147,51,234,0.3)] transition-all">
+                        {isSubmitting ? 'Memproses Laporan & Upload Foto...' : 'Simpan Laporan & Kalkulasi'}
                       </button>
                    </form>
                 </div>
@@ -721,39 +973,66 @@ const ParkingDashboard = () => {
               {inputMode === 'tabel' && (
                 <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                    <h3 className="font-black text-lg text-slate-800 mb-2">Input Tabel Massal</h3>
-                   <p className="text-xs text-slate-500 font-medium mb-6">Anda dapat menambah baris untuk menginput banyak laporan sekaligus.</p>
+                   <p className="text-xs text-slate-500 font-medium mb-6">Kotak Atas = Input Rp | Kotak Bawah = Input Qty (Unit)</p>
                    
                    <div className="overflow-x-auto w-full mb-4">
                      <table className="min-w-full text-left border-collapse">
                        <thead>
                          <tr className="bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest border-y border-slate-200">
-                           <th className="p-3 w-10 text-center">No</th>
-                           <th className="p-3 min-w-[150px]">Tanggal</th>
-                           <th className="p-3 min-w-[200px]">Pasar</th>
+                           <th className="p-3 w-8 text-center">No</th>
+                           <th className="p-3 min-w-[130px]">Tanggal</th>
+                           <th className="p-3 min-w-[140px]">Pasar</th>
                            <th className="p-3 w-28">Shift</th>
-                           <th className="p-3 min-w-[150px]">Casual (Rp)</th>
-                           <th className="p-3 min-w-[150px]">Langganan (Rp)</th>
-                           <th className="p-3 w-12 text-center">Aksi</th>
+                           <th className="p-3 w-20 text-center">Motor</th>
+                           <th className="p-3 w-20 text-center">Mobil</th>
+                           <th className="p-3 w-20 text-center">Box</th>
+                           <th className="p-3 w-20 text-center">Truck</th>
+                           <th className="p-3 w-20 text-center">PKL</th>
+                           <th className="p-3 w-20 text-center">Langganan</th>
+                           <th className="p-3 w-10 text-center">Aksi</th>
                          </tr>
                        </thead>
                        <tbody>
                          {massInputRows.map((row, idx) => (
                            <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                              <td className="p-2 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
-                             <td className="p-2"><input type="date" value={row.tanggal} onChange={(e) => {const newRows = [...massInputRows]; newRows[idx].tanggal = e.target.value; setMassInputRows(newRows);}} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:border-purple-500 outline-none" /></td>
+                             <td className="p-2"><input type="date" value={row.tanggal} onChange={(e) => {const n = [...massInputRows]; n[idx].tanggal = e.target.value; setMassInputRows(n);}} className="w-full px-2 py-1.5 border rounded focus:border-purple-500 outline-none text-[11px]" /></td>
                              <td className="p-2">
-                               <select value={row.nama_pasar} onChange={(e) => {const newRows = [...massInputRows]; newRows[idx].nama_pasar = e.target.value; setMassInputRows(newRows);}} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:border-purple-500 outline-none">
+                               <select value={row.nama_pasar} onChange={(e) => {const n = [...massInputRows]; n[idx].nama_pasar = e.target.value; setMassInputRows(n);}} className="w-full px-2 py-1.5 border rounded focus:border-purple-500 outline-none text-[11px]">
                                   <option value="" disabled>Pilih Pasar...</option>
                                   {marketList.map(m => <option key={m} value={m}>{m}</option>)}
                                </select>
                              </td>
                              <td className="p-2">
-                               <select value={row.shift} onChange={(e) => {const newRows = [...massInputRows]; newRows[idx].shift = e.target.value; setMassInputRows(newRows);}} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:border-purple-500 outline-none">
-                                 <option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option><option value="Full">Full</option>
-                               </select>
+                               <input type="text" list="shift-mass" placeholder="Shift..." value={row.shift} onChange={(e) => {const n = [...massInputRows]; n[idx].shift = e.target.value; setMassInputRows(n);}} className="w-full px-2 py-1.5 border rounded focus:border-purple-500 outline-none text-[11px]" />
+                               <datalist id="shift-mass"><option value="Shift 1"/> <option value="Shift 2"/> <option value="Langganan"/></datalist>
                              </td>
-                             <td className="p-2"><input type="number" min="0" placeholder="0" value={row.income_casual} onChange={(e) => {const newRows = [...massInputRows]; newRows[idx].income_casual = e.target.value; setMassInputRows(newRows);}} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:border-purple-500 outline-none" /></td>
-                             <td className="p-2"><input type="number" min="0" placeholder="0" value={row.income_langganan} onChange={(e) => {const newRows = [...massInputRows]; newRows[idx].income_langganan = e.target.value; setMassInputRows(newRows);}} className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:border-purple-500 outline-none" /></td>
+                             
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.inc_motor} onChange={(e)=>{const n=[...massInputRows]; n[idx].inc_motor=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_motor} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_motor=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.inc_mobil} onChange={(e)=>{const n=[...massInputRows]; n[idx].inc_mobil=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_mobil} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_mobil=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.inc_box} onChange={(e)=>{const n=[...massInputRows]; n[idx].inc_box=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_box} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_box=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.inc_truck} onChange={(e)=>{const n=[...massInputRows]; n[idx].inc_truck=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_truck} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_truck=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.inc_pkl} onChange={(e)=>{const n=[...massInputRows]; n[idx].inc_pkl=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_pkl} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_pkl=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+                             <td className="p-1">
+                                <input type="number" placeholder="Rp" value={row.income_langganan} onChange={(e)=>{const n=[...massInputRows]; n[idx].income_langganan=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] mb-1 p-1.5 border rounded outline-none font-bold" />
+                                <input type="number" placeholder="Qty" value={row.qty_langganan} onChange={(e)=>{const n=[...massInputRows]; n[idx].qty_langganan=e.target.value; setMassInputRows(n);}} className="w-full text-[10px] p-1.5 border rounded bg-emerald-50 outline-none" />
+                             </td>
+
                              <td className="p-2 text-center"><button onClick={() => {if(massInputRows.length > 1) setMassInputRows(massInputRows.filter((_, i) => i !== idx))}} className="text-red-500 hover:bg-red-100 p-1.5 rounded"><Trash2 size={14}/></button></td>
                            </tr>
                          ))}
@@ -761,7 +1040,7 @@ const ParkingDashboard = () => {
                      </table>
                    </div>
                    
-                   <button onClick={() => setMassInputRows([...massInputRows, { id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Pagi', income_casual: '', income_langganan: '' }])} className="w-full py-3 border-2 border-dashed border-purple-200 text-purple-600 font-black text-xs rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-center gap-2 mb-4">
+                   <button onClick={() => setMassInputRows([...massInputRows, { id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '' }])} className="w-full py-3 border-2 border-dashed border-purple-200 text-purple-600 font-black text-xs rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-center gap-2 mb-4">
                       <Plus size={14}/> Tambah Baris Baru
                    </button>
                    
@@ -771,31 +1050,36 @@ const ParkingDashboard = () => {
                 </div>
               )}
 
-              {/* MODE COPY PASTE MASSAL */}
-              {inputMode === 'copypaste' && (
-                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
-                   <h3 className="font-black text-lg text-slate-800 mb-2">Input via Copy-Paste Excel</h3>
-                   <p className="text-xs text-slate-500 font-medium mb-6">Blok data di Excel Anda, lalu paste di kotak bawah. <br/><b>Format Urutan Kolom:</b> Tanggal (YYYY-MM-DD) | Nama Pasar | Shift | Income Casual | Income Langganan</p>
-                   
-                   <textarea 
-                      rows="8" 
-                      value={pasteData}
-                      onChange={(e) => setPasteData(e.target.value)}
-                      placeholder="Paste data dari Excel di sini..."
-                      className="w-full p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl text-xs font-mono focus:outline-none focus:border-purple-500 mb-4 whitespace-pre"
-                   ></textarea>
-                   
-                   <button onClick={handleCopyPasteSubmit} disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-xl shadow-md transition-all flex justify-center items-center gap-2">
-                     <Save size={16}/> {isSubmitting ? 'Memproses Data...' : 'Proses & Simpan Data'}
-                   </button>
-                </div>
-              )}
-
               {/* MODE UPLOAD EXCEL FILE (SMART PARSER) */}
               {inputMode === 'excel' && (
                 <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 text-center">
-                   <h3 className="font-black text-lg text-slate-800 mb-2">Upload File Excel (.xlsx)</h3>
-                   <p className="text-xs text-slate-500 font-medium mb-6">Sistem otomatis mendeteksi format tabel bersarang (Pivot Header) sesuai format laporan harian pasar.</p>
+                   <div className="flex justify-between items-center mb-6">
+                       <div className="text-left">
+                           <h3 className="font-black text-lg text-slate-800 mb-1">Upload File Excel (.xlsx)</h3>
+                           <p className="text-xs text-slate-500 font-medium">Sistem mendeteksi otomatis format Income (Rp) dan Qty (Unit).</p>
+                       </div>
+                       <button onClick={() => {
+                          const ws_data = [
+                            ["Tanggal", "Nama Lokasi (Ketik Nama Pasar di bawah ini)"],
+                            ["", "PASAR CIBUBUR"],
+                            ["", "Shift 1", "", "", "", "", "", "Total", "Shift 2", "", "", "", "", "", "Total", "Langganan", "", "", "", "", "", "Total", "TM", "Income Gabungan"],
+                            ["", "Motor", "Man. Moto", "Mobil", "Box", "Truck", "PKL", "Total", "Motor", "Man. Moto", "Mobil", "Box", "Truck", "PKL", "Total", "Motor", "Man. Moto", "Mobil", "Box", "Truck", "PKL", "Total", "TM", "Income Gabungan"]
+                          ];
+                          const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                          ws['!cols'] = [
+                            {wch: 15}, {wch: 12}, {wch: 12}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 12}, 
+                            {wch: 12}, {wch: 12}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 12}, 
+                            {wch: 12}, {wch: 12}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 12}, 
+                            {wch: 10}, {wch: 15}
+                          ];
+
+                          const wb = XLSX.utils.book_new();
+                          XLSX.utils.book_append_sheet(wb, ws, "Template_Upload");
+                          XLSX.writeFile(wb, "Template_Laporan_Parkir.xlsx");
+                       }} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors border border-emerald-200">
+                          <Download size={14}/> Download Template Format
+                       </button>
+                   </div>
                    
                    <label className="flex flex-col items-center justify-center w-full p-10 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-purple-400 transition-all group">
                        <FileSpreadsheet className="w-12 h-12 text-slate-300 group-hover:text-purple-500 mb-3 transition-colors" />
@@ -805,6 +1089,106 @@ const ParkingDashboard = () => {
                    {isSubmitting && <p className="text-center text-purple-500 text-xs font-bold mt-4 animate-pulse">Menyimpan data ke database... Mohon tunggu.</p>}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 3: RINGKASAN LAPORAN MANUAL (+ FOTO TM) */}
+          {activeTab === 'summary' && canViewLog && (
+            <div className="animate-fade-in max-w-6xl mx-auto space-y-6">
+              <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
+                 <h3 className="font-black text-lg text-slate-800 mb-2 flex items-center gap-2"><FileImage className="text-purple-600" size={24}/> Ringkasan Laporan Masalah Lapangan</h3>
+                 <p className="text-xs text-slate-500 mb-6 font-medium">Rekapitulasi lengkap khusus dari inputan Form Manual. Menampilkan detail kerugian Tiket Masalah (TM) dan lampiran bukti foto lapangan.</p>
+                 
+                 <div className="overflow-x-auto w-full">
+                    <table className="min-w-full text-left border-collapse">
+                       <thead>
+                         <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-y border-slate-200">
+                           <th className="p-4">Tanggal & Shift</th>
+                           <th className="p-4">Lokasi & PIC</th>
+                           <th className="p-4 text-right">Income Kotor</th>
+                           <th className="p-4 text-center border-x border-slate-100 bg-red-50/50 text-red-500">Info TM (Kerugian)</th>
+                           <th className="p-4 text-right">Net Income Bersih</th>
+                           <th className="p-4 text-center">Bukti Foto</th>
+                         </tr>
+                       </thead>
+                       <tbody className="text-xs font-medium divide-y divide-slate-100">
+                         {visibleIncomes.filter(i => i.is_manual).length === 0 ? (
+                           <tr><td colSpan={6} className="py-10 text-center text-slate-400 font-bold">Belum ada data pelaporan manual yang memuat TM / Foto.</td></tr>
+                         ) : (
+                           visibleIncomes.filter(i => i.is_manual).map((item) => {
+                              const kotor = Number(item.total_income || 0) + Number(item.tm_nominal || 0);
+                              return (
+                               <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                 <td className="p-4">
+                                     <span className="font-black text-slate-800 block">{item.tanggal}</span>
+                                     <span className="text-[10px] text-slate-500 uppercase font-bold">{item.shift}</span>
+                                 </td>
+                                 <td className="p-4">
+                                     <span className="font-bold text-slate-700 block">{item.nama_pasar}</span>
+                                     <span className="text-[10px] text-blue-600 uppercase font-bold">{item.initial_users?.name || 'Sistem'}</span>
+                                 </td>
+                                 <td className="p-4 text-right text-slate-600">{formatRupiah(kotor)}</td>
+                                 <td className="p-4 text-center border-x border-slate-100 bg-red-50/20">
+                                     {Number(item.tm_qty) > 0 ? (
+                                        <>
+                                          <div className="font-black text-red-600 text-sm">-{formatRupiah(item.tm_nominal).replace('Rp','')}</div>
+                                          <div className="text-[10px] text-red-500 font-bold">{item.tm_qty} Tiket Hilang</div>
+                                        </>
+                                     ) : <span className="text-slate-400">-</span>}
+                                 </td>
+                                 <td className="p-4 text-right font-black text-purple-600 text-sm">{formatRupiah(item.total_income)}</td>
+                                 <td className="p-4 text-center">
+                                     {item.tm_photo_url ? (
+                                        <a href={item.tm_photo_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors">
+                                            <ImageIcon size={14}/> Buka Foto
+                                        </a>
+                                     ) : <span className="text-[10px] text-slate-400">Tidak ada lampiran</span>}
+                                 </td>
+                               </tr>
+                              );
+                           })
+                         )}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: SETTING MARKUP ADMIN */}
+          {activeTab === 'settings' && canAccessSetting && (
+            <div className="animate-fade-in max-w-5xl mx-auto space-y-6">
+              <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
+                 <h3 className="font-black text-lg text-slate-800 mb-2 flex items-center gap-2"><Settings className="text-purple-600" size={24}/> Pengaturan Markup Income</h3>
+                 <p className="text-xs text-slate-500 mb-6 font-medium">Tentukan target bulan dan persentase markup. Markup hanya berlaku bagi grafik yang dilihat oleh akun yang secara eksplisit dicentang <b className="text-purple-600">"Lihat Data Termarkup"</b> di Akses HRD. Data sesungguhnya di database tidak diubah.</p>
+                 
+                 <form onSubmit={handleSaveMarkup} className="space-y-4 max-w-lg bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Bulan Target</label>
+                      <input type="month" required value={markupForm.month} onChange={e => setMarkupForm({...markupForm, month: e.target.value})} className="w-full px-4 py-3 border rounded-xl font-bold"/>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Persentase Pengurang (%)</label>
+                      <input type="number" min="0" step="0.1" required value={markupForm.percentage} onChange={e => setMarkupForm({...markupForm, percentage: e.target.value})} placeholder="Contoh: 15" className="w-full px-4 py-3 border rounded-xl font-bold"/>
+                    </div>
+                    <button type="submit" disabled={isSavingMarkup} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black py-4 rounded-xl shadow-md transition-all flex justify-center gap-2">
+                      {isSavingMarkup ? 'Menyimpan...' : 'Simpan Setelan Markup'}
+                    </button>
+                 </form>
+
+                 <div className="mt-10">
+                   <h4 className="font-black text-sm text-slate-800 mb-4 border-b border-slate-100 pb-2">Daftar Bulan Termarkup</h4>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                     {Object.entries(markups).map(([month, percent]) => (
+                        <div key={month} className="bg-white border border-slate-200 p-4 rounded-2xl flex justify-between items-center shadow-sm">
+                           <div><p className="text-[10px] font-black text-slate-400 uppercase">Periode</p><p className="font-bold text-slate-800">{month}</p></div>
+                           <div className="text-right"><p className="text-[10px] font-black text-slate-400 uppercase">Markup</p><p className="font-black text-red-500 text-lg">-{percent}%</p></div>
+                           <button onClick={() => handleDeleteMarkup(month)} className="text-red-400 p-2"><Trash2 size={16}/></button>
+                        </div>
+                     ))}
+                   </div>
+                 </div>
+              </div>
             </div>
           )}
 

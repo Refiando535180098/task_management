@@ -1027,7 +1027,7 @@ const PortalHome = () => {
 
                              {/* --- KUSTOMISASI AKSES MODUL PARKIR --- */}
                              <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
-                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-purple-600 uppercase tracking-widest">Akses Modul Parkir</div>
+                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-purple-600 uppercase tracking-widest">Akses Modul Parkir Dasar</div>
 
                              <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
                                 <input type="checkbox" checked={u.pkr_access_menu || false} onChange={(e) => updatePermission(u.id, 'pkr_access_menu', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
@@ -1039,33 +1039,42 @@ const PortalHome = () => {
                                 <span className="text-[10px] font-bold text-slate-700">Input Data Laporan</span>
                              </label>
 
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
-                                <input type="checkbox" checked={u.pkr_view_dashboard || false} onChange={(e) => updatePermission(u.id, 'pkr_view_dashboard', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
-                                <span className="text-[10px] font-bold text-slate-700">Dashboard Grafik</span>
+                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-2">Akses Tampilan Grafik & Log</div>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_chart_daily || false} onChange={(e) => updatePermission(u.id, 'pkr_view_chart_daily', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Grafik Trend Harian</span>
+                             </label>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_chart_shift || false} onChange={(e) => updatePermission(u.id, 'pkr_view_chart_shift', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Grafik Sebaran Shift</span>
+                             </label>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_chart_market || false} onChange={(e) => updatePermission(u.id, 'pkr_view_chart_market', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Grafik Total Semua Pasar</span>
+                             </label>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_chart_monthly || false} onChange={(e) => updatePermission(u.id, 'pkr_view_chart_monthly', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Grafik 12 Bulan</span>
+                             </label>
+                             
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-emerald-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_qty || false} onChange={(e) => updatePermission(u.id, 'pkr_view_qty', e.target.checked)} className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Tampilkan Data Quantity</span>
                              </label>
 
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
-                                <input type="checkbox" checked={u.pkr_view_daily || false} onChange={(e) => updatePermission(u.id, 'pkr_view_daily', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
-                                <span className="text-[10px] font-bold text-slate-700">Lihat Data Harian</span>
+                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-rose-500 uppercase tracking-widest mt-2">Akses Fitur Markup Income</div>
+                             <label className="flex items-center gap-2 cursor-pointer bg-rose-50/50 px-2 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors">
+                                <input type="checkbox" checked={u.pkr_access_setting || false} onChange={(e) => updatePermission(u.id, 'pkr_access_setting', e.target.checked)} className="w-3.5 h-3.5 text-rose-600 rounded border-rose-300"/>
+                                <span className="text-[10px] font-bold text-slate-800">Akses Menu Setting Markup</span>
                              </label>
-
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
-                                <input type="checkbox" checked={u.pkr_view_shift || false} onChange={(e) => updatePermission(u.id, 'pkr_view_shift', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
-                                <span className="text-[10px] font-bold text-slate-700">Lihat Data Shift</span>
+                             <label className="flex items-center gap-2 cursor-pointer bg-rose-50/50 px-2 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_markup || false} onChange={(e) => updatePermission(u.id, 'pkr_view_markup', e.target.checked)} className="w-3.5 h-3.5 text-rose-600 rounded border-rose-300"/>
+                                <span className="text-[10px] font-bold text-slate-800">Tampilkan Data Termarkup</span>
                              </label>
+                              <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
 
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
-                                <input type="checkbox" checked={u.pkr_view_monthly || false} onChange={(e) => updatePermission(u.id, 'pkr_view_monthly', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
-                                <span className="text-[10px] font-bold text-slate-700">Lihat Data Bulanan</span>
-                             </label>
-
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
-                                <input type="checkbox" checked={u.pkr_view_global || false} onChange={(e) => updatePermission(u.id, 'pkr_view_global', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
-                                <span className="text-[10px] font-bold text-slate-700">Data Global (Semua)</span>
-                             </label>
-                             <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
-
-                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200">
+                              <div className="col-span-2 md:col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Akses Sub-Menu HRD</div>
+                              <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200">
                                 <input type="checkbox" checked={u.has_portal_access || false} onChange={(e) => updatePermission(u.id, 'has_portal_access', e.target.checked)} className="w-3.5 h-3.5"/>
                                 <span className="text-[10px] font-bold text-slate-700">Akses HRD</span>
                              </label>
@@ -1089,10 +1098,6 @@ const PortalHome = () => {
                                 <input type="checkbox" checked={u.can_manage_portal_info || false} onChange={(e) => updatePermission(u.id, 'can_manage_portal_info', e.target.checked)} className="w-3.5 h-3.5"/>
                                 <span className="text-[10px] font-bold text-slate-700">Kelola Info</span>
                              </label>
-
-                              <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
-                              <div className="col-span-2 md:col-span-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Akses Sub-Menu HRD</div>
-
                               <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200">
                                 <input type="checkbox" checked={u.can_access_recruitment || false} onChange={(e) => updatePermission(u.id, 'can_access_recruitment', e.target.checked)} className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 rounded border-slate-300"/>
                                 <span className="text-[10px] font-bold text-slate-700">Menu Recruitment</span>
