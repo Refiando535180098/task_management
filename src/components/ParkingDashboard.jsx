@@ -989,10 +989,53 @@ const ParkingDashboard = () => {
                                <input type="number" min="0" value={manualForm.tm_nominal} onChange={e => setManualForm({...manualForm, tm_nominal: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
                             </div>
                             <div className="md:col-span-3">
+                               <div className="md:col-span-3">
                                <div className="flex justify-between items-center mb-1.5">
                                   <label className="block text-[10px] font-black text-slate-500 uppercase">Lampirkan Bukti Foto (Bisa lebih dari 1)</label>
                                   <span className="text-[9px] font-bold text-slate-400">{manualForm.tm_photos?.length || 0} Foto Terpilih</span>
                                </div>
+                               
+                               <div className="flex gap-2 mb-2">
+                                  {/* Tombol 1: Langsung Buka Kamera */}
+                                  <label className="flex-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 cursor-pointer rounded-xl px-4 py-2.5 text-xs font-black text-center transition-colors shadow-sm flex items-center justify-center gap-2">
+                                     📷 Jepret Kamera
+                                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => {
+                                        if (e.target.files.length > 0) {
+                                           const newFiles = Array.from(e.target.files);
+                                           setManualForm({...manualForm, tm_photos: [...manualForm.tm_photos, ...newFiles]});
+                                        }
+                                        e.target.value = null; 
+                                     }} />
+                                  </label>
+
+                                  {/* Tombol 2: Buka Galeri / File Manager */}
+                                  <label className="flex-1 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 cursor-pointer rounded-xl px-4 py-2.5 text-xs font-black text-center transition-colors shadow-sm flex items-center justify-center gap-2">
+                                     📁 Pilih Galeri
+                                     <input type="file" multiple accept="image/*" className="hidden" onChange={e => {
+                                        if (e.target.files.length > 0) {
+                                           const newFiles = Array.from(e.target.files);
+                                           setManualForm({...manualForm, tm_photos: [...manualForm.tm_photos, ...newFiles]});
+                                        }
+                                        e.target.value = null; 
+                                     }} />
+                                  </label>
+                               </div>
+                               
+                               {/* Preview Foto yang Akan Diupload */}
+                               {manualForm.tm_photos?.length > 0 && (
+                                  <div className="flex flex-wrap gap-3 mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                                     {manualForm.tm_photos.map((file, idx) => (
+                                        <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden shadow-sm border border-slate-300">
+                                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
+                                            <button type="button" onClick={() => {
+                                               const filtered = manualForm.tm_photos.filter((_, i) => i !== idx);
+                                               setManualForm({...manualForm, tm_photos: filtered});
+                                            }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus Foto"><X size={10}/></button>
+                                        </div>
+                                     ))}
+                                  </div>
+                               )}
+                            </div>
                                <input type="file" multiple accept="image/*" onChange={e => {
                                   // Menggabungkan foto yang sudah ada dengan foto yang baru dipilih
                                   const newFiles = Array.from(e.target.files);
