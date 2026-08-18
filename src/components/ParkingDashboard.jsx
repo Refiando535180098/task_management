@@ -28,7 +28,7 @@ const ParkingDashboard = () => {
     tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', 
     inc_motor: '', inc_manual_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '',
     qty_motor: '', qty_manual_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '',
-    tm_qty: '', tm_nominal: '', tm_photo: null
+    tm_qty: '', tm_nominal: '', tm_photos: []
   });
   
   const [massInputRows, setMassInputRows] = useState([{ 
@@ -327,17 +327,45 @@ const ParkingDashboard = () => {
     if (!manualForm.nama_pasar) return alert('Pilih pasar!');
     setIsSubmitting(true);
 
-    let photoUrl = null;
-    if (manualForm.tm_photo) {
+    let uploadedUrls = [];
+    if (manualForm.tm_photos && manualForm.tm_photos.length > 0) {
+      // Fungsi internal untuk kompres gambar
+      const compressImage = (file) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 800; // Maksimal lebar 800px agar ringan
+              const scaleSize = MAX_WIDTH / img.width;
+              canvas.width = MAX_WIDTH;
+              canvas.height = img.height * scaleSize;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              // Kompres ke JPEG dengan kualitas 70%
+              canvas.toBlob((blob) => { resolve(blob); }, 'image/jpeg', 0.7);
+            };
+          };
+        });
+      };
+
       try {
-        const fileExt = manualForm.tm_photo.name.split('.').pop();
-        const fileName = `tm_${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('parking_attachments').upload(fileName, manualForm.tm_photo);
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from('parking_attachments').getPublicUrl(fileName);
-        photoUrl = data.publicUrl;
+        for (let i = 0; i < manualForm.tm_photos.length; i++) {
+           const file = manualForm.tm_photos[i];
+           const compressedBlob = await compressImage(file);
+           const fileName = `tm_${Date.now()}_${i}.jpg`;
+           
+           const { error: uploadError } = await supabase.storage.from('parking_attachments').upload(fileName, compressedBlob);
+           if (uploadError) throw uploadError;
+           
+           const { data } = supabase.storage.from('parking_attachments').getPublicUrl(fileName);
+           uploadedUrls.push(data.publicUrl);
+        }
       } catch (err) {
-        alert("Gagal mengupload foto: " + err.message);
+        alert("Gagal mengupload beberapa foto: " + err.message);
         setIsSubmitting(false); return;
       }
     }
@@ -353,10 +381,14 @@ const ParkingDashboard = () => {
            total_income: (incM + incMM + incMb + incB + incT + incP + incL) - tmNom,
            qty_motor: qtyM, qty_manual_motor: qtyMM, qty_mobil: qtyMb, qty_box: qtyB, qty_truck: qtyT, qty_pkl: qtyP, qty_langganan: qtyL,
            qty_total: qtyM + qtyMM + qtyMb + qtyB + qtyT + qtyP + qtyL,
-           tm_qty: tmQ, tm_nominal: tmNom, tm_photo_url: photoUrl, is_manual: true,
+           tm_qty: tmQ, tm_nominal: tmNom, 
+           tm_photo_urls: uploadedUrls, // <--- Simpan ke array
+           is_manual: true,
            shift_start: manualForm.shift_start, shift_end: manualForm.shift_end
        }
     }];
+    
+    // ProcessPayload akan mengurus notif alert dan reset form
     processPayload(payload);
   };
 
@@ -956,9 +988,32 @@ const ParkingDashboard = () => {
                                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Nominal Kerugian TM (Rp)</label>
                                <input type="number" min="0" value={manualForm.tm_nominal} onChange={e => setManualForm({...manualForm, tm_nominal: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
                             </div>
-                            <div>
-                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Bukti Foto TM (Jika Ada)</label>
-                               <input type="file" accept="image/*" onChange={e => setManualForm({...manualForm, tm_photo: e.target.files[0]})} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer border border-slate-200 bg-white" />
+                            <div className="md:col-span-3">
+                               <div className="flex justify-between items-center mb-1.5">
+                                  <label className="block text-[10px] font-black text-slate-500 uppercase">Lampirkan Bukti Foto (Bisa lebih dari 1)</label>
+                                  <span className="text-[9px] font-bold text-slate-400">{manualForm.tm_photos?.length || 0} Foto Terpilih</span>
+                               </div>
+                               <input type="file" multiple accept="image/*" onChange={e => {
+                                  // Menggabungkan foto yang sudah ada dengan foto yang baru dipilih
+                                  const newFiles = Array.from(e.target.files);
+                                  setManualForm({...manualForm, tm_photos: [...manualForm.tm_photos, ...newFiles]});
+                                  e.target.value = null; // Reset input agar bisa pilih file yang sama lagi kalau mau
+                               }} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 bg-white mb-2" />
+                               
+                               {/* Preview Foto yang Akan Diupload */}
+                               {manualForm.tm_photos?.length > 0 && (
+                                  <div className="flex flex-wrap gap-3 mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                                     {manualForm.tm_photos.map((file, idx) => (
+                                        <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden shadow-sm border border-slate-300">
+                                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
+                                            <button type="button" onClick={() => {
+                                               const filtered = manualForm.tm_photos.filter((_, i) => i !== idx);
+                                               setManualForm({...manualForm, tm_photos: filtered});
+                                            }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={10}/></button>
+                                        </div>
+                                     ))}
+                                  </div>
+                               )}
                             </div>
                          </div>
                       </div>
@@ -1137,12 +1192,16 @@ const ParkingDashboard = () => {
                                      ) : <span className="text-slate-400">-</span>}
                                  </td>
                                  <td className="p-4 text-right font-black text-purple-600 text-sm">{formatRupiah(item.total_income)}</td>
-                                 <td className="p-4 text-center">
-                                     {item.tm_photo_url ? (
-                                        <a href={item.tm_photo_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors">
-                                            <ImageIcon size={14}/> Buka Foto
-                                        </a>
-                                     ) : <span className="text-[10px] text-slate-400">Tidak ada lampiran</span>}
+                                 <td className="p-4">
+                                     {item.tm_photo_urls && item.tm_photo_urls.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5 justify-center">
+                                           {item.tm_photo_urls.map((url, idx) => (
+                                              <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden shadow-sm border border-slate-200 block hover:scale-150 hover:shadow-lg transition-transform z-10 hover:z-50 relative origin-center">
+                                                 <img src={url} alt="Lampiran" className="w-full h-full object-cover" />
+                                              </a>
+                                           ))}
+                                        </div>
+                                     ) : <span className="text-[10px] text-slate-400 block text-center">Tanpa lampiran</span>}
                                  </td>
                                </tr>
                               );
