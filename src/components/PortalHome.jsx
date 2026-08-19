@@ -1056,11 +1056,22 @@ const PortalHome = () => {
                              </label>
 
                              <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_submit_report || false} onChange={(e) => updatePermission(u.id, 'pkr_submit_report', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Input Data Laporan</span>
+                             </label>
+
+                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-2">Akses Tampilan Grafik & Log</div>
+                             
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
+                                <input type="checkbox" checked={u.pkr_view_log_harian || false} onChange={(e) => updatePermission(u.id, 'pkr_view_log_harian', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Akses Ringkasan & Log Laporan</span>
+                             </label>
+
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
                                 <input type="checkbox" checked={u.pkr_view_global || false} onChange={(e) => updatePermission(u.id, 'pkr_view_global', e.target.checked)} className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 rounded border-slate-300"/>
                                 <span className="text-[10px] font-bold text-slate-700">Akses Data Global (Semua Pasar)</span>
                              </label>
 
-                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-indigo-500 uppercase tracking-widest mt-2">Akses Tampilan Grafik & Log</div>
                              <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 transition-colors">
                                 <input type="checkbox" checked={u.pkr_view_chart_daily || false} onChange={(e) => updatePermission(u.id, 'pkr_view_chart_daily', e.target.checked)} className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300"/>
                                 <span className="text-[10px] font-bold text-slate-700">Grafik Trend Harian</span>
