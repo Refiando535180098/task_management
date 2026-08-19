@@ -819,9 +819,30 @@ const PortalHome = () => {
             <h3 className="text-lg font-black text-slate-900 mb-1">Task Management</h3>
             <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-6 flex-1">Kelola dan pantau seluruh laporan target kinerja divisi operasional harian.</p>
             <span className="font-bold text-xs text-amber-600 group-hover:underline mt-auto">Buka Dashboard &rarr;</span>
+          </div>{/* MENU TASK MANAGEMENT */}
+          {(user?.can_access_task !== false || user?.role === 'admin' || user?.role === 'direksi') && (
+          <div onClick={() => navigate('/TaskManagement')} className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/5 transition-all cursor-pointer relative overflow-hidden flex flex-col">
+            <div className="flex justify-between items-start mb-6">
+              <div className="w-12 h-12 bg-slate-950 text-amber-400 rounded-2xl flex items-center justify-center shadow-sm">
+                <ClipboardList size={24} strokeWidth={2.5} />
+              </div>
+              <button 
+                onClick={(e) => handleToggleMenuNotif(e, 'task', 'Task Management')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all z-10 border ${menuNotifPrefs.task ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+                title={menuNotifPrefs.task ? "Matikan Notifikasi Task" : "Nyalakan Notifikasi Task"}
+              >
+                {menuNotifPrefs.task ? <Bell size={12} /> : <BellOff size={12} />}
+                <span className="hidden md:inline">{menuNotifPrefs.task ? 'Notif Aktif' : 'Notif Mati'}</span>
+              </button>
+            </div>
+            <h3 className="text-lg font-black text-slate-900 mb-1">Task Management</h3>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-6 flex-1">Kelola dan pantau seluruh laporan target kinerja divisi operasional harian.</p>
+            <span className="font-bold text-xs text-amber-600 group-hover:underline mt-auto">Buka Dashboard &rarr;</span>
           </div>
+          )}
 
           {/* MENU COMMUNICATION / INTERNAL MAIL */}
+          {(user?.can_access_mail !== false || user?.role === 'admin' || user?.role === 'direksi') && (
           <div onClick={() => navigate('/communication')} className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/5 transition-all cursor-pointer relative overflow-hidden flex flex-col">
             <div className="flex justify-between items-start mb-6">
               <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-sm">
@@ -839,8 +860,10 @@ const PortalHome = () => {
             <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-6 flex-1">Kirim instruksi, koordinasi dengan divisi lain, dan tautkan langsung laporan tugas Anda ke dalam pesan.</p>
             <span className="font-bold text-xs text-indigo-600 group-hover:underline mt-auto">Buka Kotak Masuk &rarr;</span>
           </div>
+          )}
 
           {/* MENU SLIP GAJI */}
+          {(user?.can_access_payslip !== false || user?.role === 'admin' || user?.role === 'direksi') && (
           <div onClick={() => setShowMyPayslipsModal(true)} className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/5 transition-all cursor-pointer relative overflow-hidden flex flex-col">
             <div className="flex justify-between items-start mb-6">
               <div className="w-12 h-12 bg-blue-500 text-white rounded-2xl flex items-center justify-center shadow-sm">
@@ -858,6 +881,7 @@ const PortalHome = () => {
             <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-6 flex-1">Lihat dan unduh riwayat slip gaji bulanan Anda yang telah diterbitkan perusahaan.</p>
             <span className="font-bold text-xs text-blue-600 group-hover:underline mt-auto">Buka Slip Gaji &rarr;</span>
           </div>
+          )}
 
           {/* MENU FINANCE */}
           {(user.can_access_finance || user.role === 'admin' || user.role === 'direksi') && (
@@ -1025,8 +1049,23 @@ const PortalHome = () => {
                              </label> */}
                              <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
 
-                             {/* --- KUSTOMISASI AKSES MODUL PARKIR --- */}
+                             {/* --- KUSTOMISASI AKSES MENU DASAR --- */}
                              <div className="col-span-2 md:col-span-3 h-px bg-slate-200 my-1"></div>
+                             <div className="col-span-2 md:col-span-3 text-[9px] font-black text-slate-800 uppercase tracking-widest">Akses Menu Dasar (Umum)</div>
+
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <input type="checkbox" checked={u.can_access_task !== false} onChange={(e) => updatePermission(u.id, 'can_access_task', e.target.checked)} className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Akses Task Management</span>
+                             </label>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <input type="checkbox" checked={u.can_access_mail !== false} onChange={(e) => updatePermission(u.id, 'can_access_mail', e.target.checked)} className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Akses Pesan Internal</span>
+                             </label>
+                             <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <input type="checkbox" checked={u.can_access_payslip !== false} onChange={(e) => updatePermission(u.id, 'can_access_payslip', e.target.checked)} className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 rounded border-slate-300"/>
+                                <span className="text-[10px] font-bold text-slate-700">Akses Slip Gaji</span>
+                             </label>
+
                              <div className="col-span-2 md:col-span-3 text-[9px] font-black text-purple-600 uppercase tracking-widest">Akses Modul Parkir Dasar</div>
 
                              <label className="flex items-center gap-2 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-purple-50 transition-colors">
@@ -1548,7 +1587,7 @@ const PortalHome = () => {
       {/* MOBILE BOTTOM NAVBAR */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-200 z-50 px-4 py-2 flex justify-around items-center shadow-[0_-4px_24px_-10px_rgba(0,0,0,0.15)]">
         <button onClick={() => navigate('/')} className="flex flex-col items-center gap-0.5 text-amber-500 flex-1 py-1"><LayoutDashboard size={22} /><span className="text-[9px] font-black uppercase tracking-wider">Home</span></button>
-        <button onClick={() => navigate('/TaskManagement')} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1"><ClipboardList size={22} /><span className="text-[9px] font-bold uppercase tracking-wider">Tasks</span></button>
+        {(user?.can_access_task !== false || user?.role === 'admin') && (<button onClick={() => navigate('/TaskManagement')} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1"><ClipboardList size={22} /><span className="text-[9px] font-bold uppercase tracking-wider">Tasks</span></button>)}
         {canAccessRecruitment() && (<button onClick={() => navigate('/recruitment-admin')} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1"><Users size={22} /><span className="text-[9px] font-bold uppercase tracking-wider">HRD</span></button>)}
         <button onClick={() => { setIsSettingsModalOpen(true); setActiveSettingsTab('profile'); }} className="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-900 transition-colors flex-1 py-1"><Settings size={22} /><span className="text-[9px] font-bold uppercase tracking-wider">Setting</span></button>
       </div>
