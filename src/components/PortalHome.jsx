@@ -802,24 +802,6 @@ const PortalHome = () => {
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-6`}>
           
           {/* MENU TASK MANAGEMENT */}
-          <div onClick={() => navigate('/TaskManagement')} className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/5 transition-all cursor-pointer relative overflow-hidden flex flex-col">
-            <div className="flex justify-between items-start mb-6">
-              <div className="w-12 h-12 bg-slate-950 text-amber-400 rounded-2xl flex items-center justify-center shadow-sm">
-                <ClipboardList size={24} strokeWidth={2.5} />
-              </div>
-              <button 
-                onClick={(e) => handleToggleMenuNotif(e, 'task', 'Task Management')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all z-10 border ${menuNotifPrefs.task ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
-                title={menuNotifPrefs.task ? "Matikan Notifikasi Task" : "Nyalakan Notifikasi Task"}
-              >
-                {menuNotifPrefs.task ? <Bell size={12} /> : <BellOff size={12} />}
-                <span className="hidden md:inline">{menuNotifPrefs.task ? 'Notif Aktif' : 'Notif Mati'}</span>
-              </button>
-            </div>
-            <h3 className="text-lg font-black text-slate-900 mb-1">Task Management</h3>
-            <p className="text-slate-500 text-xs md:text-sm leading-relaxed mb-6 flex-1">Kelola dan pantau seluruh laporan target kinerja divisi operasional harian.</p>
-            <span className="font-bold text-xs text-amber-600 group-hover:underline mt-auto">Buka Dashboard &rarr;</span>
-          </div>{/* MENU TASK MANAGEMENT */}
           {(user?.can_access_task !== false || user?.role === 'admin' || user?.role === 'direksi') && (
           <div onClick={() => navigate('/TaskManagement')} className="group bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/5 transition-all cursor-pointer relative overflow-hidden flex flex-col">
             <div className="flex justify-between items-start mb-6">
