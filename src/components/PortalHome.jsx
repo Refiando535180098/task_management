@@ -603,7 +603,7 @@ const PortalHome = () => {
       
       {/* HEADER NAVBAR */}
       <nav className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="w-full mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="bg-yellow-400 p-2 rounded-lg shadow-md">
               <img src="/Logo_apps.png" alt="Logo" className="w-6 h-6 object-contain" />
@@ -680,7 +680,7 @@ const PortalHome = () => {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-6 pt-6 md:pt-10">
+      <main className="w-full mx-auto px-4 md:px-8 pt-6 md:pt-10">
         
         {/* BARIS ATAS: KARTU DATA KARYAWAN */}
         <div className="bg-slate-950 rounded-3xl p-6 md:p-8 mb-8 shadow-xl shadow-slate-900/10 text-white relative overflow-hidden">
