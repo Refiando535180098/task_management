@@ -20,7 +20,9 @@ const ParkingDashboard = () => {
   const [marketList, setMarketList] = useState([]);
   
   const [filterMonth, setFilterMonth] = useState('');
+  const [filterDate, setFilterDate] = useState('');
   const [filterMarket, setFilterMarket] = useState('');
+  const [filterInput, setFilterInput] = useState('Form Manual');
   
   const [inputMode, setInputMode] = useState('manual');
   
@@ -160,13 +162,28 @@ const ParkingDashboard = () => {
   const visibleIncomes = useMemo(() => {
     let data = incomes;
     if (!canViewGlobal) data = data.filter(i => String(i.created_by) === String(user?.id));
-    if (filterMonth) data = data.filter(i => i.tanggal && i.tanggal.startsWith(filterMonth));
+    
+    // Filter Tanggal spesifik akan menimpa filter Bulan jika diisi
+    if (filterDate) {
+       data = data.filter(i => i.tanggal === filterDate);
+    } else if (filterMonth) {
+       data = data.filter(i => i.tanggal && i.tanggal.startsWith(filterMonth));
+    }
+    
     if (filterMarket) {
       const keyword = filterMarket.replace(/pasar|jaya|parkir/gi, '').trim().toLowerCase();
       data = data.filter(i => (i.nama_pasar || '').toLowerCase().includes(keyword));
     }
+
+    if (filterInput) {
+       data = data.filter(i => {
+           const source = i.input_source || (i.is_manual ? 'Form Manual' : 'Upload Excel');
+           return source === filterInput;
+       });
+    }
+
     return data;
-  }, [incomes, canViewGlobal, filterMonth, filterMarket, user?.id]);
+  }, [incomes, canViewGlobal, filterDate, filterMonth, filterMarket, filterInput, user?.id]);
 
   const summaryData = useMemo(() => {
     let incMotor = 0, incManualMotor = 0, incMobil = 0, incBox = 0, incTruck = 0, incPkl = 0, incLangganan = 0, grandTotal = 0;
@@ -320,6 +337,61 @@ const ParkingDashboard = () => {
       const { data } = await supabase.from('parking_incomes').select('*, initial_users(name)').order('tanggal', { ascending: false });
       setIncomes(data || []); setLastSync(new Date());
     } catch (err) { alert('Gagal memproses data: ' + err.message); } finally { setIsSubmitting(false); }
+  };
+
+  const handleExportData = () => {
+    if (visibleIncomes.length === 0) return alert('Tidak ada data untuk diexport!');
+    
+    const exportData = visibleIncomes.map((item, index) => {
+      const kotor = Number(item.total_income || 0) + Number(item.tm_nominal || 0);
+      let fotoLinks = "Tanpa lampiran";
+      if (item.tm_photo_urls && item.tm_photo_urls.length > 0) {
+         fotoLinks = item.tm_photo_urls.join(" , ");
+      } else if (item.tm_photo_url) {
+         fotoLinks = item.tm_photo_url;
+      }
+
+      return {
+        "No": index + 1,
+        "Tanggal": item.tanggal,
+        "Shift": item.shift,
+        "Nama Lokasi/Pasar": item.nama_pasar,
+        "PIC Lapangan": item.initial_users?.name || 'Sistem',
+        "Income Motor (Rp)": Number(item.inc_motor || 0),
+        "Income Manual Motor (Rp)": Number(item.inc_manual_motor || 0),
+        "Income Mobil (Rp)": Number(item.inc_mobil || 0),
+        "Income Box (Rp)": Number(item.inc_box || 0),
+        "Income Truck (Rp)": Number(item.inc_truck || 0),
+        "Income PKL (Rp)": Number(item.inc_pkl || 0),
+        "Income Langganan (Rp)": Number(item.income_langganan || 0),
+        "Qty Motor": Number(item.qty_motor || 0),
+        "Qty Manual Motor": Number(item.qty_manual_motor || 0),
+        "Qty Mobil": Number(item.qty_mobil || 0),
+        "Qty Box": Number(item.qty_box || 0),
+        "Qty Truck": Number(item.qty_truck || 0),
+        "Qty PKL": Number(item.qty_pkl || 0),
+        "Qty Langganan": Number(item.qty_langganan || 0),
+        "Income Kotor (Rp)": kotor,
+        "TM Qty (Unit)": Number(item.tm_qty || 0),
+        "TM Nominal Kerugian (Rp)": Number(item.tm_nominal || 0),
+        "TOTAL INCOME BERSIH (Rp)": Number(item.total_income || 0),
+        "Metode Input": item.input_source || (item.is_manual ? 'Form Manual' : 'Upload Excel'),
+        "Link Bukti Foto": fotoLinks
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws['!cols'] = [ {wch: 5}, {wch: 12}, {wch: 10}, {wch: 25}, {wch: 20}, {wch: 18}, {wch: 24}, {wch: 18}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 22}, {wch: 10}, {wch: 18}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 15}, {wch: 18}, {wch: 15}, {wch: 24}, {wch: 25}, {wch: 15}, {wch: 50} ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap Laporan Parkir");
+    
+    let fileName = "Rekap_Laporan_Parkir";
+    if (filterDate) fileName += `_${filterDate}`;
+    else if (filterMonth) fileName += `_${filterMonth}`;
+    if (filterMarket) fileName += `_${filterMarket}`;
+    
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
   };
 
   const handleManualSubmit = async (e) => {
@@ -702,6 +774,16 @@ const ParkingDashboard = () => {
                        </select>
                      </div>
                    )}
+                   
+                   <div className="w-full md:w-auto">
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Metode Input</label>
+                       <select value={filterInput} onChange={(e) => setFilterInput(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500">
+                          <option value="">Semua Metode</option>
+                          <option value="Form Manual">Form Manual</option>
+                          <option value="Tabel Massal">Tabel Massal</option>
+                          <option value="Upload Excel">Upload Excel</option>
+                       </select>
+                   </div>
                 </div>
               )}
 
@@ -1190,43 +1272,138 @@ const ParkingDashboard = () => {
             </div>
           )}
 
-          {/* TAB 3: RINGKASAN LAPORAN MANUAL (+ FOTO TM) */}
+          {/* TAB 3: RINGKASAN DATA KESELURUHAN & LOG LAPORAN */}
           {activeTab === 'summary' && canViewLog && (
             <div className="animate-fade-in max-w-6xl mx-auto space-y-6">
+              
+              {/* FILTERING AREA (Digunakan untuk Download Excel) */}
+              {(canViewChartMonthly || canViewGlobal) && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-end flex-wrap">
+                   <div className="w-full md:w-auto">
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cari Tanggal</label>
+                       <div className="flex items-center gap-2">
+                          <input type="date" value={filterDate} onChange={(e) => {setFilterDate(e.target.value); setFilterMonth('');}} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500" />
+                          {filterDate && (
+                              <button onClick={() => setFilterDate('')} className="p-2 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-colors" title="Hapus Filter">
+                                <X size={16}/>
+                              </button>
+                          )}
+                        </div>
+                   </div>
+                   
+                   {canViewChartMonthly && (
+                     <div className="w-full md:w-auto">
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Atau Filter Bulan</label>
+                       <div className="flex items-center gap-2">
+                          <input type="month" value={filterMonth} onChange={(e) => {setFilterMonth(e.target.value); setFilterDate('');}} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500" />
+                          {filterMonth && (
+                              <button onClick={() => setFilterMonth('')} className="p-2 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-colors" title="Hapus Filter">
+                                <X size={16}/>
+                              </button>
+                          )}
+                        </div>
+                     </div>
+                   )}
+                   
+                   {canViewGlobal && (
+                     <div className="w-full md:w-auto flex-1">
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Filter Pasar / Area</label>
+                       <select value={filterMarket} onChange={(e) => setFilterMarket(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500">
+                          <option value="">Semua Pasar</option>
+                          {marketList.map(m => <option key={m} value={m}>{m}</option>)}
+                       </select>
+                     </div>
+                   )}
+                   
+                   <div className="w-full md:w-auto">
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Metode Input</label>
+                       <select value={filterInput} onChange={(e) => setFilterInput(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-purple-500">
+                          <option value="">Semua Metode</option>
+                          <option value="Form Manual">Form Manual Saja</option>
+                          <option value="Tabel Massal">Tabel Massal</option>
+                          <option value="Upload Excel">Upload Excel Saja</option>
+                       </select>
+                   </div>
+                </div>
+              )}
+
               <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
-                 <h3 className="font-black text-lg text-slate-800 mb-2 flex items-center gap-2"><FileImage className="text-purple-600" size={24}/> Ringkasan Laporan Masalah Lapangan</h3>
-                 <p className="text-xs text-slate-500 mb-6 font-medium">Rekapitulasi lengkap khusus dari inputan Form Manual. Menampilkan detail kerugian Tiket Masalah (TM) dan lampiran bukti foto lapangan.</p>
+                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <h3 className="font-black text-lg text-slate-800 mb-1 flex items-center gap-2"><FileImage className="text-purple-600" size={24}/> Ringkasan Keseluruhan Data</h3>
+                      <p className="text-xs text-slate-500 font-medium">Menampilkan seluruh data laporan parkir (baik via Form Manual maupun Upload Excel).</p>
+                    </div>
+                    <button onClick={handleExportData} className="w-full md:w-auto bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-black flex justify-center items-center gap-2 transition-colors shadow-sm">
+                      <Download size={16}/> Export Excel Data Ini
+                    </button>
+                 </div>
                  
-                 <div className="overflow-x-auto w-full">
-                    <table className="min-w-full text-left border-collapse">
+                 <div className="overflow-x-auto w-full custom-scrollbar">
+                    <table className="min-w-full text-left border-collapse whitespace-nowrap">
                        <thead>
                          <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-y border-slate-200">
-                           <th className="p-4">Tanggal & Shift</th>
-                           <th className="p-4">Lokasi & PIC</th>
-                           <th className="p-4 text-right">Income Kotor</th>
-                           <th className="p-4 text-center border-x border-slate-100 bg-red-50/50 text-red-500">Info TM (Kerugian)</th>
-                           <th className="p-4 text-right">Net Income Bersih</th>
-                           <th className="p-4 text-center">Bukti Foto</th>
+                           <th className="px-4 py-3">Tanggal & Shift</th>
+                           <th className="px-4 py-3">Lokasi & PIC</th>
+                           <th className="px-3 py-3 text-right border-l border-slate-100">Motor</th>
+                           <th className="px-3 py-3 text-right">Mobil</th>
+                           <th className="px-3 py-3 text-right">Box</th>
+                           <th className="px-3 py-3 text-right">Truck</th>
+                           <th className="px-3 py-3 text-right">PKL</th>
+                           <th className="px-3 py-3 text-right">Langganan</th>
+                           <th className="px-4 py-3 text-center border-x border-slate-100 bg-red-50/50 text-red-500">Info TM (Kerugian)</th>
+                           <th className="px-4 py-3 text-right bg-purple-50/50">Total Bersih</th>
+                           <th className="px-4 py-3 text-center">Bukti Foto</th>
                          </tr>
                        </thead>
-                       <tbody className="text-xs font-medium divide-y divide-slate-100">
-                         {visibleIncomes.filter(i => i.is_manual).length === 0 ? (
-                           <tr><td colSpan={6} className="py-10 text-center text-slate-400 font-bold">Belum ada data pelaporan manual yang memuat TM / Foto.</td></tr>
+                       <tbody className="text-[11px] font-medium divide-y divide-slate-100">
+                         {visibleIncomes.length === 0 ? (
+                           <tr><td colSpan={11} className="py-10 text-center text-slate-400 font-bold text-sm">Belum ada data laporan yang sesuai dengan filter.</td></tr>
                          ) : (
-                           visibleIncomes.filter(i => i.is_manual).map((item) => {
-                              const kotor = Number(item.total_income || 0) + Number(item.tm_nominal || 0);
+                           visibleIncomes.map((item) => {
+                              const sourceLabel = item.input_source || (item.is_manual ? 'Form Manual' : 'Upload Excel');
+                              
                               return (
                                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                 <td className="p-4">
-                                     <span className="font-black text-slate-800 block">{item.tanggal}</span>
+                                 <td className="px-4 py-3">
+                                     <span className="font-black text-slate-800 block text-xs">{item.tanggal}</span>
                                      <span className="text-[10px] text-slate-500 uppercase font-bold">{item.shift}</span>
+                                     <div className="mt-1">
+                                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${sourceLabel === 'Form Manual' ? 'bg-amber-100 text-amber-700' : sourceLabel === 'Tabel Massal' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
+                                           {sourceLabel}
+                                        </span>
+                                     </div>
                                  </td>
-                                 <td className="p-4">
-                                     <span className="font-bold text-slate-700 block">{item.nama_pasar}</span>
+                                 <td className="px-4 py-3">
+                                     <span className="font-bold text-slate-700 block text-xs">{item.nama_pasar}</span>
                                      <span className="text-[10px] text-blue-600 uppercase font-bold">{item.initial_users?.name || 'Sistem'}</span>
                                  </td>
-                                 <td className="p-4 text-right text-slate-600">{formatRupiah(kotor)}</td>
-                                 <td className="p-4 text-center border-x border-slate-100 bg-red-50/20">
+                                 
+                                 <td className="px-3 py-3 text-right border-l border-slate-100">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(Number(item.inc_motor||0) + Number(item.inc_manual_motor||0)).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{Number(item.qty_motor||0) + Number(item.qty_manual_motor||0)} Unit</div>
+                                 </td>
+                                 <td className="px-3 py-3 text-right">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(item.inc_mobil).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{item.qty_mobil||0} Unit</div>
+                                 </td>
+                                 <td className="px-3 py-3 text-right">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(item.inc_box).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{item.qty_box||0} Unit</div>
+                                 </td>
+                                 <td className="px-3 py-3 text-right">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(item.inc_truck).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{item.qty_truck||0} Unit</div>
+                                 </td>
+                                 <td className="px-3 py-3 text-right">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(item.inc_pkl).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{item.qty_pkl||0} Unit</div>
+                                 </td>
+                                 <td className="px-3 py-3 text-right">
+                                    <div className="text-slate-800 font-bold">{formatRupiah(item.income_langganan).replace('Rp','')}</div>
+                                    <div className="text-[10px] font-bold text-emerald-600">{item.qty_langganan||0} Unit</div>
+                                 </td>
+
+                                 <td className="px-4 py-3 text-center border-x border-slate-100 bg-red-50/20">
                                      {Number(item.tm_qty) > 0 ? (
                                         <>
                                           <div className="font-black text-red-600 text-sm">-{formatRupiah(item.tm_nominal).replace('Rp','')}</div>
@@ -1234,17 +1411,26 @@ const ParkingDashboard = () => {
                                         </>
                                      ) : <span className="text-slate-400">-</span>}
                                  </td>
-                                 <td className="p-4 text-right font-black text-purple-600 text-sm">{formatRupiah(item.total_income)}</td>
-                                 <td className="p-4">
+                                 <td className="px-4 py-3 text-right bg-purple-50/30 border-r border-slate-100">
+                                     <div className="font-black text-purple-600 text-sm">{formatRupiah(item.total_income)}</div>
+                                     <div className="text-[10px] font-bold text-emerald-600">{item.qty_total || 0} Unit</div>
+                                 </td>
+                                 <td className="px-4 py-3 text-center">
                                      {item.tm_photo_urls && item.tm_photo_urls.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1.5 justify-center">
+                                        <div className="flex flex-wrap gap-1.5 justify-center w-max mx-auto">
                                            {item.tm_photo_urls.map((url, idx) => (
                                               <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden shadow-sm border border-slate-200 block hover:scale-150 hover:shadow-lg transition-transform z-10 hover:z-50 relative origin-center">
                                                  <img src={url} alt="Lampiran" className="w-full h-full object-cover" />
                                               </a>
                                            ))}
                                         </div>
-                                     ) : <span className="text-[10px] text-slate-400 block text-center">Tanpa lampiran</span>}
+                                     ) : item.tm_photo_url ? (
+                                        <div className="flex justify-center w-max mx-auto">
+                                           <a href={item.tm_photo_url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden shadow-sm border border-slate-200 block hover:scale-150 hover:shadow-lg transition-transform z-10 hover:z-50 relative origin-center">
+                                              <img src={item.tm_photo_url} alt="Lampiran" className="w-full h-full object-cover" />
+                                           </a>
+                                        </div>
+                                     ) : <span className="text-[10px] text-slate-400 block text-center whitespace-nowrap">Tanpa lampiran</span>}
                                  </td>
                                </tr>
                               );
@@ -1293,10 +1479,8 @@ const ParkingDashboard = () => {
               </div>
             </div>
           )}
-
         </div>
       </main>
-
     </div>
   );
 };
