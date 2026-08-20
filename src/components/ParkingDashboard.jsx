@@ -1274,7 +1274,7 @@ const ParkingDashboard = () => {
 
           {/* TAB 3: RINGKASAN DATA KESELURUHAN & LOG LAPORAN */}
           {activeTab === 'summary' && canViewLog && (
-            <div className="animate-fade-in max-w-6xl mx-auto space-y-6">
+            <div className="animate-fade-in w-full space-y-6">
               
               {/* FILTERING AREA (Digunakan untuk Download Excel) */}
               {(canViewChartMonthly || canViewGlobal) && (
@@ -1417,16 +1417,16 @@ const ParkingDashboard = () => {
                                  </td>
                                  <td className="px-4 py-3 text-center">
                                      {item.tm_photo_urls && item.tm_photo_urls.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1.5 justify-center w-max mx-auto">
+                                        <div className="flex flex-wrap gap-2 justify-center w-max mx-auto">
                                            {item.tm_photo_urls.map((url, idx) => (
-                                              <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden shadow-sm border border-slate-200 block hover:scale-150 hover:shadow-lg transition-transform z-10 hover:z-50 relative origin-center">
+                                              <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-lg overflow-hidden shadow-sm border border-slate-300 block hover:scale-[2.5] hover:shadow-2xl transition-transform duration-300 z-10 hover:z-50 relative origin-center">
                                                  <img src={url} alt="Lampiran" className="w-full h-full object-cover" />
                                               </a>
                                            ))}
                                         </div>
                                      ) : item.tm_photo_url ? (
                                         <div className="flex justify-center w-max mx-auto">
-                                           <a href={item.tm_photo_url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden shadow-sm border border-slate-200 block hover:scale-150 hover:shadow-lg transition-transform z-10 hover:z-50 relative origin-center">
+                                           <a href={item.tm_photo_url} target="_blank" rel="noopener noreferrer" className="w-12 h-12 rounded-lg overflow-hidden shadow-sm border border-slate-300 block hover:scale-[2.5] hover:shadow-2xl transition-transform duration-300 z-10 hover:z-50 relative origin-center">
                                               <img src={item.tm_photo_url} alt="Lampiran" className="w-full h-full object-cover" />
                                            </a>
                                         </div>
