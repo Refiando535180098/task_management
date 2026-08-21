@@ -30,7 +30,7 @@ const ParkingDashboard = () => {
     tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', 
     inc_motor: '', inc_manual_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '',
     qty_motor: '', qty_manual_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '',
-    tm_qty: '', tm_nominal: '', tm_photos: []
+    tm_qty: '', tm_nominal: '', tm_keterangan: '', tm_photos: []
   });
   
   const [massInputRows, setMassInputRows] = useState([{ 
@@ -331,7 +331,7 @@ const ParkingDashboard = () => {
 
       alert(`Berhasil memproses dan mensinkronkan ${payloads.length} entri data!`);
       
-      setManualForm({ tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '', tm_qty: '', tm_nominal: '', tm_photo: null });
+      setManualForm({ tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', shift_start: '08:00', shift_end: '16:00', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '', tm_qty: '', tm_nominal: '', tm_keterangan: '', tm_photo: [] });
       setMassInputRows([{ id: Date.now(), tanggal: new Date().toISOString().split('T')[0], nama_pasar: '', shift: 'Shift 1', inc_motor: '', inc_mobil: '', inc_box: '', inc_truck: '', inc_pkl: '', income_langganan: '', qty_motor: '', qty_mobil: '', qty_box: '', qty_truck: '', qty_pkl: '', qty_langganan: '' }]);
       
       const { data } = await supabase.from('parking_incomes').select('*, initial_users(name)').order('tanggal', { ascending: false });
@@ -374,6 +374,7 @@ const ParkingDashboard = () => {
         "Income Kotor (Rp)": kotor,
         "TM Qty (Unit)": Number(item.tm_qty || 0),
         "TM Nominal Kerugian (Rp)": Number(item.tm_nominal || 0),
+        "Keterangan Lapangan": item.tm_keterangan || '-',
         "TOTAL INCOME BERSIH (Rp)": Number(item.total_income || 0),
         "Metode Input": item.input_source || (item.is_manual ? 'Form Manual' : 'Upload Excel'),
         "Link Bukti Foto": fotoLinks
@@ -453,14 +454,13 @@ const ParkingDashboard = () => {
            total_income: (incM + incMM + incMb + incB + incT + incP + incL) - tmNom,
            qty_motor: qtyM, qty_manual_motor: qtyMM, qty_mobil: qtyMb, qty_box: qtyB, qty_truck: qtyT, qty_pkl: qtyP, qty_langganan: qtyL,
            qty_total: qtyM + qtyMM + qtyMb + qtyB + qtyT + qtyP + qtyL,
-           tm_qty: tmQ, tm_nominal: tmNom, 
-           tm_photo_urls: uploadedUrls, // <--- Simpan ke array
+           tm_qty: tmQ, tm_nominal: tmNom, tm_keterangan: manualForm.tm_keterangan, 
+           tm_photo_urls: uploadedUrls,
            is_manual: true,
            shift_start: manualForm.shift_start, shift_end: manualForm.shift_end
        }
     }];
     
-    // ProcessPayload akan mengurus notif alert dan reset form
     processPayload(payload);
   };
 
@@ -1057,28 +1057,39 @@ const ParkingDashboard = () => {
                          {/* SEKSI TIKET MASALAH (TM) */}
                          <div className="md:col-span-2 h-px bg-slate-200 my-2"></div>
                          <div className="md:col-span-2 flex items-center justify-between">
-                             <span className="text-xs font-black text-red-600 uppercase tracking-widest bg-red-50 px-3 py-1 rounded-lg">3. Tiket Masalah (TM) / Kerugian (Opsional)</span>
-                             <span className="text-[10px] font-bold text-slate-400">*Otomatis mengurangi Total Income</span>
+                             <span className="text-xs font-black text-red-600 uppercase tracking-widest bg-red-50 px-3 py-1 rounded-lg">3. Laporan Masalah / Kerugian / Keterangan (Opsional)</span>
+                             <span className="text-[10px] font-bold text-slate-400">*Nominal akan mengurangi Total Income</span>
                          </div>
                          
-                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Jumlah Qty TM</label>
-                               <input type="number" min="0" value={manualForm.tm_qty} onChange={e => setManualForm({...manualForm, tm_qty: e.target.value})} placeholder="0 Unit" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex gap-4">
+                               <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Jumlah Qty TM</label>
+                                  <input type="number" min="0" value={manualForm.tm_qty} onChange={e => setManualForm({...manualForm, tm_qty: e.target.value})} placeholder="0 Unit" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                               </div>
+                               <div className="flex-1">
+                                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Nominal Kerugian (Rp)</label>
+                                  <input type="number" min="0" value={manualForm.tm_nominal} onChange={e => setManualForm({...manualForm, tm_nominal: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                               </div>
                             </div>
                             <div>
-                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Nominal Kerugian TM (Rp)</label>
-                               <input type="number" min="0" value={manualForm.tm_nominal} onChange={e => setManualForm({...manualForm, tm_nominal: e.target.value})} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500"/>
+                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Keterangan / Kronologi Singkat Kejadian</label>
+                               <textarea 
+                                  value={manualForm.tm_keterangan} 
+                                  onChange={e => setManualForm({...manualForm, tm_keterangan: e.target.value})} 
+                                  placeholder="Ketik keterangan di sini jika ada tiket masalah, beda selisih uang, hujan lebat, dll..." 
+                                  rows="2"
+                                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-red-500 custom-scrollbar resize-y"
+                               />
                             </div>
-                            <div className="md:col-span-3">
-                               <div className="md:col-span-3">
+                            
+                            <div className="md:col-span-2 mt-2">
                                <div className="flex justify-between items-center mb-1.5">
                                   <label className="block text-[10px] font-black text-slate-500 uppercase">Lampirkan Bukti Foto (Bisa lebih dari 1)</label>
                                   <span className="text-[9px] font-bold text-slate-400">{manualForm.tm_photos?.length || 0} Foto Terpilih</span>
                                </div>
                                
                                <div className="flex gap-2 mb-2">
-                                  {/* Tombol 1: Langsung Buka Kamera */}
                                   <label className="flex-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 cursor-pointer rounded-xl px-4 py-2.5 text-xs font-black text-center transition-colors shadow-sm flex items-center justify-center gap-2">
                                      📷 Buka Kamera
                                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => {
@@ -1090,7 +1101,6 @@ const ParkingDashboard = () => {
                                      }} />
                                   </label>
 
-                                  {/* Tombol 2: Buka Galeri / File Manager */}
                                   <label className="flex-1 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 cursor-pointer rounded-xl px-4 py-2.5 text-xs font-black text-center transition-colors shadow-sm flex items-center justify-center gap-2">
                                      📁 Pilih Galeri
                                      <input type="file" multiple accept="image/*" className="hidden" onChange={e => {
@@ -1103,7 +1113,6 @@ const ParkingDashboard = () => {
                                   </label>
                                </div>
                                
-                               {/* Preview Foto yang Akan Diupload */}
                                {manualForm.tm_photos?.length > 0 && (
                                   <div className="flex flex-wrap gap-3 mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                                      {manualForm.tm_photos.map((file, idx) => (
@@ -1113,28 +1122,6 @@ const ParkingDashboard = () => {
                                                const filtered = manualForm.tm_photos.filter((_, i) => i !== idx);
                                                setManualForm({...manualForm, tm_photos: filtered});
                                             }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus Foto"><X size={10}/></button>
-                                        </div>
-                                     ))}
-                                  </div>
-                               )}
-                            </div>
-                               <input type="file" multiple accept="image/*" onChange={e => {
-                                  // Menggabungkan foto yang sudah ada dengan foto yang baru dipilih
-                                  const newFiles = Array.from(e.target.files);
-                                  setManualForm({...manualForm, tm_photos: [...manualForm.tm_photos, ...newFiles]});
-                                  e.target.value = null; // Reset input agar bisa pilih file yang sama lagi kalau mau
-                               }} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 bg-white mb-2" />
-                               
-                               {/* Preview Foto yang Akan Diupload */}
-                               {manualForm.tm_photos?.length > 0 && (
-                                  <div className="flex flex-wrap gap-3 mt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                                     {manualForm.tm_photos.map((file, idx) => (
-                                        <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden shadow-sm border border-slate-300">
-                                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
-                                            <button type="button" onClick={() => {
-                                               const filtered = manualForm.tm_photos.filter((_, i) => i !== idx);
-                                               setManualForm({...manualForm, tm_photos: filtered});
-                                            }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={10}/></button>
                                         </div>
                                      ))}
                                   </div>
@@ -1351,13 +1338,14 @@ const ParkingDashboard = () => {
                            <th className="px-3 py-3 text-right">PKL</th>
                            <th className="px-3 py-3 text-right">Langganan</th>
                            <th className="px-4 py-3 text-center border-x border-slate-100 bg-red-50/50 text-red-500">Info TM (Kerugian)</th>
+                           <th className="px-4 py-3 text-left border-r border-slate-100 min-w-[200px]">Keterangan</th>
                            <th className="px-4 py-3 text-right bg-purple-50/50">Total Bersih</th>
                            <th className="px-4 py-3 text-center">Bukti Foto</th>
                          </tr>
                        </thead>
                        <tbody className="text-[11px] font-medium divide-y divide-slate-100">
                          {visibleIncomes.length === 0 ? (
-                           <tr><td colSpan={11} className="py-10 text-center text-slate-400 font-bold text-sm">Belum ada data laporan yang sesuai dengan filter.</td></tr>
+                           <tr><td colSpan={12} className="py-10 text-center text-slate-400 font-bold text-sm">Belum ada data laporan yang sesuai dengan filter.</td></tr>
                          ) : (
                            visibleIncomes.map((item) => {
                               const sourceLabel = item.input_source || (item.is_manual ? 'Form Manual' : 'Upload Excel');
@@ -1410,6 +1398,13 @@ const ParkingDashboard = () => {
                                           <div className="text-[10px] text-red-500 font-bold">{item.tm_qty} Tiket Hilang</div>
                                         </>
                                      ) : <span className="text-slate-400">-</span>}
+                                 </td>
+                                 <td className="px-4 py-3 border-r border-slate-100 max-w-xs whitespace-normal break-words leading-relaxed text-[10px]">
+                                     {item.tm_keterangan ? (
+                                        <span className="text-slate-700 italic">"{item.tm_keterangan}"</span>
+                                     ) : (
+                                        <span className="text-slate-400">-</span>
+                                     )}
                                  </td>
                                  <td className="px-4 py-3 text-right bg-purple-50/30 border-r border-slate-100">
                                      <div className="font-black text-purple-600 text-sm">{formatRupiah(item.total_income)}</div>

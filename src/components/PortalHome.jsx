@@ -44,6 +44,19 @@ const PortalHome = () => {
   const [infoForm, setInfoForm] = useState({ title: '', content: '', file: null });
   const [isSubmittingInfo, setIsSubmittingInfo] = useState(false);
 
+  const [urgentPopupData, setUrgentPopupData] = useState(null);
+  const [urgentCountdown, setUrgentCountdown] = useState(5);
+
+  useEffect(() => {
+    let timer;
+    if (urgentPopupData && urgentCountdown > 0) {
+      timer = setInterval(() => {
+        setUrgentCountdown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [urgentPopupData, urgentCountdown]);
+
   const [showNotifPrompt, setShowNotifPrompt] = useState(false);
 
   // ==========================================
@@ -125,7 +138,17 @@ const PortalHome = () => {
       .from('portal_announcements')
       .select('*')
       .order('created_at', { ascending: false });
+    
     setAnnouncements(data || []);
+
+    // Cek jika ada pengumuman penting yang belum disetujui di sesi browser ini
+    if (data && data.length > 0) {
+      const latestUrgent = data.find(item => item.is_urgent);
+      if (latestUrgent && !sessionStorage.getItem(`read_urgent_${latestUrgent.id}`)) {
+        setUrgentPopupData(latestUrgent);
+        setUrgentCountdown(5); // Set mundur 5 detik
+      }
+    }
   };
 
   // Fungsi Fetch Daftar Pasar dari Database
@@ -207,14 +230,15 @@ const PortalHome = () => {
         title: infoForm.title,
         content: infoForm.content,
         attachment_url: attachmentUrl,
-        author_id: user.id
+        author_id: user.id,
+        is_urgent: infoForm.is_urgent
       }]);
 
       if (error) throw error;
 
       alert('Informasi berhasil dipublikasikan!');
       setIsInfoModalOpen(false);
-      setInfoForm({ title: '', content: '', file: null });
+      setInfoForm({ title: '', content: '', file: null, is_urgent: false });
       fetchAnnouncements(); 
     } catch (err) {
       alert('Gagal menambahkan informasi: ' + err.message);
@@ -734,14 +758,30 @@ const PortalHome = () => {
             {announcements.length > 0 ? (
               <div className="space-y-3">
                 {announcements.map((info) => (
-                  <div key={info.id} className="bg-white border-l-4 border-amber-500 border-y border-r border-slate-200 p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md">
+                  <div key={info.id} className={`bg-white border-y border-r p-4 md:p-5 rounded-r-2xl shadow-sm relative group transition-all hover:shadow-md border-l-4 ${info.is_urgent ? 'border-l-red-500 bg-red-50/10' : 'border-l-amber-500'}`}>
+                    
+                    {/* Blip Merah Animasi Jika Penting */}
+                    {info.is_urgent && (
+                       <span className="absolute top-4 right-12 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                       </span>
+                    )}
+
                     {(user.role === 'admin' || (user.can_manage_portal_info && info.author_id === user.id)) && (
                       <button onClick={() => deleteInfo(info.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors" title="Hapus Informasi">
                         <Trash2 size={16} />
                       </button>
                     )}
-                    <h4 className="font-bold text-slate-900 text-sm md:text-base pr-8 mb-1">{info.title}</h4>
-                    <p className="text-slate-600 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{info.content}</p>
+                    
+                    <div className="pr-12">
+                      <h4 className="font-bold text-slate-900 text-sm md:text-base mb-1">
+                        {info.is_urgent && <span className="text-red-600 mr-2 uppercase tracking-widest text-[10px] bg-red-100 px-2 py-0.5 rounded">Penting</span>}
+                        {info.title}
+                      </h4>
+                      <p className="text-slate-600 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{info.content}</p>
+                    </div>
+
                     {info.attachment_url && (
                       <div className="mt-3 pt-3 border-t border-slate-100">
                         <a href={info.attachment_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 py-1.5 px-3 rounded-lg transition-colors">
@@ -761,11 +801,11 @@ const PortalHome = () => {
         )}
 
         {/* BANNER SLIDESHOW */}
-        {(banners.length > 0 || user.role === 'admin') && (
+        {(banners.length > 0 || canManageInfo) && (
           <div className="mb-10 relative">
             <div className="flex justify-between items-center mb-3 px-2">
                <h3 className="font-black text-slate-800 text-sm md:text-lg">Banner Informasi Event</h3>
-               {user.role === 'admin' && (
+               {canManageInfo && (
                  <label className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow-sm transition-all">
                     {isUploading ? <RefreshCw size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                     {isUploading ? 'Proses...' : 'Upload Banner'}
@@ -776,7 +816,7 @@ const PortalHome = () => {
             {banners.length > 0 ? (
               <div className="relative w-full h-auto bg-slate-100/50 rounded-3xl overflow-hidden shadow-md border border-slate-200 group flex items-center justify-center">
                 <img src={banners[currentSlide].url} alt="Banner Internal" className="w-full h-auto object-contain transition-all duration-500 ease-in-out"/>
-                {user.role === 'admin' && (
+                {canManageInfo && (
                    <button onClick={() => deleteBanner(banners[currentSlide].name)} className="absolute top-4 right-4 bg-red-600/90 hover:bg-red-700 text-white p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all z-10" title="Hapus Banner Ini">
                      <Trash2 size={16} />
                    </button>
@@ -1376,12 +1416,46 @@ const PortalHome = () => {
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Lampiran File / Gambar (Opsional)</label>
                 <input type="file" onChange={e => setInfoForm({...infoForm, file: e.target.files[0]})} className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer" />
               </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-red-50 hover:bg-red-100 px-4 py-3 rounded-xl border border-red-200 transition-colors mt-2">
+                <input type="checkbox" checked={infoForm.is_urgent} onChange={e => setInfoForm({...infoForm, is_urgent: e.target.checked})} className="w-4 h-4 text-red-600 focus:ring-red-500 rounded border-red-300 cursor-pointer"/>
+                <span className="text-xs font-black text-red-700 uppercase tracking-widest">Tandai Pengumuman Penting (Pop-up Wajib Baca)</span>
+              </label>
               <div className="pt-2">
                 <button type="submit" disabled={isSubmittingInfo} className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition-all text-xs uppercase tracking-wider">
                   {isSubmittingInfo ? 'Memproses...' : 'Publikasikan Sekarang'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL PENGUMUMAN PENTING (URGENT) --- */}
+      {urgentPopupData && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
+          <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl p-6 text-center animate-fade-in-up border-2 border-red-500 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-2 bg-red-500 animate-pulse"></div>
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+              <ShieldAlert size={32} />
+            </div>
+            <h2 className="font-black text-slate-900 text-xl mb-1 uppercase tracking-tight">PENGUMUMAN PENTING</h2>
+            <h3 className="font-bold text-red-600 text-sm mb-4">{urgentPopupData.title}</h3>
+            
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left max-h-48 overflow-y-auto custom-scrollbar mb-6">
+               <p className="text-slate-700 text-xs md:text-sm whitespace-pre-wrap leading-relaxed">{urgentPopupData.content}</p>
+            </div>
+
+            <button 
+              disabled={urgentCountdown > 0}
+              onClick={() => {
+                 // Simpan status di session storage agar tidak pop-up berulang kali
+                 sessionStorage.setItem(`read_urgent_${urgentPopupData.id}`, 'true');
+                 setUrgentPopupData(null);
+              }} 
+              className={`w-full font-black py-4 rounded-xl transition-all flex items-center justify-center gap-2 ${urgentCountdown > 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white shadow-[0_8px_20px_rgba(220,38,38,0.3)] transform hover:-translate-y-1'}`}
+            >
+              {urgentCountdown > 0 ? `Mohon baca instruksi... (${urgentCountdown}s)` : 'Saya Sudah Membaca & Mengerti'}
+            </button>
           </div>
         </div>
       )}
