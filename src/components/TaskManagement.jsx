@@ -1824,9 +1824,8 @@ export default function TaskManagement() {
                      <button type="button" onClick={() => {setTaskSearchQuery(''); setTaskFilterMonth(''); setTaskFilterDate('');}} className="px-4 py-2 bg-red-50 text-red-600 font-bold text-xs rounded-xl hover:bg-red-100 shrink-0">Reset</button>
                    )}
                  </div>
-               </div>
-
-               {/* 3. TOMBOL BACKUP BARU (Hanya untuk Admin) */}
+                 
+                 {/* 3. TOMBOL BACKUP BARU (Hanya untuk Admin) */}
                  {currentUser?.role === 'admin' && (
                    <div className="flex w-full md:w-auto mt-2 md:mt-0 md:ml-auto">
                       <button type="button" onClick={handleOpenBackup} className="w-full md:w-auto px-4 py-2 bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl hover:bg-black shadow-md flex items-center justify-center gap-2 transition-all">
@@ -1834,6 +1833,7 @@ export default function TaskManagement() {
                       </button>
                    </div>
                  )}
+               </div>
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
