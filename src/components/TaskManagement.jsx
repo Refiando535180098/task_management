@@ -3,12 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import OneSignal from 'react-onesignal';
 import { supabase } from '../supabase';
 import html2pdf from 'html2pdf.js';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import JSZip from 'jszip';
 import { 
   Camera, LayoutDashboard, CheckSquare, Users, Plus, LogOut, Clock, CheckCircle2, AlertCircle,
   Search, Menu, X, ChevronDown, ChevronRight, MessageSquare, Paperclip, Send, FileText,
   Image as ImageIcon, BarChart3, Download, Calendar, TrendingUp, Briefcase, Printer,
-  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter
+  ShieldCheck, Building, Activity, Settings, UserPlus, Edit, Trash2, Bell, Lock, Check, Filter,
+  Archive, DatabaseBackup, AlertTriangle
 } from 'lucide-react';
+
 
 // ==========================================
 // 2. KOMPONEN UI PENDUKUNG
@@ -126,6 +131,13 @@ export default function TaskManagement() {
     strictMode: false
   });
   const [configForm, setConfigForm] = useState(sysConfig); 
+
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [backupStep, setBackupStep] = useState(1);
+  const [isProcessingBackup, setIsProcessingBackup] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [backupPdfs, setBackupPdfs] = useState([]);
+  const [deleteDateLimit, setDeleteDateLimit] = useState('');
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeChatId, setActiveChatId] = useState(null); 
@@ -258,6 +270,203 @@ export default function TaskManagement() {
     } finally {
       setIsUploading(false);
       e.target.value = ''; 
+    }
+  };
+
+  // 1. Fungsi Membuka Modal Backup
+  const handleOpenBackup = () => {
+    // Cari semua file PDF dari seluruh task
+    const allPdfs = [];
+    tasks.forEach(task => {
+      (task.attachments || []).forEach(att => {
+        if (att.type === 'application/pdf' || att.name.endsWith('.pdf')) {
+          allPdfs.push(att);
+        }
+      });
+    });
+    setBackupPdfs(allPdfs);
+    setBackupStep(allPdfs.length > 0 ? 1 : 2); // Jika ada PDF mulai dari step 1, jika tidak langsung step 2 (Excel)
+    setDeleteConfirmText('');
+    setIsBackupModalOpen(true);
+  };
+
+  // 2. Fungsi Download Semua PDF (Dijadikan .zip) - VERSI TAHAN BANTING
+  const handleDownloadPDFs = async () => {
+    setIsProcessingBackup(true);
+    try {
+      const zip = new JSZip();
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < backupPdfs.length; i++) {
+        const pdf = backupPdfs[i];
+        
+        try {
+          // Deteksi apakah ini link Supabase
+          const isSupabase = pdf.url && pdf.url.includes('/task-attachments/');
+          let blob;
+
+          if (isSupabase) {
+             const urlParts = pdf.url.split('/task-attachments/');
+             let storageFileName = urlParts.length > 1 ? urlParts[1] : null;
+             
+             if (storageFileName) {
+                storageFileName = storageFileName.split('?')[0]; // Bersihkan param
+                const { data, error } = await supabase.storage.from('task-attachments').download(storageFileName);
+                if (error) throw error;
+                blob = data;
+             }
+          }
+
+          // Jika bukan Supabase atau gagal, coba fetch URL biasa
+          if (!blob && pdf.url) {
+             const response = await fetch(pdf.url);
+             if (!response.ok) throw new Error(`Gagal akses URL (Status: ${response.status})`);
+             blob = await response.blob();
+          }
+
+          // Jika berhasil dapat file-nya, masukkan ke dalam ZIP
+          if (blob) {
+             zip.file(pdf.name || `dokumen_${i}.pdf`, blob);
+             successCount++;
+          } else {
+             throw new Error("File tidak ditemukan atau kosong");
+          }
+        } catch (fileErr) {
+          // JIKA 1 FILE GAGAL, HANYA CATAT DI CONSOLE, JANGAN STOP PROSES
+          console.warn(`Melewati file rusak (${pdf.name}):`, fileErr.message);
+          failCount++;
+        }
+      }
+
+      // Generate file ZIP jika ada minimal 1 file yang sukses didownload
+      if (successCount > 0) {
+        const zipContent = await zip.generateAsync({ type: 'blob' });
+        saveAs(zipContent, `Backup_PDF_Tasks_${new Date().getTime()}.zip`);
+      } else if (backupPdfs.length > 0) {
+        alert("Perhatian: Semua file PDF gagal didownload. Kemungkinan URL di database adalah URL lama yang sudah mati.");
+      }
+
+      // Beri info jika ada file yang gagal terdownload (opsional)
+      if (failCount > 0) {
+         console.log(`Berhasil: ${successCount} PDF. Gagal/Dilewati: ${failCount} PDF.`);
+      }
+
+      setBackupStep(2); // Lanjut otomatis ke step download Excel
+    } catch (error) {
+      alert("Terjadi kesalahan sistem saat membuat file ZIP: " + error.message);
+    } finally {
+      setIsProcessingBackup(false);
+    }
+  };
+
+  // 3. Fungsi Download Excel (beserta Gambar di dalamnya)
+  const handleDownloadExcel = async () => {
+    setIsProcessingBackup(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Data Tasks');
+
+      worksheet.columns = [
+        { header: 'ID', key: 'id', width: 10 },
+        { header: 'Judul Tugas', key: 'title', width: 30 },
+        { header: 'Deskripsi', key: 'description', width: 40 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Dibuat Oleh', key: 'assignedBy', width: 20 },
+        { header: 'Deadline', key: 'dueDate', width: 20 },
+        { header: 'Lampiran Gambar', key: 'image', width: 40 }
+      ];
+
+      for (let i = 0; i < tasks.length; i++) {
+        const t = tasks[i];
+        const row = worksheet.addRow({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          status: t.status,
+          assignedBy: getUserName(t.assignedBy),
+          dueDate: t.dueDate
+        });
+
+        // Cari lampiran gambar
+        const images = (t.attachments || []).filter(a => a.type?.startsWith('image/') || a.name?.match(/\.(jpeg|jpg|png)$/i));
+        
+        if (images.length > 0) {
+          row.height = 100; // Tinggikan baris untuk gambar
+          try {
+            const urlParts = images[0].url.split('/task-attachments/');
+            const storageFileName = urlParts.length > 1 ? urlParts[1] : null;
+            
+            let buffer;
+            if (storageFileName) {
+               // Gunakan Supabase SDK untuk menarik data gambar
+               const { data, error } = await supabase.storage.from('task-attachments').download(storageFileName);
+               if (error) throw error;
+               buffer = await data.arrayBuffer();
+            } else {
+               const response = await fetch(images[0].url);
+               buffer = await response.arrayBuffer();
+            }
+
+            const imageId = workbook.addImage({
+              buffer: buffer,
+              extension: 'png',
+            });
+            
+            worksheet.addImage(imageId, {
+              tl: { col: 6, row: row.number - 1 },
+              ext: { width: 100, height: 100 }
+            });
+          } catch (imgErr) {
+            console.warn("Gagal memuat gambar untuk excel:", imgErr);
+          }
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer]), `Backup_Tasks_${new Date().getTime()}.xlsx`);
+      setBackupStep(3); // Lanjut ke step reset database
+    } catch (error) {
+      alert("Gagal membuat Excel: " + error.message);
+    } finally {
+      setIsProcessingBackup(false);
+    }
+  };
+
+  // 4. Fungsi Kosongkan Database (Berdasarkan Tanggal)
+  const handleEmptyDatabase = async () => {
+    if (!deleteDateLimit) {
+      return alert('Pilih batas tanggal penghapusan terlebih dahulu!');
+    }
+    if (deleteConfirmText !== 'kosongkan') {
+      return alert('Ketik "kosongkan" dengan benar untuk melanjutkan!');
+    }
+    
+    setIsProcessingBackup(true);
+    try {
+      // Menambahkan waktu 23:59:59 agar mencakup seluruh hari pada tanggal yang dipilih
+      const cutoffDate = `${deleteDateLimit}T23:59:59.999Z`;
+
+      // Menghapus data task yang tanggal dibuatnya (created_at) SEBELUM atau SAMA DENGAN cutoffDate
+      const { error } = await supabase
+        .from('initial_tasks')
+        .delete()
+        .lte('created_at', cutoffDate);
+
+      if (error) throw error;
+      
+      alert(`Berhasil! Data pekerjaan sampai tanggal ${deleteDateLimit} telah dihapus permanen.`);
+      
+      // Memuat ulang data dari database agar layar langsung ter-update
+      loadTasksFromDB(); 
+      
+      setIsBackupModalOpen(false);
+      setDeleteConfirmText('');
+      setDeleteDateLimit('');
+    } catch (error) {
+      alert("Gagal menghapus database: " + error.message);
+    } finally {
+      setIsProcessingBackup(false);
     }
   };
 
@@ -1616,6 +1825,15 @@ export default function TaskManagement() {
                    )}
                  </div>
                </div>
+
+               {/* 3. TOMBOL BACKUP BARU (Hanya untuk Admin) */}
+                 {currentUser?.role === 'admin' && (
+                   <div className="flex w-full md:w-auto mt-2 md:mt-0 md:ml-auto">
+                      <button type="button" onClick={handleOpenBackup} className="w-full md:w-auto px-4 py-2 bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl hover:bg-black shadow-md flex items-center justify-center gap-2 transition-all">
+                        <DatabaseBackup className="w-4 h-4"/> Backup & Reset DB
+                      </button>
+                   </div>
+                 )}
 
                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-3 md:p-6 min-h-[50vh] pb-20 md:pb-6">
                  <h3 className="px-2 text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-3">Daftar Pekerjaan</h3>
@@ -2999,6 +3217,63 @@ export default function TaskManagement() {
             </p>
           </div>
         </div>
+
+        {/* === MODAL BACKUP & RESET DATABASE === */}
+        {isBackupModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[90] flex justify-center items-center p-4 print:hidden">
+            <Card className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in duration-300">
+              <div className="bg-slate-900 text-white p-5 border-b border-slate-800 flex justify-between items-center">
+                <h3 className="font-black text-lg flex items-center gap-2"><Archive className="w-5 h-5"/> Proses Backup & Reset</h3>
+                {!isProcessingBackup && <button onClick={() => setIsBackupModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>}
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {/* STEP 1: DOWNLOAD PDF */}
+                <div className={`p-4 rounded-xl border-2 transition-all ${backupStep === 1 ? 'border-blue-500 bg-blue-50' : 'border-slate-100 opacity-50 grayscale pointer-events-none'}`}>
+                  <h4 className="font-black text-slate-800 mb-2">Langkah 1: Amankan File PDF</h4>
+                  <p className="text-xs text-slate-600 mb-4 font-medium">Ditemukan <strong>{backupPdfs.length}</strong> file PDF terlampir. File ini akan dibungkus dalam format .zip.</p>
+                  <button onClick={handleDownloadPDFs} disabled={isProcessingBackup || backupStep !== 1} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-blue-700 disabled:opacity-50">
+                    {isProcessingBackup && backupStep === 1 ? 'Mendownload...' : `Download ${backupPdfs.length} PDF (.zip)`}
+                  </button>
+                </div>
+
+                {/* STEP 2: DOWNLOAD EXCEL */}
+                <div className={`p-4 rounded-xl border-2 transition-all ${backupStep === 2 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 opacity-50 grayscale pointer-events-none'}`}>
+                  <h4 className="font-black text-slate-800 mb-2">Langkah 2: Backup Data Utama (Excel)</h4>
+                  <p className="text-xs text-slate-600 mb-4 font-medium">Download seluruh riwayat tugas beserta lampiran foto fisik ke dalam format Excel (.xlsx).</p>
+                  <button onClick={handleDownloadExcel} disabled={isProcessingBackup || backupStep !== 2} className="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-emerald-700 disabled:opacity-50">
+                    {isProcessingBackup && backupStep === 2 ? 'Menyusun Excel...' : 'Download Data ke Excel'}
+                  </button>
+                </div>
+
+                {/* STEP 3: KOSONGKAN DATABASE */}
+                <div className={`p-4 rounded-xl border-2 transition-all ${backupStep === 3 ? 'border-red-500 bg-red-50' : 'border-slate-100 opacity-50 grayscale pointer-events-none'}`}>
+                  <h4 className="font-black text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/> Langkah 3: Bersihkan Database</h4>
+                  <p className="text-xs text-red-600/80 mb-3 font-bold">Pastikan file Excel dan PDF sudah sukses ter-download dan bisa dibuka di laptop kamu!</p>
+                  
+                  <div className="bg-white p-3 rounded-lg border border-red-200 mb-3">
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">Hapus Semua Data Sampai Tanggal:</label>
+                    <input 
+                        type="date" 
+                        value={deleteDateLimit} 
+                        onChange={e => setDeleteDateLimit(e.target.value)} 
+                        disabled={backupStep !== 3} 
+                        className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-red-500 outline-none text-sm font-bold" 
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Hanya tugas yang dibuat pada dan sebelum tanggal ini yang akan dihapus.</p>
+                  </div>
+
+                  <p className="text-xs text-slate-700 mb-2 font-medium">Ketik kata <strong>kosongkan</strong> di bawah ini untuk konfirmasi.</p>
+                  <input type="text" placeholder="Ketik kosongkan..." value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} disabled={backupStep !== 3} className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:border-red-500 outline-none text-sm font-bold mb-3" />
+                  
+                  <button onClick={handleEmptyDatabase} disabled={isProcessingBackup || backupStep !== 3 || deleteConfirmText !== 'kosongkan' || !deleteDateLimit} className="w-full bg-red-600 text-white py-2.5 rounded-lg font-black text-sm hover:bg-red-700 disabled:opacity-50">
+                    {isProcessingBackup && backupStep === 3 ? 'Menghapus...' : 'Hapus Data Terpilih'}
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
       </main>
 
       <style dangerouslySetInnerHTML={{__html: `
