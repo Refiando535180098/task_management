@@ -1603,39 +1603,91 @@ const PortalHome = () => {
                   </thead>
                   <tbody>
                      {(() => {
-                        const earnings = [{ name: 'Basic Salary', amount: selectedPayslip.base_salary }, ...(selectedPayslip.custom_details || []).filter(c => c.type === 'earning')];
-                        const deductions = (selectedPayslip.custom_details || []).filter(c => c.type === 'deduction');
-                        const totalEarning = earnings.reduce((sum, e) => sum + Number(e.amount), 0);
-                        const totalDeduction = deductions.reduce((sum, d) => sum + Number(d.amount), 0);
+                        // 1. Kumpulkan semua pemasukan dasar
+                        const earnings = [
+                           { name: 'Gaji Pokok (Basic Salary)', amount: Number(selectedPayslip.base_salary) || 0 }, 
+                           ...(selectedPayslip.custom_details || []).filter(c => c.type === 'earning').map(c => ({ name: c.name, amount: Number(c.amount) }))
+                        ];
+                        
+                        // 2. Kumpulkan semua potongan dasar
+                        const deductions = (selectedPayslip.custom_details || []).filter(c => c.type === 'deduction').map(c => ({ name: c.name, amount: Number(c.amount) }));
+                        
+                        // 3. Kalkulasi selisih untuk mendeteksi Prorata (Ketidakhadiran)
+                        let tempTotalEarning = earnings.reduce((sum, e) => sum + e.amount, 0);
+                        let tempTotalDeduction = deductions.reduce((sum, d) => sum + d.amount, 0);
+                        const expectedNet = tempTotalEarning - tempTotalDeduction;
+                        const actualNet = Number(selectedPayslip.net_salary);
+
+                        // JIKA Gaji Bersih lebih kecil dari perhitungan kotor (Ada pemotongan hari kerja / Prorata oleh HRD)
+                        if (expectedNet > actualNet) {
+                            const selisihProrata = expectedNet - actualNet;
+                            deductions.unshift({ 
+                                name: 'Potongan Kehadiran (Prorata / Absen)', 
+                                amount: selisihProrata 
+                            });
+                        } 
+                        // JIKA Gaji Bersih LEBIH BESAR (Misal sistem menggunakan mode Pekerja Harian / Tambahan lain)
+                        else if (actualNet > expectedNet) {
+                            const selisihTambahan = actualNet - expectedNet;
+                            earnings.push({ 
+                                name: 'Penyesuaian Upah Harian / Kehadiran', 
+                                amount: selisihTambahan 
+                            });
+                        }
+
+                        // 4. Totalkan Ulang Setelah Penyesuaian
+                        const totalEarning = earnings.reduce((sum, e) => sum + e.amount, 0);
+                        const totalDeduction = deductions.reduce((sum, d) => sum + d.amount, 0);
                         
                         const maxRows = Math.max(earnings.length, deductions.length) || 1; 
                         const rows = [];
                         
+                        // Render baris berselang-seling
                         for (let i = 0; i < maxRows; i++) {
                            rows.push(
                               <tr key={i} className="border-b border-black align-top">
                                  <td className="border-r border-black p-2">{earnings[i] ? earnings[i].name : ''}</td>
-                                 <td className="border-r-[3px] border-black p-2 text-right">{earnings[i] ? formatRupiah(earnings[i].amount).replace('Rp', '') : ''}</td>
+                                 <td className="border-r-[3px] border-black p-2 text-right">
+                                    {earnings[i] ? <span className="flex justify-between"><span>Rp</span><span>{earnings[i].amount.toLocaleString('id-ID')}</span></span> : ''}
+                                 </td>
                                  <td className="border-r border-black p-2">{deductions[i] ? deductions[i].name : ''}</td>
-                                 <td className="p-2 text-right">{deductions[i] ? formatRupiah(deductions[i].amount).replace('Rp', '') : ''}</td>
+                                 <td className="p-2 text-right text-red-600">
+                                    {deductions[i] ? <span className="flex justify-between"><span>Rp</span><span>{deductions[i].amount.toLocaleString('id-ID')}</span></span> : ''}
+                                 </td>
                               </tr>
                            );
                         }
                         
+                        // Render Baris Total
                         return (
                            <>
                               {rows}
-                              <tr className="border-t-[3px] border-black font-black">
-                                 <td className="border-r border-black p-2">Total Earning</td>
-                                 <td className="border-r-[3px] border-black p-2 text-right">{formatRupiah(totalEarning)}</td>
-                                 <td className="border-r border-black p-2">Total Deductions</td>
-                                 <td className="p-2 text-right">{formatRupiah(totalDeduction)}</td>
+                              <tr className="border-t-[3px] border-black font-black bg-slate-100">
+                                 <td className="border-r border-black p-2 uppercase text-xs">Total Pendapatan</td>
+                                 <td className="border-r-[3px] border-black p-2 text-right"><span className="flex justify-between"><span>Rp</span><span>{totalEarning.toLocaleString('id-ID')}</span></span></td>
+                                 <td className="border-r border-black p-2 uppercase text-xs">Total Potongan</td>
+                                 <td className="p-2 text-right text-red-700"><span className="flex justify-between"><span>Rp</span><span>{totalDeduction.toLocaleString('id-ID')}</span></span></td>
                               </tr>
-                              <tr className="font-black bg-slate-50 border-t-[3px] border-black">
+                              
+                              {/* BARIS TAKE HOME PAY */}
+                              <tr className="font-black bg-white border-t-[3px] border-black">
                                  <td colSpan="2" className="border-r-[3px] border-black p-2 bg-white"></td>
-                                 <td className="border-r border-black p-3 text-base">Take Home Pay</td>
-                                 <td className="p-3 text-right text-lg">{formatRupiah(selectedPayslip.net_salary)}</td>
+                                 <td className="border-r border-black p-3 text-sm uppercase tracking-widest text-blue-800 bg-blue-50">Take Home Pay</td>
+                                 <td className="p-3 text-right text-lg text-blue-800 bg-blue-50">
+                                    <span className="flex justify-between"><span>Rp</span><span>{actualNet.toLocaleString('id-ID')}</span></span>
+                                 </td>
                               </tr>
+
+                              {/* JIKA GAJI DICICIL / SPLIT PAY DARI FINANCE */}
+                              {selectedPayslip.status === 'PARTIALLY_PAID' && (
+                                 <tr className="font-black bg-white border-t border-black">
+                                    <td colSpan="2" className="border-r-[3px] border-black p-2 bg-white"></td>
+                                    <td className="border-r border-black p-3 text-xs uppercase tracking-widest text-amber-600 bg-amber-50">Telah Dibayarkan</td>
+                                    <td className="p-3 text-right text-sm text-amber-600 bg-amber-50">
+                                       <span className="flex justify-between"><span>Rp</span><span>{Number(selectedPayslip.paid_amount || 0).toLocaleString('id-ID')}</span></span>
+                                    </td>
+                                 </tr>
+                              )}
                            </>
                         );
                      })()}
