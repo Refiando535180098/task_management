@@ -1492,36 +1492,6 @@ export default function TaskManagement() {
       }
     }, 800); 
   };
-  
-  const handleDownloadPDF = () => {
-    setIsGeneratingPDF(true);
-    setTimeout(async () => {
-      try {
-        const element = document.getElementById('report-pdf-content');
-        
-        if (!element) {
-          alert('Gagal memproses: Elemen tabel laporan tidak ditemukan.');
-          setIsGeneratingPDF(false);
-          return;
-        }
-
-        const opt = {
-          margin:       [10, 10, 15, 10], 
-          filename:     reportTargetUserId === 'ALL' ? 'Laporan_Kinerja_Global.pdf' : `Laporan_Kinerja_Karyawan.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        await html2pdf().set(opt).from(element).save();
-        setIsGeneratingPDF(false); 
-      } catch (error) {
-        console.error("Error pembuatan PDF:", error);
-        alert("Terjadi kendala saat membuat PDF. Silakan coba lagi.");
-        setIsGeneratingPDF(false); 
-      }
-    }, 800); 
-  };
 
   const handleDownloadTemplateCSV = () => {
     const headers = "nik,password,name,role,division,position\n";
