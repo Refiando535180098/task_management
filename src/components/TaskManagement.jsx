@@ -2596,30 +2596,30 @@ export default function TaskManagement() {
                     }
                     if (taskFilterMonth && !t.dueDate.startsWith(taskFilterMonth)) return false;
                     return true;
-                  }).map(task => {
+                  }).map(t => {
                     const nowLocalStr = getNowStr();
-                    const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
-                    const assigneesArr = getAssigneesArray(task.assignedTo);
+                    const isOverdue = t.dueDate < nowLocalStr && t.status !== 'done';
+                    const assigneesArr = getAssigneesArray(t.assignedTo);
                     
                     return (  
-                      <div key={task.id} onClick={() => handleOpenTaskDetail(task)} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-4 hover:bg-purple-50/30 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-purple-100 gap-4">
+                      <div key={t.id} onClick={() => handleOpenTaskDetail(t)} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 md:p-4 hover:bg-purple-50/30 rounded-2xl cursor-pointer transition-colors border border-transparent hover:border-purple-100 gap-4">
                         <div className="flex items-center gap-4 min-w-0">
-                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white ${isOverdue ? 'bg-red-100 text-red-600' : task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-purple-100 text-purple-600'}`}>
-                            {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : isOverdue ? <AlertCircle className="w-6 h-6"/> : <MonitorSmartphone className="w-6 h-6" />}
+                          <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white ${isOverdue ? 'bg-red-100 text-red-600' : t.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-purple-100 text-purple-600'}`}>
+                            {t.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : isOverdue ? <AlertCircle className="w-6 h-6"/> : <Activity className="w-6 h-6" />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1 mb-1">{task.title.replace('[TIKET IT] ', '')}</h4>
+                            <h4 className="text-sm md:text-base font-black text-slate-800 line-clamp-1 mb-1">{t.title.replace('[TIKET IT] ', '')}</h4>
                             <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-400">
-                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatDateTime(task.dueDate)}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatDateTime(t.dueDate)}</span>
                               <span>•</span>
-                              <span className="truncate">Pelapor: {getUserName(task.assignedBy)}</span>
+                              <span className="truncate">Pelapor: {getUserName(t.assignedBy)}</span>
                             </div>
                           </div>
                         </div>
 
                         <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0 pl-16 sm:pl-0">
                           {isOverdue && <span className="text-[9px] font-black text-white bg-red-600 px-2 py-1 rounded-md uppercase tracking-wider shadow-sm">Overdue</span>}
-                          {!isOverdue && <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>}
+                          {!isOverdue && <Badge type={t.status}>{t.status.replace('-', ' ')}</Badge>}
                           <div className="hidden sm:flex -space-x-2 mt-1">
                             {assigneesArr.slice(0,3).map(id => <div key={id} title={getUserName(id)} className="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-10">{getAvatar(id)}</div>)}
                             {assigneesArr.length > 3 && <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-[9px] border-2 border-white relative z-0">+{assigneesArr.length - 3}</div>}
@@ -2767,40 +2767,40 @@ export default function TaskManagement() {
                             </tr>
                           </thead>
                           <tbody>
-                            {targetTasks.map((task, index) => { 
+                            {targetTasks.map((t, index) => { 
                               const nowLocalStr = getNowStr();
-                              const isNotDoneOverdue = task.dueDate < nowLocalStr && task.status !== 'done';
-                              const isDoneLate = task.status === 'done' && task.completed_at && task.completed_at > task.dueDate;
+                              const isNotDoneOverdue = t.dueDate < nowLocalStr && t.status !== 'done';
+                              const isDoneLate = t.status === 'done' && t.completed_at && t.completed_at > t.dueDate;
                               
                               return (
-                                <tr key={task.id} className="border-b border-slate-300 break-inside-avoid">
+                                <tr key={t.id} onClick={() => handleOpenTaskDetail(t)} className="border-b border-slate-300 break-inside-avoid cursor-pointer hover:bg-slate-50 transition-colors">
                                   <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 text-center align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{index + 1}</td>
-                                  <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{task.title}</td>
-                                  <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{getAssigneesNames(task.assignedTo)}</td>
+                                  <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{t.title}</td>
+                                  <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{getAssigneesNames(t.assignedTo)}</td>
                                   
                                   <td className="px-3 py-2 border-r border-slate-300 align-top">
                                     <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
-                                      <span className="text-slate-600">Oleh: <span className="font-bold text-blue-600">{getUserName(task.assignedBy)}</span></span>
-                                      <span className="text-slate-600">Diberikan: <span className="font-bold text-slate-800">{task.created_at ? formatDateTime(task.created_at) : '-'}</span></span>
-                                      <span className="text-slate-600">Deadline: <span className={`font-bold ${isNotDoneOverdue ? 'text-red-600' : 'text-slate-800'}`}>{task.dueDate ? formatDateTime(task.dueDate) : '-'}</span></span>
+                                      <span className="text-slate-600">Oleh: <span className="font-bold text-blue-600">{getUserName(t.assignedBy)}</span></span>
+                                      <span className="text-slate-600">Diberikan: <span className="font-bold text-slate-800">{t.created_at ? formatDateTime(t.created_at) : '-'}</span></span>
+                                      <span className="text-slate-600">Deadline: <span className={`font-bold ${isNotDoneOverdue ? 'text-red-600' : 'text-slate-800'}`}>{t.dueDate ? formatDateTime(t.dueDate) : '-'}</span></span>
                                     </div>
                                   </td>
 
                                   <td className="px-3 py-2 border-r border-slate-300 align-top">
                                     <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
-                                      <span className="text-slate-600">Selesai: <span className="font-bold text-emerald-600">{task.completed_at ? formatDateTime(task.completed_at) : '-'}</span></span>
-                                      <span className="text-slate-600">Approve: <span className="font-bold text-blue-600">{task.approved_by ? getUserName(task.approved_by) : '-'}</span></span>
+                                      <span className="text-slate-600">Selesai: <span className="font-bold text-emerald-600">{t.completed_at ? formatDateTime(t.completed_at) : '-'}</span></span>
+                                      <span className="text-slate-600">Approve: <span className="font-bold text-blue-600">{t.approved_by ? getUserName(t.approved_by) : '-'}</span></span>
                                     </div>
                                   </td>
 
                                   <td className={`px-3 py-2 text-center border-slate-300 font-black uppercase tracking-wider align-top ${isGeneratingPDF ? 'text-xs' : 'text-[8px]'}`}>
                                     <div className="flex flex-col items-center justify-center gap-1.5 h-full">
                                       {isGeneratingPDF ? (
-                                         <span className={`font-black ${task.status === 'done' ? 'text-emerald-600' : 'text-blue-600'}`}>
-                                           {task.status === 'done' ? 'SELESAI' : String(task.status).toUpperCase()}
+                                         <span className={`font-black ${t.status === 'done' ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                           {t.status === 'done' ? 'SELESAI' : String(t.status).toUpperCase()}
                                          </span>
                                       ) : (
-                                         <Badge type={task.status}>{String(task.status).toUpperCase()}</Badge>
+                                         <Badge type={t.status}>{String(t.status).toUpperCase()}</Badge>
                                       )}
                                       
                                       {isDoneLate && <span className={`bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded shadow-sm w-fit mx-auto ${isGeneratingPDF ? 'text-[9px]' : 'text-[7px]'}`}>SELESAI TELAT</span>}
