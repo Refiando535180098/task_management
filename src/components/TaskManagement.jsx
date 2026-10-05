@@ -2299,22 +2299,22 @@ export default function TaskManagement() {
                     </h3>
                   </div>
                   <div className="flex gap-4 overflow-x-auto pb-2 px-1 custom-scrollbar">
-                    {urgentTasks.map(task => {
+                    {urgentTasks.map(t => {
                        const nowLocalStr = getNowStr();
-                       const isOverdue = task.dueDate < nowLocalStr && task.status !== 'done' && task.status !== 'laporan-cleaning';
+                       const isOverdue = t.dueDate < nowLocalStr && t.status !== 'done' && t.status !== 'laporan-cleaning';
                        return (
-                         <div key={task.id} onClick={() => handleOpenTaskDetail(task)} className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}>
+                         <div key={t.id} onClick={() => handleOpenTaskDetail(t)} className={`min-w-[280px] md:min-w-[320px] p-4 rounded-[1.5rem] border-2 shadow-md cursor-pointer transition-all active:scale-95 bg-white ${isOverdue ? 'border-red-200' : 'border-orange-200'}`}>
                             <div className="flex justify-between items-start mb-3">
                               <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${isOverdue ? 'bg-red-600 text-white' : 'bg-orange-100 text-orange-700'}`}>
                                 {isOverdue ? 'Sudah Lewat Deadline' : 'Mendekati Deadline'}
                               </span>
-                              <Badge type={task.priority}>{task.priority}</Badge>
+                              <Badge type={t.priority}>{t.priority}</Badge>
                             </div>
-                            <h4 className="text-sm font-black text-slate-800 line-clamp-1 mb-2">{task.title}</h4>
+                            <h4 className="text-sm font-black text-slate-800 line-clamp-1 mb-2">{t.title}</h4>
                             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                                  <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-red-500' : 'text-orange-500'}`} />
-                                 {formatDateTime(task.dueDate)}
+                                 {formatDateTime(t.dueDate)}
                                </div>
                                <span className="text-[10px] font-bold text-blue-500">Klik Detail &rarr;</span>
                             </div>
@@ -2346,18 +2346,18 @@ export default function TaskManagement() {
                   <button onClick={() => navigateTo('tasks')} className="text-xs font-bold text-blue-600">Lihat Semua</button>
                 </div>
                 <div className="p-2 md:p-4 mb-5">
-                  {activeTasks.slice(0, 5).map((task) => (
-                    <div key={task.id} onClick={() => handleOpenTaskDetail(task)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer border border-transparent">
+                  {activeTasks.slice(0, 5).map((t) => (
+                    <div key={t.id} onClick={() => handleOpenTaskDetail(t)} className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-50 rounded-2xl cursor-pointer border border-transparent">
                       <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm ${task.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                          {task.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
+                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 shadow-sm ${t.status === 'done' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {t.status === 'done' ? <CheckCircle2 className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
                         </div>
                         <div>
-                          <h4 className="text-sm font-black text-slate-800 line-clamp-1">{task.title}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {formatDateTime(task.dueDate)}</p>
+                          <h4 className="text-sm font-black text-slate-800 line-clamp-1">{t.title}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Deadline: {formatDateTime(t.dueDate)}</p>
                         </div>
                       </div>
-                      <Badge type={task.status}>{task.status.replace('-', ' ')}</Badge>
+                      <Badge type={t.status}>{t.status.replace('-', ' ')}</Badge>
                     </div>
                   ))}
                 </div>
