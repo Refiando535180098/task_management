@@ -1088,8 +1088,12 @@ export default function TaskManagement() {
   }, []);
 
   useEffect(() => {
-    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedTask?.comments]);
+    if (chatEndRef.current) {
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 150); // Jeda agar scroll tidak nyangkut di atas
+    }
+  }, [selectedTask?.comments, selectedTask?.id, isChatOpen]);
 
   useEffect(() => {
     const fetchInitialGlobalData = async () => {
@@ -2841,8 +2845,9 @@ export default function TaskManagement() {
 
                       <div className="w-full">
                         <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><FileText className="w-4 h-4"/> Rincian Aktivitas Pekerjaan</h3>
-                        <table className="w-full text-left border-collapse border border-slate-300">
-                          <thead>
+                        <div className="overflow-x-auto custom-scrollbar pb-4">
+                          <table className="w-full text-left border-collapse border border-slate-300 min-w-[800px]">
+                            <thead>
                             <tr className="bg-slate-100 text-slate-800 uppercase tracking-widest font-black border-b border-slate-300">
                               <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>No</th>
                               <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Deskripsi Tugas</th>
@@ -2898,6 +2903,7 @@ export default function TaskManagement() {
                             })}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                       <div className={`${isGeneratingPDF ? 'flex' : 'hidden md:flex'} justify-between mt-16 pt-8 break-inside-avoid px-8`}>
                         <div className="text-center w-48">
