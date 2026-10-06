@@ -242,13 +242,15 @@ export default function TaskManagement() {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-          alert(`File "${file.name}" ditolak. Hanya JPG, PNG, atau PDF.`);
+        const fileExt = file.name.split('.').pop().toLowerCase();
+        const isValid = file.type.startsWith('image/') || file.type === 'application/pdf' || ['jpg', 'jpeg', 'png', 'pdf'].includes(fileExt);
+
+        if (!isValid) {
+          alert(`File "${file.name}" ditolak. Hanya format JPG, PNG, atau PDF yang diizinkan.`);
           continue;
         }
 
-        const fileExt = file.name.split('.').pop();
-        const fileName = `lampiran_${Date.now()}_${Math.floor(Math.random()*1000)}_${currentUser.id}.${fileExt}`;
+        const fileName = `lampiran_${Date.now()}_${i}_${currentUser.id}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage.from('task-attachments').upload(fileName, file);
         if (uploadError) throw uploadError;
@@ -582,8 +584,8 @@ export default function TaskManagement() {
            max_upload_size: configForm.maxUploadSize, 
            session_timeout: configForm.sessionTimeout, 
            strict_mode: configForm.strictMode,
-           project_codes: configForm.projectCodes, // <--- Tambahan ini
-           task_codes: configForm.taskCodes        // <--- Tambahan ini
+           project_codes: configForm.projectCodes,
+           task_codes: configForm.taskCodes
         })
         .eq('id', 1);
       
@@ -760,6 +762,7 @@ export default function TaskManagement() {
     try {
       setTaskFormType(formType);
       setTaskAssignMode(assignMode);
+      setCleaningPhotos([]); // Bersihkan sisa lampiran sebelumnya
       
       // Keamanan ekstra untuk memastikan ID User terbaca
       const safeAssignees = (assignMode === 'personal' && currentUser?.id) ? [currentUser.id] : [];
@@ -783,23 +786,44 @@ export default function TaskManagement() {
   };
 
   const handleUploadCleaningPhoto = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return alert('Hanya format gambar yang diizinkan!');
+    const files = Array.from(e.target.files);
+    if (!files || files.length === 0) return;
     
     setIsUploadingPhoto(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `cleaning_${Date.now()}_${currentUser.id}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('task-attachments').upload(fileName, file);
-      if (uploadError) throw uploadError;
-      const { data: publicUrlData } = supabase.storage.from('task-attachments').getPublicUrl(fileName);
-      
-      setCleaningPhotos(prev => [...prev, {
-        id: Date.now(), name: file.name, url: publicUrlData.publicUrl, type: file.type, uploaderId: currentUser.id
-      }]);
+      const uploadedPhotos = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop().toLowerCase();
+        const isValid = file.type.startsWith('image/') || file.type === 'application/pdf' || ['jpg', 'jpeg', 'png', 'pdf'].includes(fileExt);
+
+        if (!isValid) {
+          alert(`File "${file.name}" ditolak. Hanya format JPG, PNG, atau PDF yang diizinkan.`);
+          continue;
+        }
+
+        const fileName = `lampiran_${Date.now()}_${i}_${currentUser.id}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage.from('task-attachments').upload(fileName, file);
+        if (uploadError) throw uploadError;
+        
+        const { data: publicUrlData } = supabase.storage.from('task-attachments').getPublicUrl(fileName);
+        
+        uploadedPhotos.push({
+          id: Date.now() + i, 
+          name: file.name, 
+          url: publicUrlData.publicUrl, 
+          type: file.type, 
+          uploaderId: currentUser.id
+        });
+      }
+
+      if (uploadedPhotos.length > 0) {
+        setCleaningPhotos(prev => [...prev, ...uploadedPhotos]);
+      }
     } catch (err) {
-      alert('Gagal upload foto: ' + err.message);
+      alert('Gagal upload lampiran: ' + err.message);
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = '';
@@ -1286,7 +1310,7 @@ export default function TaskManagement() {
         dueDate: getNowStr(),
         status: 'pending', 
         comments: [],
-        attachments: []
+        attachments: cleaningPhotos
       };
     }
     else {
@@ -1307,7 +1331,7 @@ export default function TaskManagement() {
         dueDate: newTask.dueDate ? getLocalTimeWithOffset(new Date(newTask.dueDate)) : null, 
         status: 'pending',
         comments: [],
-        attachments: []
+        attachments: cleaningPhotos
       };
     }
 
@@ -3449,9 +3473,9 @@ export default function TaskManagement() {
                                   </div>
                                   
                                   <div className="flex gap-2">
-                                    <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                                    <input type="file" id="upload-bukti" multiple={true} onChange={handleFileUpload} disabled={isUploading} className="hidden" />
                                     <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 border border-blue-200'}`}>
-                                      {isUploading ? (<><svg className="w-3.5 h-3.5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Proses...</>) : (<><Plus className="w-3.5 h-3.5"/> File</>)}
+                                      {isUploading ? (<><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" /> Proses...</>) : (<><Paperclip className="w-3.5 h-3.5"/> Galeri/Multi</>)}
                                     </label>
           
                                     <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
@@ -3726,32 +3750,47 @@ export default function TaskManagement() {
                             <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Keterangan Tambahan (Opsional)</label>
                             <textarea rows="3" placeholder="Contoh: Lantai lobi sudah dipel dan kaca dibersihkan..." className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 text-xs md:text-sm outline-none resize-none font-medium" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})}></textarea>
                           </div>
-                          
-                          <div className="p-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
-                            <div className="flex items-center justify-between mb-3">
-                              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Upload Foto Laporan OB *</label>
-                              <div className="flex gap-2">
-                                <input type="file" id="upload-foto-cleaning" accept="image/*" onChange={handleUploadCleaningPhoto} disabled={isUploadingPhoto} className="hidden" />
-                                <label htmlFor={isUploadingPhoto ? "" : "upload-foto-cleaning"} className={`text-[10px] font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm ${isUploadingPhoto ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
-                                  {isUploadingPhoto ? 'Proses Upload...' : <><Camera className="w-4 h-4"/> Tambah Foto</>}
-                                </label>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2 mt-3">
-                              {cleaningPhotos.map(photo => (
-                                <div key={photo.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 shadow-sm gap-3">
-                                  <div className="flex items-center gap-3 overflow-hidden">
-                                    <img src={photo.url} alt="preview" className="w-10 h-10 object-cover rounded-md border border-slate-200 shrink-0" />
-                                    <span className="text-xs font-bold text-slate-600 truncate">{photo.name}</span>
-                                  </div>
-                                  <button type="button" onClick={() => setCleaningPhotos(cleaningPhotos.filter(p => p.id !== photo.id))} className="text-red-500 hover:bg-red-50 p-1.5 rounded-md shrink-0"><X className="w-4 h-4"/></button>
-                                </div>
-                              ))}
-                              {cleaningPhotos.length === 0 && <p className="text-[10px] text-slate-400 font-bold text-center py-4">Belum ada foto. Wajib lampirkan minimal 1 foto hasil kerja.</p>}
-                            </div>
-                          </div>
                         </>
                       )}
+
+                      {/* === AREA UPLOAD LAMPIRAN UNTUK SEMUA TUGAS === */}
+                      <div className="p-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 mt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            {taskFormType === 'cleaning' ? 'Upload Foto Laporan OB *' : 'Lampiran Dokumen / Foto (Opsional)'}
+                          </label>
+                          <div className="flex gap-2">
+                            <input type="file" id="upload-foto-cleaning" multiple={true} onChange={handleUploadCleaningPhoto} disabled={isUploadingPhoto} className="hidden" />
+                            <label htmlFor={isUploadingPhoto ? "" : "upload-foto-cleaning"} className={`text-[10px] font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm ${isUploadingPhoto ? 'bg-slate-200 text-slate-500' : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'}`}>
+                              {isUploadingPhoto ? <><Loader2 className="w-3 h-3 animate-spin"/> Uploading...</> : <><Paperclip className="w-4 h-4"/> Galeri/Multi</>}
+                            </label>
+
+                            <input type="file" id="upload-kamera-baru" accept="image/*" capture="environment" onChange={handleUploadCleaningPhoto} disabled={isUploadingPhoto} className="hidden" />
+                            <label htmlFor={isUploadingPhoto ? "" : "upload-kamera-baru"} className={`text-[10px] font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm ${isUploadingPhoto ? 'bg-slate-200 text-slate-500' : 'bg-slate-900 text-white hover:bg-black'}`}>
+                              <Camera className="w-4 h-4"/> Kamera
+                            </label>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 mt-3">
+                          {cleaningPhotos.map(photo => {
+                            const isPdf = photo.name.endsWith('.pdf') || photo.type === 'application/pdf';
+                            return (
+                              <div key={photo.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 shadow-sm gap-3">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  {isPdf ? (
+                                    <div className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-md border border-red-100 shrink-0"><FileText className="w-5 h-5"/></div>
+                                  ) : (
+                                    <img src={photo.url} alt="preview" className="w-10 h-10 object-cover rounded-md border border-slate-200 shrink-0" />
+                                  )}
+                                  <span className="text-xs font-bold text-slate-600 truncate">{photo.name}</span>
+                                </div>
+                                <button type="button" onClick={() => setCleaningPhotos(cleaningPhotos.filter(p => p.id !== photo.id))} className="text-red-500 hover:bg-red-50 p-1.5 rounded-md shrink-0"><X className="w-4 h-4"/></button>
+                              </div>
+                            )
+                          })}
+                          {cleaningPhotos.length === 0 && <p className="text-[10px] text-slate-400 font-bold text-center py-4">{taskFormType === 'cleaning' ? 'Belum ada foto. Wajib lampirkan minimal 1 foto.' : 'Belum ada lampiran yang dipilih.'}</p>}
+                        </div>
+                      </div>
                   </div>
                   <div className="p-4 md:p-6 flex justify-end gap-2 md:gap-3 border-t border-slate-100 bg-slate-50 pb-10 shrink-0">
                       <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 md:px-5 md:py-2.5 text-slate-500 hover:bg-slate-200 rounded-xl font-bold text-xs md:text-sm">Batal</button>
