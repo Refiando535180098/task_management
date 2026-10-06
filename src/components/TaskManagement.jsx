@@ -685,12 +685,17 @@ export default function TaskManagement() {
   // FUNGSI AUTO-COLLAPSE SIDEBAR SAAT BUKA DETAIL
   const handleOpenTaskDetail = (task) => {
     setSelectedTask(task);
+    setIsChatOpen(false); // PASTIKAN BARIS INI ADA: Tutup chat saat buka tugas baru
+    setIsEditingDesc(false);
+    setEditingMsgId(null);
     if (window.innerWidth >= 768) setIsSidebarOpen(false); // Otomatis tutup sidebar di Laptop/PC
   };
 
   // FUNGSI OTOMATIS BUKA SIDEBAR KEMBALI SAAT TUTUP DETAIL
   const handleCloseTaskDetail = () => {
     setSelectedTask(null);
+    setIsChatOpen(false);
+    setIsEditingDesc(false);
     if (window.innerWidth >= 768) setIsSidebarOpen(true); // Buka kembali sidebar di Laptop/PC
   };
 
@@ -1497,6 +1502,31 @@ export default function TaskManagement() {
         const opt = {
           margin:       [10, 10, 15, 10], 
           filename:     `Executive_Summary_${new Date().toISOString().split('T')[0]}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        await html2pdf().set(opt).from(element).save();
+        setIsGeneratingPDF(false); 
+      } catch (error) {
+        console.error("Error:", error);
+        setIsGeneratingPDF(false); 
+      }
+    }, 800); 
+  };
+
+  const handleDownloadPDF = () => {
+    setIsGeneratingPDF(true);
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById('report-pdf-content');
+        if (!element) {
+          alert('Gagal memproses: Elemen Laporan tidak ditemukan.');
+          return setIsGeneratingPDF(false);
+        }
+        const opt = {
+          margin:       [10, 10, 15, 10], 
+          filename:     `Laporan_Kinerja_${new Date().toISOString().split('T')[0]}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
           html2canvas:  { scale: 2, useCORS: true },
           jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -2636,7 +2666,14 @@ export default function TaskManagement() {
 
           {/* TAB: LAPORAN */}
           {activeTab === 'laporan' && (
-            <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 print:space-y-0">
+            <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300 print:space-y-0 pb-24 md:pb-0">
+              {/* Notifikasi khusus HP */}
+              <div className="md:hidden bg-blue-50 border border-blue-200 p-4 rounded-2xl mb-4 shadow-sm text-center">
+                 <Printer className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                 <h4 className="text-blue-800 font-black text-sm">Mode Cetak Aktif</h4>
+                 <p className="text-blue-600 font-medium text-[10px] mt-1">Disarankan mengunduh PDF melalui perangkat Komputer/Laptop untuk hasil terbaik.</p>
+              </div>
+
               <Card className="p-3 md:p-4 mb-3 md:mb-4 bg-white border-blue-200 border-2 shadow-sm print:hidden">
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-end justify-between">
                   <div className="w-full md:w-1/2">
@@ -3241,6 +3278,462 @@ export default function TaskManagement() {
 
             </div>
           )}
+
+          {/* === MODAL 1: DETAIL TUGAS & APPROVAL (SPLIT VIEW DYNAMIC) === */}
+                    {selectedTask && activeTab !== 'chat' && (
+                      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex justify-center items-end md:items-center md:p-8 print:hidden">
+                        {/* Ukuran Modal Berubah Dinamis: max-w-3xl (Single) menjadi max-w-6xl (Split) */}
+                        <div className={`w-full h-[85vh] md:h-[90vh] bg-white rounded-t-[2rem] md:rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10 duration-300 transition-all ease-in-out ${isChatOpen ? 'md:max-w-6xl' : 'md:max-w-3xl'}`}>
+                          
+                          {/* --- PANEL KIRI: DETAIL TUGAS --- */}
+                          <div className={`w-full flex-col bg-white h-full md:h-full ${isChatOpen ? 'hidden md:flex md:w-1/2 border-r border-slate-200' : 'flex md:w-full'}`}>
+                            <div className="px-5 py-4 md:px-8 md:py-5 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                              <div className="flex items-center gap-3">
+                                <h3 className="font-black text-base md:text-xl text-slate-800 tracking-tight flex items-center gap-2">
+                                  <FileText className="w-5 h-5 text-blue-600"/> Detail Tugas
+                                </h3>
+                                {(currentUser?.role === 'admin' || currentUser?.tm_delete_tasks || String(selectedTask.assignedBy) === String(currentUser.id)) && (
+                                  <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus Tugas</span>
+                                  </button>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                 {/* Tombol Toggle Chat Split */}
+                                 <button type="button" onClick={() => setIsChatOpen(!isChatOpen)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-[10px] md:text-xs shadow-sm transition-colors border ${isChatOpen ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'}`}>
+                                   <MessageSquare className="w-4 h-4"/> 
+                                   <span className="hidden md:inline">{isChatOpen ? 'Tutup Diskusi' : 'Buka Diskusi / Chat'}</span>
+                                   <span className="md:hidden">Chat</span>
+                                 </button>
+                                 <button type="button" onClick={handleCloseTaskDetail} className="p-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-500 rounded-xl shadow-sm transition-colors"><X className="w-5 h-5" /></button>
+                              </div>
+                            </div>
+          
+                            <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2 mb-4">
+                                  {selectedTask.status === 'laporan-cleaning' ? (
+                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-black tracking-widest rounded-md uppercase flex items-center gap-1.5 shadow-sm">🧹 Laporan Cleaning / OB</span>
+                                  ) : (
+                                    <>
+                                        {selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' && (
+                                          <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
+                                        )}
+                                        <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
+                                        <Badge type={selectedTask.priority}>PRIORITAS {selectedTask.priority.toUpperCase()}</Badge>
+                                    </>
+                                  )}
+                                </div>
+                                
+                                <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
+                                
+                                  {selectedTask.status === 'laporan-cleaning' ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dikirim Pada</span>
+                                        <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                          <CheckCircle2 className="w-3.5 h-3.5"/> 
+                                          {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : (selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-')}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col border-t md:border-t-0 md:border-l border-emerald-200 pt-3 md:pt-0 md:pl-4">
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dilaporkan Oleh</span>
+                                        <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                          <Users className="w-3.5 h-3.5"/> 
+                                          {getUserName(selectedTask.assignedBy)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
+                                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                          <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
+                                          {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu (Deadline)</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                                          <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-blue-600' : 'text-slate-400'}`}>
+                                          <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+          
+                                {/* FITUR EDIT KETERANGAN */}
+                                <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm relative group">
+                                  <div className="flex justify-between items-center mb-3">
+                                    <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest">Keterangan / Instruksi Detail:</span>
+                                    {(String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin') && !isEditingDesc && (
+                                      <button onClick={() => { setIsEditingDesc(true); setEditDescText(selectedTask.description || ''); }} className="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
+                                        <Edit size={12}/> Edit Keterangan
+                                      </button>
+                                    )}
+                                  </div>
+                                  
+                                  {isEditingDesc ? (
+                                    <div className="animate-in fade-in zoom-in-95 duration-200">
+                                       <textarea 
+                                         rows="5" 
+                                         className="w-full bg-slate-50 border-2 border-blue-200 rounded-xl p-3 focus:outline-none focus:border-blue-500 transition-colors mb-3 resize-y" 
+                                         value={editDescText} 
+                                         onChange={(e) => setEditDescText(e.target.value)}
+                                         placeholder="Ketik keterangan pekerjaan sedetail mungkin..."
+                                       />
+                                       <div className="flex justify-end gap-2">
+                                         <button onClick={() => setIsEditingDesc(false)} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-lg hover:bg-slate-200 transition-colors">Batal</button>
+                                         <button onClick={handleSaveDescription} className="px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-lg hover:bg-blue-700 transition-colors shadow-sm">Simpan Keterangan</button>
+                                       </div>
+                                    </div>
+                                  ) : (
+                                    <div className="whitespace-pre-wrap">{selectedTask.description || <span className="text-slate-400 italic">Tidak ada deskripsi.</span>}</div>
+                                  )}
+                                </div>
+                              </div>
+          
+                              {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || ['admin', 'direksi', 'manager'].includes(currentUser?.role)) && (
+                                  <div className="mt-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan Anda</label>
+                                    <select 
+                                      value={selectedTask.status} 
+                                      onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
+                                      disabled={currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval'}
+                                      className="w-full px-4 py-3 md:py-3.5 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-black cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-white shadow-sm transition-colors"
+                                    >
+                                      <option value="pending">⏳ Pending (Belum Dikerjakan)</option>
+                                      <option value="in-progress">🚀 In Progress (Sedang Diproses)</option>
+                                      <option value="done">✅ Done (Tandai Selesai)</option>
+                                    </select>
+                                    {currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval' && (
+                                      <p className="text-[9px] md:text-[10px] text-orange-600 mt-2.5 font-bold uppercase tracking-wider bg-orange-50 p-2 rounded-lg border border-orange-100">
+                                        * Status terkunci: Menunggu persetujuan (Approval) Atasan.
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+          
+                              {((String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin' || currentUser.tm_access_all_tasks) && selectedTask.status === 'waiting-approval') && (
+                                <div className="bg-orange-50 border-2 border-orange-200 p-5 rounded-2xl shadow-sm mt-4 relative overflow-hidden">
+                                  <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500 animate-pulse"></div>
+                                  <p className="text-xs font-black text-orange-800 uppercase mb-3 text-center">Tindakan Atasan: Konfirmasi Penyelesaian</p>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={() => handleApproveTask(selectedTask.id, true)} className="bg-emerald-600 text-white py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md transition-transform hover:-translate-y-0.5">
+                                      <Check className="w-5 h-5"/> Setujui (Approve)
+                                    </button>
+                                    <button onClick={() => handleApproveTask(selectedTask.id, false)} className="bg-white text-red-600 border-2 border-red-200 py-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm transition-colors">
+                                      <X className="w-5 h-5"/> Tolak & Revisi
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+          
+                              <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm mt-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                                  <div>
+                                    <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base"><Paperclip className="w-5 h-5 text-blue-500"/> Lampiran Dokumen Bukti</h4>
+                                    {/* TEKS REKOMENDASI PROFESIONAL */}
+                                    <p className="text-[9px] md:text-[10px] font-bold text-slate-500 mt-1.5 leading-relaxed">
+                                      <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mr-1">Rekomendasi</span> 
+                                      Melampirkan 1-2 dokumen/foto dirasa memadai. Anda bebas mengunggah lebih dari itu secara bersamaan, namun harap bijak demi menjaga kapasitas penyimpanan Database Perusahaan (Max {configForm.maxUploadSize}MB/file).
+                                    </p>
+                                  </div>
+                                  
+                                  <div className="flex gap-2 shrink-0">
+                                    {/* MENDUKUNG MULTIPLE UPLOAD */}
+                                    <input type="file" id="upload-bukti" accept=".pdf, image/*" multiple onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                                    <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 border border-blue-200 hover:shadow-md'}`}>
+                                      {isUploading ? (<><Loader2 className="w-4 h-4 animate-spin text-blue-500" /> Proses...</>) : (<><Plus className="w-4 h-4"/> Pilih Multi-File</>)}
+                                    </label>
+          
+                                    <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                                    <label htmlFor={isUploading ? "" : "upload-kamera"} className={`text-[10px] md:text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-slate-900 text-white cursor-pointer hover:bg-slate-800 border border-slate-900 hover:shadow-md'}`}>
+                                      <Camera className="w-4 h-4"/> Kamera
+                                    </label>
+                                  </div>
+                                </div>
+                                {(currentUser?.role === 'admin' || currentUser?.tm_delete_tasks) && (
+                                  <button type="button" onClick={() => handleDeleteTask(selectedTask.id, selectedTask.title)} className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg border border-red-200 text-[10px] font-black shadow-sm">
+                                    <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus</span>
+                                  </button>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                 <button type="button" onClick={() => setShowMobileChat(true)} className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 rounded-xl font-bold text-[10px] shadow-sm transition-colors">
+                                   <MessageSquare className="w-3.5 h-3.5"/> Diskusi
+                                 </button>
+                                 <button type="button" onClick={handleCloseTaskDetail} className="md:hidden p-1.5 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-500 rounded-full shadow-sm transition-colors"><X className="w-4 h-4" /></button>
+                              </div>
+                            </div>
+          
+                            <div className="p-5 md:p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar bg-slate-50/30 pb-10">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2 mb-4">
+                                  {selectedTask.status === 'laporan-cleaning' ? (
+                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-black tracking-widest rounded-md uppercase flex items-center gap-1.5 shadow-sm">🧹 Laporan Cleaning / OB</span>
+                                  ) : (
+                                    <>
+                                        {selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' && (
+                                          <Badge type="overdue">OVERDUE (TERLAMBAT)</Badge>
+                                        )}
+                                        <Badge type={selectedTask.status}>{String(selectedTask.status).replace('-', ' ').toUpperCase()}</Badge>
+                                        <Badge type={selectedTask.priority}>PRIORITAS {selectedTask.priority.toUpperCase()}</Badge>
+                                    </>
+                                  )}
+                                </div>
+                                
+                                <h2 className="text-xl md:text-3xl font-black text-slate-900 leading-tight">{selectedTask.title}</h2>
+                                
+                                  {selectedTask.status === 'laporan-cleaning' ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dikirim / Diselesaikan Pada</span>
+                                        <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                          <CheckCircle2 className="w-3.5 h-3.5"/> 
+                                          {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : (selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-')}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col border-t md:border-t-0 md:border-l border-emerald-200 pt-3 md:pt-0 md:pl-4">
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Dilaporkan Oleh</span>
+                                        <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                                          <Users className="w-3.5 h-3.5"/> 
+                                          {getUserName(selectedTask.assignedBy)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Diberikan Pada</span>
+                                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                          <Calendar className="w-3.5 h-3.5 text-blue-500"/> 
+                                          {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="flex flex-col border-l border-slate-100 pl-3 md:pl-4">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Batas Waktu (Deadline)</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.dueDate < getNowStr() && selectedTask.status !== 'done' ? 'text-red-600' : 'text-slate-700'}`}>
+                                          <Clock className="w-3.5 h-3.5"/> {formatDateTime(selectedTask.dueDate)}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="flex flex-col pt-3 md:pt-0 md:border-l border-slate-100 md:pl-4 col-span-2 md:col-span-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tgl Selesai</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                          <CheckCircle2 className="w-3.5 h-3.5"/> {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : '-'}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="flex flex-col pt-3 md:pt-0 border-l border-slate-100 pl-3 md:pl-4 col-span-2 md:col-span-1">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Di-Approve</span>
+                                        <span className={`text-xs font-bold flex items-center gap-1.5 ${selectedTask.approved_by ? 'text-blue-600' : 'text-slate-400'}`}>
+                                          <ShieldCheck className="w-3.5 h-3.5"/> {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+          
+                                <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
+                                  <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Detail Pekerjaan:</span>
+                                  {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
+                                </div>
+                              </div>
+          
+                              {(getAssigneesArray(selectedTask.assignedTo).includes(currentUser?.id) || String(selectedTask.assignedBy) === String(currentUser?.id) || ['admin', 'direksi', 'manager'].includes(currentUser?.role)) && (
+                                  <div className="mt-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Update Status Pekerjaan</label>
+                                    <select 
+                                      value={selectedTask.status} 
+                                      onChange={(e) => handleStatusUpdate(selectedTask.id, e.target.value)}
+                                      disabled={currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval'}
+                                      className="w-full px-3 py-2.5 md:px-4 md:py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 text-xs md:text-sm outline-none font-bold cursor-pointer disabled:bg-slate-100 disabled:cursor-not-allowed bg-slate-50 focus:bg-white transition-colors"
+                                    >
+                                      <option value="pending">Pending (Belum Dikerjakan)</option>
+                                      <option value="in-progress">In Progress (Sedang Diproses)</option>
+                                      <option value="done">Done (Selesai)</option>
+                                    </select>
+                                    {currentUser?.role === 'staff' && selectedTask.status === 'waiting-approval' && (
+                                      <p className="text-[9px] md:text-[10px] text-orange-500 mt-2 font-bold uppercase tracking-wider">
+                                        * Status terkunci: Menunggu persetujuan (Approval) Atasan.
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+          
+                              {((String(selectedTask.assignedBy) === String(currentUser.id) || currentUser.role === 'admin' || currentUser.tm_access_all_tasks) && selectedTask.status === 'waiting-approval') && (
+                                <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-2xl animate-pulse shadow-sm">
+                                  <p className="text-xs font-black text-orange-700 uppercase mb-3 text-center">Butuh Konfirmasi Penyelesaian</p>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={() => handleApproveTask(selectedTask.id, true)} className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-md">
+                                      <Check className="w-4 h-4"/> Approve Selesai
+                                    </button>
+                                    <button onClick={() => handleApproveTask(selectedTask.id, false)} className="bg-white text-red-600 border border-red-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-red-50 shadow-sm">
+                                      <X className="w-4 h-4"/> Tolak & Revisi
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+          
+                              <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                                  <div>
+                                    <h4 className="font-black text-slate-800 flex items-center gap-2 text-sm md:text-base"><Paperclip className="w-4 h-4 text-blue-500"/> Lampiran Bukti</h4>
+                                    <p className="text-[9px] md:text-[10px] font-bold text-slate-400 mt-1 uppercase">PDF / JPG / PNG Max {configForm.maxUploadSize}MB</p>
+                                  </div>
+                                  
+                                  <div className="flex gap-2">
+                                    <input type="file" id="upload-bukti" accept=".pdf, image/*" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                                    <label htmlFor={isUploading ? "" : "upload-bukti"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 border border-blue-200'}`}>
+                                      {isUploading ? (<><svg className="w-3.5 h-3.5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Proses...</>) : (<><Plus className="w-3.5 h-3.5"/> File</>)}
+                                    </label>
+          
+                                    <input type="file" id="upload-kamera" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={isUploading} className="hidden" />
+                                    <label htmlFor={isUploading ? "" : "upload-kamera"} className={`text-[10px] md:text-xs font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-slate-800 text-white cursor-pointer hover:bg-black border border-slate-900'}`}>
+                                      <Camera className="w-3.5 h-3.5"/> Kamera
+                                    </label>
+                                  </div>
+                                </div>
+          
+                                <div className="space-y-2">
+                                  {(selectedTask.attachments || []).map(file => {
+                                    const isImage = file.type?.startsWith('image/') || file.url?.match(/\.(jpeg|jpg|gif|png)$/i);
+                                    
+                                    return (
+                                    <div key={file.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-100 transition-colors">
+                                       <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => window.open(file.url, '_blank')}>
+                                          {isImage ? (
+                                             <img src={file.url} alt="preview" className="w-10 h-10 md:w-12 md:h-12 object-cover rounded-lg border border-slate-200 shadow-sm shrink-0" />
+                                          ) : (
+                                             <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm shrink-0"><ImageIcon className="w-4 h-4 text-slate-400"/></div>
+                                          )}
+                                          
+                                          <div className="min-w-0">
+                                            <span className="text-xs font-bold text-slate-700 truncate block hover:text-blue-600">{file.name}</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase truncate">Oleh: {getUserName(file.uploaderId)}</span>
+                                          </div>
+                                       </div>
+                                       <div className="flex gap-2 shrink-0">
+                                         <button onClick={() => window.open(file.url, '_blank')} className="text-blue-600 p-1.5 hover:bg-blue-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Download className="w-4 h-4"/></button>
+                                         {(String(file.uploaderId) === String(currentUser.id) || currentUser.role === 'admin') && (
+                                           <button onClick={() => handleDeleteAttachment(file.id, file.name)} className="text-red-600 p-1.5 hover:bg-red-100 rounded-lg bg-white border border-slate-200 shadow-sm"><Trash2 className="w-4 h-4"/></button>
+                                         )}
+                                       </div>
+                                    </div>
+                                  )})}
+                                  {(!selectedTask.attachments || selectedTask.attachments.length === 0) && (
+                                    <p className="text-center text-[10px] text-slate-400 font-bold uppercase py-4 border-2 border-dashed border-slate-100 rounded-xl">Belum Ada Lampiran</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+          
+                          {/* --- PANEL KANAN: KOLOM DISKUSI (MUNCUL JIKA isChatOpen TRUE) --- */}
+                          {isChatOpen && (
+                          <div className="w-full md:w-1/2 flex flex-col bg-slate-50 h-full md:h-full relative border-t md:border-t-0 animate-in slide-in-from-right-10 duration-300">
+                            <div className="px-5 py-4 md:px-6 md:py-5 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 shrink-0">
+                              <div className="flex items-center gap-3">
+                                 <h3 className="font-black text-sm md:text-lg text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-indigo-500" /> Kolom Diskusi Pesan</h3>
+                              </div>
+                              {/* Di HP bisa ditutup via icon ini */}
+                              <button type="button" onClick={() => setIsChatOpen(false)} className="p-1.5 md:hidden bg-slate-100 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-full border border-slate-200 transition-colors shadow-sm"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                            </div>
+          
+                            <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-95">
+                              {(!Array.isArray(selectedTask?.comments) || selectedTask.comments.length === 0) && (
+                                 <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
+                                    <MessageSquare className="w-12 h-12 text-slate-300 mb-3"/>
+                                    <p className="text-xs font-bold text-slate-500">Belum ada diskusi. Mulai percakapan sekarang!</p>
+                                 </div>
+                              )}
+                              {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
+                                const isMe = String(chat?.userId) === String(currentUser?.id);
+                                const isEditingThis = editingMsgId === chat.id;
+          
+                                return (
+                                  <div key={chat.id || idx} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
+                                    
+                                    {/* Buble Chat Text / Input Edit */}
+                                    {isEditingThis ? (
+                                       <div className="w-[85%] bg-white border-2 border-indigo-200 rounded-2xl p-3 shadow-lg animate-in zoom-in-95">
+                                         <textarea 
+                                            value={editMsgText} 
+                                            onChange={(e) => setEditMsgText(e.target.value)}
+                                            className="w-full text-xs md:text-sm focus:outline-none resize-none bg-transparent mb-2"
+                                            rows="2"
+                                            autoFocus
+                                         />
+                                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-2">
+                                            <button onClick={() => setEditingMsgId(null)} className="text-[10px] font-bold text-slate-500 px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Batal</button>
+                                            <button onClick={() => handleSaveEditMessage(chat.id)} className="text-[10px] font-black text-white px-3 py-1.5 bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-colors">Simpan Pesan</button>
+                                         </div>
+                                       </div>
+                                    ) : (
+                                       <div className={`p-3 md:p-4 rounded-[1.2rem] shadow-sm max-w-[85%] relative ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'}`}>
+                                         <p className="text-[11px] md:text-sm font-medium leading-relaxed whitespace-pre-wrap">{chat?.text || ''}</p>
+                                         
+                                         {/* Tombol Edit/Hapus Pesan (Muncul Saat Hover jika milik sendiri) */}
+                                         {isMe && (
+                                            <div className="absolute top-0 -left-16 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                                              <button onClick={() => { setEditingMsgId(chat.id); setEditMsgText(chat.text); }} className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"><Edit size={12}/></button>
+                                              <button onClick={() => handleDeleteMessage(chat.id)} className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors"><Trash2 size={12}/></button>
+                                            </div>
+                                         )}
+                                       </div>
+                                    )}
+          
+                                    <span className="text-[8px] md:text-[9px] font-black tracking-widest text-slate-400 mt-1.5 px-1 uppercase">
+                                       {isMe ? 'Anda' : getUserName(chat?.userId)} • {chat?.timestamp || ''} {chat?.isEdited && <span className="text-indigo-400 italic">(Diedit)</span>}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              <div ref={chatEndRef} />
+                            </div>
+          
+                            {/* FLOATING INPUT FORM (Lebih Elegan & Tidak Menempel Bawah) */}
+                            <div className="p-4 md:p-6 bg-gradient-to-t from-slate-100 to-transparent shrink-0">
+                              <form onSubmit={handleAddComment} className="flex items-end gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgba(0,0,0,0.06)] focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
+                                <textarea 
+                                  value={newComment} 
+                                  onChange={(e) => setNewComment(e.target.value)} 
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                       e.preventDefault();
+                                       if (newComment.trim()) handleAddComment(e);
+                                    }
+                                  }}
+                                  placeholder="Ketik balasan Anda di sini... (Shift+Enter untuk baris baru)" 
+                                  className="flex-1 px-3 py-2 border-none focus:ring-0 resize-none max-h-32 text-xs md:text-sm bg-transparent font-medium text-slate-700 outline-none" 
+                                  rows="1"
+                                />
+                                <button type="submit" disabled={!newComment.trim()} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transform active:scale-95 shadow-md shrink-0 transition-all mb-0.5 mr-0.5">
+                                   <Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" />
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                          )}
+          
+                        </div>
+                      </div>
+                    )}
 
           {/* === MODAL 2: TUGAS BARU === */}
           {isModalOpen && (
