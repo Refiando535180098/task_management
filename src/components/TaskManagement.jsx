@@ -1650,13 +1650,13 @@ export default function TaskManagement() {
     } catch (err) { alert("Gagal terhubung ke server database."); }
   };
 
-  if (!currentUser) {
-    return <div className="min-h-screen w-full flex items-center justify-center bg-slate-50"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>;
-  }
-
   // ==========================================
   // LOGIKA HAK AKSES TINGKAT LANJUT (OCCUPATION)
   // ==========================================
+  if (!currentUser) {
+    return <div className="min-h-screen w-full flex items-center justify-center bg-slate-50"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div></div>;
+  }
+  
   const safeTasks = Array.isArray(tasks) ? tasks : [];
   
   const myTasks = safeTasks.filter(t => {
@@ -1819,21 +1819,24 @@ export default function TaskManagement() {
                 
                 {/* LIST DIVISI */}
                 <div className={`transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-[400px] overflow-y-auto custom-scrollbar mt-2' : 'max-h-0 overflow-hidden'}`}>
-                  <div className="relative -top-5 flex justify-center w-16 shrink-0 z-[60]">
-                 <button type="button" 
-                   onClick={(e) => { 
-                     e.preventDefault();
-                     if (activeTab === 'admin_users') {
-                        setIsUserModalOpen(true); 
-                     } else {
-                        const mode = (currentUser?.role !== 'staff' || currentUser?.tm_assign_tasks) ? 'delegate' : 'personal';
-                        handleOpenTaskModal('regular', mode); 
-                     }
-                   }} 
-                   className="bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(79,70,229,0.35)] border-4 border-slate-50 transform transition-transform hover:scale-105 active:scale-95 cursor-pointer">
-                   {activeTab === 'admin_users' ? <UserPlus className="w-6 h-6 pointer-events-none" /> : <Plus className="w-7 h-7 pointer-events-none" strokeWidth={3} />}
-                 </button>
-              </div>
+                  <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1 pr-1">
+                    <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Pantauan Tim</button>
+                    {divisions.filter(div => {
+                       if (currentUser?.role === 'admin' || currentUser?.tm_access_all_tasks) return true;
+                       
+                       const getDepartment = (divName) => {
+                          const found = divisions.find(d => d.name === divName);
+                          return found ? found.department_name : divName;
+                       };
+                       const myDept = getDepartment(currentUser?.division);
+                       const uDept = div.department_name;
+                       
+                       const allowedCustom = currentUser?.accessible_divisions || [];
+                       return (uDept === myDept || div.name === currentUser?.division || allowedCustom.includes(uDept) || allowedCustom.includes(div.name));
+                    }).map(div => (
+                      <button type="button" key={div.name} onClick={() => { navigateTo('division'); setSelectedDivision(div.name); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div.name && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div.name}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -2895,12 +2898,17 @@ export default function TaskManagement() {
                  const uDept = getDepartment(u.division);
                  const myDept = getDepartment(currentUser.division);
 
-                 // 4. Apakah berada di satu Departemen atau satu Divisi yang sama?
-                 if (uDept === myDept || u.division === currentUser.division) return true;
-
-                 // 5. Apakah Manager punya hak akses Override Silang dari Admin?
-                 const allowedCustom = currentUser.accessible_divisions || [];
-                 if (allowedCustom.includes(uDept) || allowedCustom.includes(u.division)) return true;
+                 // 4. Aturan Hak Akses Pantauan Divisi
+                 if (currentUser.role === 'staff') {
+                    // Staff HANYA bisa memantau rekan di divisinya sendiri secara spesifik
+                    if (u.division === currentUser.division) return true;
+                 } else {
+                    // Manager/Direksi bisa memantau seluruh departemennya
+                    if (uDept === myDept || u.division === currentUser.division) return true;
+                    // Dan juga memantau hak akses silang khusus dari Admin
+                    const allowedCustom = currentUser.accessible_divisions || [];
+                    if (allowedCustom.includes(uDept) || allowedCustom.includes(u.division)) return true;
+                 }
 
                  return false;
               }).map(staff => {
@@ -3787,6 +3795,21 @@ export default function TaskManagement() {
                                    else if (currentUser?.role === 'manager' || currentUser?.tm_monitor_division) hasAccess = (u.role === 'staff' || u.role === 'manager'); 
                                    else hasAccess = (u.role === 'staff');
                                    if (!hasAccess) return false;
+                                   
+                                   // ATURAN PEMBATASAN WILAYAH DIVISI UNTUK STAFF
+                                   if (currentUser?.role === 'staff' && !currentUser?.tm_access_all_tasks) {
+                                      if (u.division !== currentUser.division) return false;
+                                   } else if (currentUser?.role !== 'admin' && !currentUser?.tm_access_all_tasks) {
+                                      const getDepartment = (divName) => {
+                                         const div = divisions.find(d => d.name === divName);
+                                         return div ? div.department_name : divName;
+                                      };
+                                      const myDept = getDepartment(currentUser?.division);
+                                      const uDept = getDepartment(u.division);
+                                      const allowedCustom = currentUser?.accessible_divisions || [];
+                                      if (uDept !== myDept && u.division !== currentUser?.division && !allowedCustom.includes(uDept) && !allowedCustom.includes(u.division)) return false;
+                                   }
+
                                    if (recipientSearchQuery) return u.name.toLowerCase().includes(recipientSearchQuery.toLowerCase());
                                    return true;
                                 }).map(user => (
