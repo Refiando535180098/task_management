@@ -1547,8 +1547,8 @@ export default function TaskManagement() {
           margin:       [10, 10, 15, 10], 
           filename:     `Executive_Summary_${new Date().toISOString().split('T')[0]}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
         };
         await html2pdf().set(opt).from(element).save();
         setIsGeneratingPDF(false); 
@@ -1572,8 +1572,8 @@ export default function TaskManagement() {
           margin:       [10, 10, 15, 10], 
           filename:     `Laporan_Kinerja_${new Date().toISOString().split('T')[0]}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
         };
         await html2pdf().set(opt).from(element).save();
         setIsGeneratingPDF(false); 
@@ -2742,7 +2742,11 @@ export default function TaskManagement() {
                       <h3 className="font-black text-sm md:text-base text-slate-800 mb-3 md:mb-4 flex items-center gap-2"><Users className="w-4 h-4 md:w-5 md:h-5 text-blue-500"/> Pilih Laporan Karyawan</h3>
                       <select value={reportTargetUserId} onChange={(e) => setReportTargetUserId(e.target.value)} className="w-full px-3 py-2 md:px-4 md:py-3 border border-slate-300 flex items-center rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
                          <option value="ALL">-- CETAK LAPORAN SEMUA KARYAWAN --</option>
-                         {users.filter(u => (u.role === 'staff' || u.role === 'manager') && (currentUser.role === 'admin' || currentUser.tm_access_all_tasks || currentUser.crossDivision || (currentUser.role === 'direksi' && (currentUser.accessible_divisions || []).includes(u.division)) || u.division === currentUser.division)).map(u => (
+                         {users.filter(u => {
+                            if (u.role === 'admin' || u.role === 'direksi') return false; // Abaikan level atas
+                            if (['admin', 'direksi', 'manager'].includes(currentUser.role) || currentUser.tm_access_all_tasks || currentUser.tm_print_reports) return true;
+                            return u.division === currentUser.division;
+                         }).map(u => (
                            <option key={u.id} value={u.id}>{u.name} - {u.role.toUpperCase()} (Divisi {u.division})</option>
                          ))}
                       </select>
@@ -2797,6 +2801,28 @@ export default function TaskManagement() {
                   ? new Date(reportFilterMonth + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) 
                   : new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
+                let individualKpis = [];
+                if (isGlobalMode) {
+                   individualKpis = users.filter(u => u.role === 'staff' || u.role === 'manager').map(user => {
+                      let uTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(user.id));
+                      if (reportFilterMonth) uTasks = uTasks.filter(t => t.dueDate && t.dueDate.startsWith(reportFilterMonth));
+                      
+                      const utTotal = uTasks.length;
+                      let utScore = 0; let utOnTime = 0; let utLate = 0;
+                      
+                      uTasks.forEach(t => {
+                         if (t.status === 'done') {
+                            if (t.completed_at && t.completed_at > t.dueDate) { utLate++; utScore += 0.5; }
+                            else { utOnTime++; utScore += 1; }
+                         } else if (t.status === 'laporan-cleaning') {
+                            utOnTime++; utScore += 1;
+                         }
+                      });
+                      const utRate = utTotal === 0 ? 0 : Math.round((utScore / utTotal) * 100);
+                      return { ...user, total: utTotal, onTime: utOnTime, late: utLate, rate: utRate };
+                   }).sort((a, b) => b.rate - a.rate); // Otomatis ranking dari yang tertinggi
+                }
+
                 return (
                   <div className={`${isGeneratingPDF ? '' : 'max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar'} pb-10`}>
                     
@@ -2842,6 +2868,42 @@ export default function TaskManagement() {
                           </div>
                         </div>
                       </div>
+
+                      {isGlobalMode && (
+                        <div className="w-full mb-8">
+                          <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><BarChart3 className="w-4 h-4"/> Rekap KPI Perorangan (Seluruh Karyawan)</h3>
+                          <div className="overflow-x-auto custom-scrollbar pb-2">
+                            <table className="w-full text-left border-collapse border border-slate-300 min-w-[600px]">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-800 uppercase tracking-widest font-black border-b border-slate-300">
+                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>No</th>
+                                  <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Nama Karyawan</th>
+                                  <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Divisi</th>
+                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Total Tugas</th>
+                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Tepat Wkt</th>
+                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Terlambat</th>
+                                  <th className={`px-3 py-2 border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Skor KPI</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {individualKpis.length === 0 ? (
+                                   <tr><td colSpan="7" className="py-4 text-center text-xs font-bold text-slate-400">Belum ada data.</td></tr>
+                                ) : individualKpis.map((kpi, idx) => (
+                                  <tr key={kpi.id} className="border-b border-slate-300 break-inside-avoid hover:bg-slate-50 transition-colors">
+                                     <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{idx + 1}</td>
+                                     <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.name}</td>
+                                     <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.division}</td>
+                                     <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.total}</td>
+                                     <td className={`px-3 py-2 font-bold text-emerald-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.onTime}</td>
+                                     <td className={`px-3 py-2 font-bold text-orange-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.late}</td>
+                                     <td className={`px-3 py-2 font-black text-center ${isGeneratingPDF ? 'text-base' : 'text-xs'} ${kpi.rate >= 80 ? 'text-emerald-600' : kpi.rate >= 50 ? 'text-amber-500' : 'text-red-600'}`}>{kpi.rate}%</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="w-full">
                         <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><FileText className="w-4 h-4"/> Rincian Aktivitas Pekerjaan</h3>
