@@ -64,7 +64,14 @@ const AdminDashboard = ({ setAuth }) => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkLokasi, setBulkLokasi] = useState('');
 
-  // STATE EDIT PROFIL & BULK
+  // STATE TAMBAH MANUAL & BULK EDIT BARU
+  const [showAddManualModal, setShowAddManualModal] = useState(false);
+  const [newManualData, setNewManualData] = useState({ nama_lengkap: '', nik_karyawan: '', bidang_jasa: '', posisi_jabatan: '', lokasi_penempatan: '', status_kontrak: 'Probation', base_salary: 0 });
+  
+  // UBAH STATE BULK EDIT MENJADI INI:
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkEditList, setBulkEditList] = useState([]); // <-- Menyimpan array karyawan yang mau diedit
+
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileData, setEditProfileData] = useState({});
   const [selectedIds, setSelectedIds] = useState([]);
@@ -518,69 +525,144 @@ const AdminDashboard = ({ setAuth }) => {
     } catch (error) { alert("Gagal melakukan sinkronisasi massal: " + error.message); } finally { setLoading(false); }
   };
 
+  // --- FUNGSI RESIGN & AKTIFASI KEMBALI KARYAWAN ---
+  const processResign = async (candidate, isBulk = false) => {
+    if (!user?.can_edit_hrd && user?.role !== 'admin') { alert('Akses ditolak'); return; }
+    
+    let targetIds = isBulk ? selectedIds : [candidate.id];
+    let targetNiks = isBulk 
+      ? candidates.filter(c => selectedIds.includes(c.id) && c.nik_karyawan).map(c => c.nik_karyawan)
+      : (candidate.nik_karyawan ? [candidate.nik_karyawan] : []);
+
+    if (!window.confirm(`Yakin ingin memproses RESIGN untuk ${targetIds.length} karyawan? Akses login aplikasi ERP mereka akan otomatis ditutup.`)) return;
+
+    setLoading(true);
+    try {
+      // 1. Pindahkan status menjadi RESIGN di HRIS
+      await supabase.from('candidates').update({ status: 'RESIGN' }).in('id', targetIds);
+      
+      // 2. Cabut hak akses portal di task management (TIDAK BISA LOGIN LAGI)
+      if (targetNiks.length > 0) {
+        await supabase.from('initial_users').update({ has_portal_access: false }).in('nik', targetNiks);
+      }
+
+      alert(`SUKSES: ${targetIds.length} karyawan berhasil di-resign dan aksesnya dicabut.`);
+      if (isBulk) setSelectedIds([]);
+      else setSelectedCandidate(null);
+      fetchData();
+    } catch (error) {
+      alert('Gagal memproses resign: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processReactivate = async (candidate, isBulk = false) => {
+    if (!user?.can_edit_hrd && user?.role !== 'admin') { alert('Akses ditolak'); return; }
+    
+    let targetIds = isBulk ? selectedIds : [candidate.id];
+    let targetNiks = isBulk 
+      ? candidates.filter(c => selectedIds.includes(c.id) && c.nik_karyawan).map(c => c.nik_karyawan)
+      : (candidate.nik_karyawan ? [candidate.nik_karyawan] : []);
+
+    if (!window.confirm(`Yakin ingin MENGAKTIFKAN KEMBALI ${targetIds.length} karyawan? Akses login aplikasi ERP mereka akan dibuka lagi.`)) return;
+
+    setLoading(true);
+    try {
+      // 1. Kembalikan status menjadi INTI di HRIS
+      await supabase.from('candidates').update({ status: 'INTI' }).in('id', targetIds);
+      
+      // 2. Buka kembali hak akses portal di task management
+      if (targetNiks.length > 0) {
+        await supabase.from('initial_users').update({ has_portal_access: true }).in('nik', targetNiks);
+      }
+
+      alert(`SUKSES: ${targetIds.length} karyawan berhasil diaktifkan kembali.`);
+      if (isBulk) setSelectedIds([]);
+      else setSelectedCandidate(null);
+      fetchData();
+    } catch (error) {
+      alert('Gagal mengaktifkan kembali: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- FITUR TAMBAH MANUAL & EDIT MASSAL ---
+  const handleAddManualSubmit = async (e) => {
+    e.preventDefault();
+    if (!user?.can_create_hrd && user?.role !== 'admin') { alert('Akses Ditolak'); return; }
+    try {
+      // Set default status INTI agar langsung masuk ke HRIS Karyawan
+      const payload = { ...newManualData, status: 'INTI' };
+      const { error } = await supabase.from('candidates').insert([payload]);
+      if (error) throw error;
+      alert('Berhasil menambah karyawan manual!');
+      setShowAddManualModal(false);
+      setNewManualData({ nama_lengkap: '', nik_karyawan: '', bidang_jasa: '', posisi_jabatan: '', lokasi_penempatan: '', status_kontrak: 'Probation', base_salary: 0 });
+      fetchData(); // Refresh table
+    } catch (err) { alert('Gagal menambah data: ' + err.message); }
+  };
+
+  const executeSpreadsheetBulkEdit = async () => {
+    if (!user?.can_edit_hrd && user?.role !== 'admin') { alert('Akses Ditolak'); return; }
+    if (!window.confirm(`Simpan seluruh perubahan untuk ${bulkEditList.length} karyawan?`)) return;
+    
+    setLoading(true);
+    try {
+      // Loop untuk menyimpan data setiap karyawan yang ada di tabel bulk edit
+      const updatePromises = bulkEditList.map(item => {
+        const updateData = {};
+        // Mapping semua kolom yang akan diupdate ke DB
+        BULK_EDIT_FIELDS.forEach(field => {
+           updateData[field.key] = item[field.key];
+        });
+        return supabase.from('candidates').update(updateData).eq('id', item.id);
+      });
+
+      await Promise.all(updatePromises);
+      
+      alert(`SUKSES: Seluruh data untuk ${bulkEditList.length} karyawan berhasil diperbarui secara massal!`);
+      setShowBulkEditModal(false);
+      setSelectedIds([]);
+      fetchData(); // Refresh table
+    } catch (err) {
+      alert('Gagal menyimpan data massal: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- FITUR IMPORT DAN UPDATE MASSAL EXCEL ---
   const downloadImportTemplate = () => {
-    const templateData = [{
-      "Nama Lengkap": "Joss Karyawan Baru",
-      "NIK Karyawan": "2026101",
-      "NIK KTP": "3201012345678901",
-      "Warga Negara": "WNI",
-      "Tempat Lahir": "Jakarta",
-      "Tanggal Lahir": "1995-01-01",
-      "Jenis Kelamin": "Laki-laki",
-      "Agama": "Islam",
-      "Divisi / Jasa": "Security (Satpam)",
-      "Posisi Jabatan": "Komandan Regu",
-      "Level Akses Portal": "staff",
-      "Lokasi Penempatan": "PTPN 1 Regional 1",
-      "Kategori Karyawan": "Pekerja Site",
-      "Status Kontrak": "PKWT",
-      "Tanggal Bergabung": "2024-01-01",
-      "No WhatsApp": "081234567890",
-      "Telp Alternatif": "089999999",
-      "Alamat Domisili": "Jl. Contoh Domisili No 123",
-      "Alamat KTP Lengkap": "Jl. Contoh KTP No 123",
-      "Status Pernikahan (PTKP)": "TK/0",
-      "Data Anak/Tanggungan": "-",
-      "Nama Pasangan": "-",
-      "TTL Pasangan": "-",
-      "Kerja Pasangan": "-",
-      "Kontak Darurat (Nama)": "Bapak Budi",
-      "Hubungan Darurat": "Ayah",
-      "No Telp Darurat": "0877777777",
-      "Tinggi (cm)": 170,
-      "Berat (kg)": 65,
-      "Gol Darah": "O",
-      "Ukuran Baju": "L",
-      "Ukuran Celana": 32,
-      "Ukuran Sepatu": 42,
-      "Bertato?": "Tidak",
-      "Berkacamata?": "Tidak",
-      "Patah Tulang?": "Tidak",
-      "Takut Tinggi?": "Tidak",
-      "Pernah Operasi?": "Tidak",
-      "Detail Operasi": "-",
-      "Sakit 1 thn Terakhir?": "Tidak",
-      "Detail Sakit": "-",
-      "Penguasaan Bahasa ID": "Baik",
-      "Penguasaan Bahasa EN": "Cukup",
-      "Riwayat Pekerjaan": "PT ABC (1 Tahun)",
-      "Gaji Terakhir": "4000000",
-      "Gaji Diharapkan": "5000000",
-      "Alasan Keluar": "Habis Kontrak",
-      "Bisa Berenang?": "Tidak",
-      "Bisa Beladiri?": "Ya",
-      "Detail Beladiri": "Karate",
-      "Keahlian Lainnya": "Komputer Dasar",
-      "Info Loker Dari?": "Iklan",
-      "Kenalan PT?": "Tidak",
-      "Siapa Namanya?": "-"
-    }];
+    // Baris pertama ini adalah CONTOH pengisian.
+    // Sistem dirancang untuk MENGABAIKAN baris ini saat diupload berdasarkan kata "CONTOH".
+    const templateData = [
+      {
+        "NIK Karyawan": "CONTOH-12345",
+        "Nama Lengkap": "Joss Karyawan (Jangan Hapus Baris Ini)",
+        "Posisi Jabatan": "Staff Administrasi",
+        "Divisi / Bidang Jasa": "Finance",
+        "Penempatan Kerja": "Head Office",
+        "Level Akses Portal": "staff (Pilih: staff/manager/director/admin)"
+      }
+    ];
 
     const worksheet = XLSX.utils.json_to_sheet(templateData);
+    
+    // Melebarkan ukuran kolom Excel otomatis agar rapi saat didownload HRD
+    worksheet['!cols'] = [
+      { wch: 20 }, // NIK
+      { wch: 35 }, // Nama
+      { wch: 25 }, // Posisi
+      { wch: 25 }, // Divisi
+      { wch: 25 }, // Penempatan
+      { wch: 45 }  // Level Akses
+    ];
+
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Import HRIS');
-    XLSX.writeFile(workbook, 'Template_Import_Karyawan_Lengkap.xlsx');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Import Data Karyawan');
+    XLSX.writeFile(workbook, 'Template_Import_Karyawan.xlsx');
   };
 
   // --- FUNGSI PAYROLL HRD OTOMATIS ---
@@ -769,7 +851,7 @@ const AdminDashboard = ({ setAuth }) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!window.confirm(`Mulai proses import dan update data dari file ${file.name}?`)) return;
+    if (!window.confirm(`Mulai proses import data dari file ${file.name}?`)) return;
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -777,8 +859,7 @@ const AdminDashboard = ({ setAuth }) => {
         setLoading(true);
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
+        const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
 
         if (data.length === 0) {
@@ -786,96 +867,132 @@ const AdminDashboard = ({ setAuth }) => {
           return;
         }
 
+        // ========================================================
+        // 1. LOGIKA AUTO-MASTER POSISI JABATAN (SMART MAPPING)
+        // ========================================================
+        // Tarik data posisi dari DB
+        const { data: dbPositions } = await supabase.from('master_positions').select('*');
+        const currentPositions = dbPositions || [];
+        
+        // Buat Kamus Pencarian Huruf Kecil (Case Insensitive)
+        const positionMap = {};
+        currentPositions.forEach(p => {
+          positionMap[p.name.toLowerCase()] = p.name; // Simpan nama asli dari DB
+        });
+
+        const toInsertPositions = [];
+        
+        // Pindai (scan) Excel untuk mendeteksi posisi baru
+        data.forEach(row => {
+          const rawPosisi = String(row['Posisi Jabatan'] || '').trim();
+          if (rawPosisi) {
+            const lowerPos = rawPosisi.toLowerCase();
+            // Jika posisi tidak ditemukan di sistem, siapkan untuk ditambah ke master
+            if (!positionMap[lowerPos]) {
+              toInsertPositions.push({ name: rawPosisi }); 
+              positionMap[lowerPos] = rawPosisi; // Tambah ke kamus lokal agar tdk dobel jika ada di baris berikutnya
+            }
+          }
+        });
+
+        // Masukkan posisi baru ke database master
+        if (toInsertPositions.length > 0) {
+          const { error: posErr } = await supabase.from('master_positions').insert(toInsertPositions);
+          if (posErr) throw posErr;
+        }
+
+        // ========================================================
+        // 2. PERSIAPAN DATA KARYAWAN & PORTAL TM
+        // ========================================================
         const { data: existingDB } = await supabase.from('candidates').select('id, nik_karyawan');
         const existingMap = {};
         if (existingDB) {
           existingDB.forEach(d => { if (d.nik_karyawan) existingMap[d.nik_karyawan] = d.id; });
         }
 
-        const toInsert = [];
-        const toUpdate = [];
+        const { data: existingUsers } = await supabase.from('initial_users').select('id, nik');
+        const existingUserMap = {};
+        if (existingUsers) {
+          existingUsers.forEach(u => { if (u.nik) existingUserMap[u.nik] = u.id; });
+        }
+
+        const toInsertCandidates = [];
+        const toUpdateCandidates = [];
+        const toInsertUsers = [];
+        const toUpdateUsers = [];
 
         data.forEach(row => {
-          const payload = {
+          const nikExcel = String(row['NIK Karyawan'] || '').trim();
+          
+          // Lewati baris jika kosong atau berisi contoh
+          if (!nikExcel || nikExcel.toUpperCase().includes('CONTOH')) return;
+
+          let rawLevel = String(row['Level Akses Portal'] || 'staff').split(' ')[0].toLowerCase().trim();
+          const validLevels = ['staff', 'manager', 'director', 'admin'];
+          const levelAkses = validLevels.includes(rawLevel) ? rawLevel : 'staff';
+
+          // Gunakan kamus untuk mendapatkan penulisan Posisi yang 100% akurat dari database
+          const rawPosisiExcel = String(row['Posisi Jabatan'] || '').trim();
+          const finalPosisiJabatan = rawPosisiExcel ? positionMap[rawPosisiExcel.toLowerCase()] : '';
+
+          const payloadHRIS = {
             nama_lengkap: row['Nama Lengkap'] || 'Tanpa Nama',
-            nik_karyawan: row['NIK Karyawan'] ? String(row['NIK Karyawan']) : null,
-            nik_ktp: row['NIK KTP'] ? String(row['NIK KTP']) : '0000000000000000',
-            kewarganegaraan: row['Warga Negara'] || 'WNI',
-            tempat_lahir: row['Tempat Lahir'] || '-',
-            tanggal_lahir: row['Tanggal Lahir'] || new Date().toISOString().split('T')[0],
-            jenis_kelamin: row['Jenis Kelamin'] || 'Laki-laki',
-            agama: row['Agama'] || 'Islam',
-            bidang_jasa: row['Divisi / Jasa'] || 'Umum',
-            posisi_jabatan: row['Posisi Jabatan'] || '',
-            level_jabatan: row['Level Akses Portal'] || 'staff',
-            lokasi_penempatan: row['Lokasi Penempatan'] || 'Belum ditentukan',
-            kategori_karyawan: row['Kategori Karyawan'] || 'Pekerja Site',
-            status_kontrak: row['Status Kontrak'] || 'Probation',
-            tanggal_bergabung: row['Tanggal Bergabung'] || new Date().toISOString().split('T')[0],
-            no_hp: row['No WhatsApp'] ? String(row['No WhatsApp']) : '',
-            no_telp: row['Telp Alternatif'] ? String(row['Telp Alternatif']) : '',
-            alamat_domisili: row['Alamat Domisili'] || '-',
-            alamat_lengkap: row['Alamat KTP Lengkap'] || '-',
-            status_pernikahan: row['Status Pernikahan (PTKP)'] || 'TK/0',
-            detail_anak: row['Data Anak/Tanggungan'] || '',
-            nama_pasangan: row['Nama Pasangan'] || '',
-            pasangan_ttl: row['TTL Pasangan'] || '',
-            pasangan_pekerjaan: row['Kerja Pasangan'] || '',
-            kontak_darurat_nama: row['Kontak Darurat (Nama)'] || '-',
-            kontak_darurat_hub: row['Hubungan Darurat'] || '-',
-            kontak_darurat_telp: row['No Telp Darurat'] ? String(row['No Telp Darurat']) : '-',
-            tinggi_badan: Number(row['Tinggi (cm)']) || 0,
-            berat_badan: Number(row['Berat (kg)']) || 0,
-            golongan_darah: row['Gol Darah'] || '-',
-            ukuran_baju: row['Ukuran Baju'] || 'M',
-            ukuran_celana: String(row['Ukuran Celana'] || '0'),
-            ukuran_sepatu: String(row['Ukuran Sepatu'] || '0'),
-            bertato: row['Bertato?'] || 'Tidak',
-            berkacamata: row['Berkacamata?'] || 'Tidak',
-            patah_tulang: row['Patah Tulang?'] || 'Tidak',
-            takut_tinggi: row['Takut Tinggi?'] || 'Tidak',
-            riwayat_operasi: row['Pernah Operasi?'] || 'Tidak',
-            detail_operasi: row['Detail Operasi'] || '',
-            sakit_serius: row['Sakit 1 thn Terakhir?'] || 'Tidak',
-            detail_sakit: row['Detail Sakit'] || '',
-            bahasa_indonesia: row['Penguasaan Bahasa ID'] || 'Baik',
-            bahasa_inggris: row['Penguasaan Bahasa EN'] || 'Cukup',
-            riwayat_kerja: row['Riwayat Pekerjaan'] || '',
-            gaji_terakhir: row['Gaji Terakhir'] ? String(row['Gaji Terakhir']) : '',
-            gaji_diharapkan: row['Gaji Diharapkan'] ? String(row['Gaji Diharapkan']) : '',
-            alasan_keluar: row['Alasan Keluar'] || '',
-            bisa_berenang: row['Bisa Berenang?'] || 'Tidak',
-            bisa_beladiri: row['Bisa Beladiri?'] || 'Tidak',
-            detail_beladiri: row['Detail Beladiri'] || '',
-            keterampilan_lain: row['Keahlian Lainnya'] || '',
-            info_lowongan: row['Info Loker Dari?'] || 'Internal',
-            kenalan_syntegra: row['Kenalan PT?'] || 'Tidak',
-            detail_kenalan: row['Siapa Namanya?'] || '',
-            status: 'INTI' 
+            nik_karyawan: nikExcel,
+            posisi_jabatan: finalPosisiJabatan, // <-- Posisi otomatis mengikuti sistem
+            bidang_jasa: row['Divisi / Bidang Jasa'] || '',
+            lokasi_penempatan: row['Penempatan Kerja'] || '',
+            level_jabatan: levelAkses,
+            status: 'INTI',
+            kategori_karyawan: 'Pekerja Site',
+            status_kontrak: 'Probation',
+            tanggal_bergabung: new Date().toISOString().split('T')[0]
           };
 
-          if (payload.nik_karyawan && existingMap[payload.nik_karyawan]) {
-            toUpdate.push({ id: existingMap[payload.nik_karyawan], ...payload });
+          if (existingMap[nikExcel]) {
+            toUpdateCandidates.push({ id: existingMap[nikExcel], ...payloadHRIS });
           } else {
-            toInsert.push(payload);
+            toInsertCandidates.push(payloadHRIS);
+          }
+
+          const payloadTM = {
+            nik: nikExcel,
+            name: payloadHRIS.nama_lengkap,
+            password: '12345678',
+            role: levelAkses,
+            division: payloadHRIS.bidang_jasa,
+            position: payloadHRIS.posisi_jabatan,
+            has_portal_access: false 
+          };
+
+          if (existingUserMap[nikExcel]) {
+            toUpdateUsers.push({ id: existingUserMap[nikExcel], ...payloadTM });
+          } else {
+            toInsertUsers.push(payloadTM);
           }
         });
 
-        if (toInsert.length > 0) {
-          const { error: insertErr } = await supabase.from('candidates').insert(toInsert);
-          if (insertErr) throw insertErr;
-        }
-
-        if (toUpdate.length > 0) {
-          for (const item of toUpdate) {
+        // ========================================================
+        // 3. EKSEKUSI PENYIMPANAN
+        // ========================================================
+        if (toInsertCandidates.length > 0) await supabase.from('candidates').insert(toInsertCandidates);
+        if (toUpdateCandidates.length > 0) {
+          for (const item of toUpdateCandidates) {
             const { id, ...updateData } = item;
             await supabase.from('candidates').update(updateData).eq('id', id);
           }
         }
 
-        alert(`SUKSES:\n- ${toInsert.length} Karyawan Baru Ditambahkan\n- ${toUpdate.length} Karyawan Lama Diperbarui`);
+        if (toInsertUsers.length > 0) await supabase.from('initial_users').insert(toInsertUsers);
+        if (toUpdateUsers.length > 0) {
+          for (const item of toUpdateUsers) {
+            const { id, ...updateData } = item;
+            await supabase.from('initial_users').update(updateData).eq('id', id);
+          }
+        }
+
+        alert(`SUKSES IMPORT!\n- ${toInsertPositions.length} Posisi Jabatan Baru Didaftarkan Sistem\n- ${toInsertCandidates.length} Karyawan Baru\n- ${toUpdateCandidates.length} Karyawan Diperbarui`);
         setShowImportModal(false);
-        fetchData(); 
+        fetchData(); // Refresh UI untuk memunculkan Karyawan & Posisi Baru
       } catch (err) {
         alert("Gagal memproses data Excel: " + err.message);
       } finally {
@@ -904,14 +1021,21 @@ const AdminDashboard = ({ setAuth }) => {
   if (currentView.module === 'RECRUITMENT') {
     displayData = candidates.filter(c => c.status === currentView.filter); 
   } else if (currentView.module === 'HRIS') {
-    displayData = candidates.filter(c => c.status === 'INTI'); 
-    if (currentView.filter !== 'ALL') { displayData = displayData.filter(c => c.lokasi_penempatan === currentView.filter); }
+    if (currentView.filter === 'ALL') {
+      displayData = candidates.filter(c => c.status === 'INTI'); 
+    } else if (currentView.filter === 'RESIGN') {
+      // Tampilkan data yang sudah resign
+      displayData = candidates.filter(c => c.status === 'RESIGN');
+    } else {
+      // Filter berdasarkan Lokasi
+      displayData = candidates.filter(c => c.status === 'INTI' && c.lokasi_penempatan === currentView.filter);
+    }
   }
 
   if (searchTerm) {
     const lowerSearch = searchTerm.toLowerCase();
     displayData = displayData.filter(c => 
-      (c.nama_lengkap && c.nama_lengkap.toLowerCase().includes(lowerSearch)) || 
+      (c.nama_lengkap && c.nama_lengkap.toLowerCase().includes(lowerSearch)) ||
       (c.nik_karyawan && c.nik_karyawan.includes(searchTerm)) ||
       (c.referensi_dari && c.referensi_dari.toLowerCase().includes(lowerSearch)) // <-- Tambahan filter pencarian
     );
@@ -975,6 +1099,67 @@ const AdminDashboard = ({ setAuth }) => {
     else setSelectedExportFields([...selectedExportFields, fieldKey]);
   };
 
+  // KONFIGURASI KOLOM UNTUK SPREADSHEET BULK EDIT (KESELURUHAN DATA KECUALI LAMPIRAN)
+  // KONFIGURASI KOLOM UNTUK SPREADSHEET BULK EDIT (KESELURUHAN DATA KECUALI LAMPIRAN)
+  const BULK_EDIT_FIELDS = [
+    { key: 'nama_lengkap', label: 'Nama Lengkap', type: 'text' },
+    { key: 'nik_karyawan', label: 'NIK Karyawan', type: 'text' },
+    { key: 'nik_ktp', label: 'NIK KTP', type: 'text' },
+    { key: 'bidang_jasa', label: 'Divisi/Jasa', type: 'select', options: masterDivisions },
+    { key: 'posisi_jabatan', label: 'Jabatan', type: 'select', options: masterPositions.map(p => p.name) },
+    { key: 'level_jabatan', label: 'Level Portal', type: 'select', options: ['staff','manager','director','admin'] },
+    { key: 'lokasi_penempatan', label: 'Penempatan', type: 'select', options: masterSites.map(s => s.name) },
+    { key: 'kategori_karyawan', label: 'Kategori Karyawan', type: 'select', options: ['Pekerja Site', 'Internal HO'] },
+    { key: 'status_kontrak', label: 'Status Kontrak', type: 'select', options: ['Probation', 'PKWT', 'PKWTT', 'Harian Lepas'] },
+    { key: 'tanggal_bergabung', label: 'Tgl Bergabung', type: 'date' },
+    { key: 'base_salary', label: 'Gaji Pokok Utama', type: 'number' },
+    { key: 'kewarganegaraan', label: 'Warga Negara', type: 'text' },
+    { key: 'tempat_lahir', label: 'Tempat Lahir', type: 'text' },
+    { key: 'tanggal_lahir', label: 'Tanggal Lahir', type: 'date' },
+    { key: 'jenis_kelamin', label: 'Jenis Kelamin', type: 'select', options: ['Laki-laki', 'Perempuan'] },
+    { key: 'agama', label: 'Agama', type: 'select', options: ['Islam','Kristen','Katolik','Hindu','Buddha','Konghucu'] },
+    { key: 'no_hp', label: 'No WhatsApp', type: 'text' },
+    { key: 'no_telp', label: 'Telp Alternatif', type: 'text' },
+    { key: 'alamat_domisili', label: 'Alamat Domisili', type: 'text' },
+    { key: 'alamat_lengkap', label: 'Alamat KTP Lengkap', type: 'text' },
+    { key: 'status_pernikahan', label: 'Status PTKP', type: 'select', options: ['TK/0','TK/1','TK/2','TK/3','K/0','K/1','K/2','K/3'] },
+    { key: 'detail_anak', label: 'Data Anak', type: 'text' },
+    { key: 'nama_pasangan', label: 'Nama Pasangan', type: 'text' },
+    { key: 'pasangan_ttl', label: 'TTL Pasangan', type: 'text' },
+    { key: 'pasangan_pekerjaan', label: 'Pekerjaan Pasangan', type: 'text' },
+    { key: 'kontak_darurat_nama', label: 'Darurat (Nama)', type: 'text' },
+    { key: 'kontak_darurat_hub', label: 'Darurat (Hub)', type: 'text' },
+    { key: 'kontak_darurat_telp', label: 'Darurat (Telp)', type: 'text' },
+    { key: 'tinggi_badan', label: 'Tinggi (cm)', type: 'number' },
+    { key: 'berat_badan', label: 'Berat (kg)', type: 'number' },
+    { key: 'golongan_darah', label: 'Gol. Darah', type: 'select', options: ['-','A','B','AB','O'] },
+    { key: 'ukuran_baju', label: 'Uk. Baju', type: 'select', options: ['S','M','L','XL','XXL'] },
+    { key: 'ukuran_celana', label: 'Uk. Celana', type: 'text' },
+    { key: 'ukuran_sepatu', label: 'Uk. Sepatu', type: 'text' },
+    { key: 'bertato', label: 'Bertato?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'berkacamata', label: 'Berkacamata?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'patah_tulang', label: 'Patah Tulang?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'takut_tinggi', label: 'Takut Tinggi?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'riwayat_operasi', label: 'Pernah Operasi?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'detail_operasi', label: 'Detail Operasi', type: 'text' },
+    { key: 'sakit_serius', label: 'Sakit 1thn Terakhir?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'detail_sakit', label: 'Detail Sakit', type: 'text' },
+    { key: 'bahasa_indonesia', label: 'B. Indonesia', type: 'select', options: ['Baik','Cukup','Kurang'] },
+    { key: 'bahasa_inggris', label: 'B. Inggris', type: 'select', options: ['Baik','Cukup','Kurang'] },
+    { key: 'riwayat_kerja', label: 'Riwayat Kerja', type: 'text' },
+    { key: 'gaji_terakhir', label: 'Gaji Terakhir', type: 'text' },
+    { key: 'gaji_diharapkan', label: 'Gaji Diharapkan', type: 'text' },
+    { key: 'alasan_keluar', label: 'Alasan Keluar', type: 'text' },
+    { key: 'bisa_berenang', label: 'Bisa Berenang?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'bisa_beladiri', label: 'Bisa Beladiri?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'detail_beladiri', label: 'Detail Beladiri', type: 'text' },
+    { key: 'keterampilan_lain', label: 'Keahlian Lain', type: 'text' },
+    { key: 'info_lowongan', label: 'Info Loker', type: 'select', options: ['Iklan','Teman','Keluarga','Teman Kerja'] },
+    { key: 'kenalan_syntegra', label: 'Kenalan PT?', type: 'select', options: ['Tidak','Ya'] },
+    { key: 'detail_kenalan', label: 'Nama Kenalan', type: 'text' },
+    { key: 'referensi_dari', label: 'Referensi', type: 'text' }
+  ];
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       
@@ -1022,7 +1207,8 @@ const AdminDashboard = ({ setAuth }) => {
                </button>
                {expandedMenus.hris && (
                   <div className="ml-10 mt-1 space-y-1 border-l border-slate-800 pl-3">
-                    <button onClick={() => handleNavClick('HRIS', 'ALL', 'Semua Karyawan Aktif')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-colors mb-2 ${currentView.module === 'HRIS' && currentView.filter === 'ALL' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-emerald-400'}`}>Semua Karyawan Inti</button>
+                    <button onClick={() => handleNavClick('HRIS', 'ALL', 'Semua Karyawan Aktif')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-colors mb-1 ${currentView.module === 'HRIS' && currentView.filter === 'ALL' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-emerald-400'}`}>Semua Karyawan Inti</button>
+                    <button onClick={() => handleNavClick('HRIS', 'RESIGN', 'Data Karyawan Resign')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-colors mb-2 ${currentView.module === 'HRIS' && currentView.filter === 'RESIGN' ? 'bg-rose-600 text-white' : 'hover:bg-slate-800 text-rose-400'}`}>Karyawan Resign</button>
                     
                     {Object.keys(groupedSites).map(region => (
                       <div key={region} className="mb-1">
@@ -1592,6 +1778,7 @@ const AdminDashboard = ({ setAuth }) => {
                   <div className="flex gap-2 h-[42px] overflow-x-auto">
                     {currentView.module === 'HRIS' && (
                       <>
+                        <button onClick={() => setShowAddManualModal(true)} className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-[10px] md:text-xs transition-colors shadow-sm px-3 whitespace-nowrap"><UserPlus size={14}/> Tambah Manual</button>
                         <button onClick={() => setShowImportModal(true)} className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-bold text-[10px] md:text-xs transition-colors shadow-sm px-3 whitespace-nowrap"><Upload size={14}/> Import</button>
                       </>
                     )}
@@ -1658,6 +1845,149 @@ const AdminDashboard = ({ setAuth }) => {
                     </table>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* MODAL TAMBAH MANUAL KARYAWAN */}
+          {showAddManualModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
+                <div className="bg-emerald-600 p-5 flex justify-between items-center text-white shrink-0">
+                    <h3 className="font-black flex items-center gap-2"><UserPlus size={18}/> Tambah Karyawan Manual</h3>
+                    <button onClick={() => setShowAddManualModal(false)} className="text-emerald-100 hover:text-white transition"><X size={20}/></button>
+                </div>
+                <div className="p-6 overflow-y-auto max-h-[70vh]">
+                  <form id="manual-add-form" onSubmit={handleAddManualSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nama Lengkap *</label>
+                        <input type="text" required value={newManualData.nama_lengkap} onChange={e => setNewManualData({...newManualData, nama_lengkap: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">NIK Karyawan *</label>
+                        <input type="text" required value={newManualData.nik_karyawan} onChange={e => setNewManualData({...newManualData, nik_karyawan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Divisi / Jasa *</label>
+                        <select required value={newManualData.bidang_jasa} onChange={e => setNewManualData({...newManualData, bidang_jasa: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500 font-bold">
+                          <option value="">-- Pilih Divisi --</option>
+                          {masterDivisions.map((div, i) => <option key={i} value={div}>{div}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Posisi Jabatan *</label>
+                        <select required value={newManualData.posisi_jabatan} onChange={e => setNewManualData({...newManualData, posisi_jabatan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500 font-bold">
+                          <option value="">-- Pilih Posisi --</option>
+                          {masterPositions.map(pos => <option key={pos.id} value={pos.name}>{pos.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Lokasi Penempatan *</label>
+                        <select required value={newManualData.lokasi_penempatan} onChange={e => setNewManualData({...newManualData, lokasi_penempatan: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500 font-bold">
+                          <option value="">-- Pilih Lokasi --</option>
+                          {masterSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status Kontrak</label>
+                        <select value={newManualData.status_kontrak} onChange={e => setNewManualData({...newManualData, status_kontrak: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-emerald-500 font-bold">
+                          <option value="Probation">Probation</option>
+                          <option value="PKWT">PKWT</option>
+                          <option value="PKWTT">PKWTT</option>
+                          <option value="Harian Lepas">Harian Lepas</option>
+                        </select>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+                <div className="p-5 border-t border-slate-100 bg-white flex gap-3 shrink-0">
+                    <button onClick={() => setShowAddManualModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm transition">Batal</button>
+                    <button type="submit" form="manual-add-form" className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-sm transition shadow-md">Simpan Data Karyawan</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL EDIT MASSAL KESELURUHAN DATA (SPREADSHEET MODE) */}
+          {showBulkEditModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white w-full h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
+                
+                {/* HEADER */}
+                <div className="bg-blue-600 p-5 flex justify-between items-center text-white shrink-0">
+                    <div>
+                       <h3 className="font-black flex items-center gap-2 text-base md:text-lg"><Edit size={20}/> Edit Massal Data Karyawan (Mode Spreadsheet)</h3>
+                       <p className="text-blue-100 text-[10px] md:text-xs mt-1 font-bold">Mengedit {bulkEditList.length} karyawan sekaligus. Gulir (scroll) tabel ke kanan untuk melihat dan mengubah seluruh kolom data diri hingga gaji.</p>
+                    </div>
+                    <button onClick={() => setShowBulkEditModal(false)} className="bg-blue-700/50 hover:bg-blue-700 p-2 rounded-full transition"><X size={20}/></button>
+                </div>
+
+                {/* TABLE CONTAINER SPREADSHEET */}
+                <div className="flex-1 overflow-auto bg-slate-50 p-4 custom-scrollbar relative">
+                   <table className="min-w-max w-full border-collapse bg-white shadow-sm rounded-xl overflow-hidden">
+                      <thead className="bg-slate-100 sticky top-0 z-20 shadow-sm">
+                         <tr>
+                            <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase sticky left-0 bg-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] z-30">Identitas Pegawai</th>
+                            {BULK_EDIT_FIELDS.map((f, i) => (
+                               <th key={i} className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase border-l border-slate-200">{f.label}</th>
+                            ))}
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                         {bulkEditList.map((item, rowIndex) => (
+                            <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
+                               
+                               {/* KOLOM FIX DI KIRI AGAR NAMA TIDAK HILANG SAAT DI SCROLL KANAN */}
+                               <td className="px-4 py-3 sticky left-0 bg-white group-hover:bg-blue-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-100 z-10 align-top">
+                                  <div className="font-black text-slate-800 text-xs w-40 truncate" title={item.nama_lengkap}>{item.nama_lengkap || 'Tanpa Nama'}</div>
+                                  <div className="text-[10px] text-blue-600 font-bold mt-0.5">NIK: {item.nik_karyawan || '-'}</div>
+                               </td>
+
+                               {/* KOLOM DINAMIS MENGGUNAKAN LOOPING KONFIGURASI */}
+                               {BULK_EDIT_FIELDS.map((f, colIndex) => (
+                                  <td key={colIndex} className="px-2 py-2 border-l border-slate-100 align-top">
+                                     {f.type === 'select' ? (
+                                        <select 
+                                           value={item[f.key] || ''} 
+                                           onChange={(e) => {
+                                              const newData = [...bulkEditList];
+                                              newData[rowIndex][f.key] = e.target.value;
+                                              setBulkEditList(newData);
+                                           }}
+                                           className="w-36 bg-slate-50 hover:bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                                        >
+                                           <option value="">-- Pilih --</option>
+                                           {f.options?.map((opt, oIdx) => <option key={oIdx} value={opt}>{opt}</option>)}
+                                        </select>
+                                     ) : (
+                                        <input 
+                                           type={f.type} 
+                                           value={item[f.key] || ''} 
+                                           onChange={(e) => {
+                                              const newData = [...bulkEditList];
+                                              newData[rowIndex][f.key] = e.target.value;
+                                              setBulkEditList(newData);
+                                           }}
+                                           placeholder="-"
+                                           className={`w-36 bg-slate-50 hover:bg-white border border-slate-200 rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors ${f.key === 'base_salary' ? 'font-black text-emerald-700' : 'font-medium text-slate-700'}`}
+                                        />
+                                     )}
+                                  </td>
+                               ))}
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                </div>
+
+                {/* FOOTER ACTION */}
+                <div className="p-5 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+                   <button onClick={() => setShowBulkEditModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-6 py-3 rounded-xl text-sm transition-colors">Batalkan</button>
+                   <button onClick={executeSpreadsheetBulkEdit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 py-3 rounded-xl text-sm transition-all shadow-md flex items-center gap-2">
+                      {loading ? 'Menyimpan...' : <><Save size={16}/> Simpan Semua Perubahan ({bulkEditList.length} Data)</>}
+                   </button>
+                </div>
               </div>
             </div>
           )}
@@ -1750,11 +2080,18 @@ const AdminDashboard = ({ setAuth }) => {
                <button onClick={() => bulkUpdateStatus('BANK_DATA')} className="text-[10px] md:text-xs font-bold hover:bg-slate-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><Archive size={12}/> Ke Bank Data</button>
             </div>
           )}
-          {currentView.module === 'HRIS' && (
+          {currentView.module === 'HRIS' && currentView.filter !== 'RESIGN' && (
             <div className="flex items-center gap-2 shrink-0">
                <span className="text-[9px] uppercase text-slate-400 font-bold hidden sm:inline">Aksi HRIS:</span>
-               <button onClick={() => setShowBulkModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-blue-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><MapPin size={12}/> Mutasi / Plotting Lokasi</button>
-               <button onClick={bulkSyncToTaskManagement} className="text-[10px] md:text-xs font-bold hover:bg-emerald-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><UserPlus size={12}/> Sync Massal</button>
+               <button onClick={() => setShowBulkEditModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-amber-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><Edit size={12}/> Edit Massal</button>
+               <button onClick={() => setShowBulkModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-blue-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><MapPin size={12}/> Mutasi Lokasi</button>
+               <button onClick={() => processResign(null, true)} className="text-[10px] md:text-xs font-bold hover:bg-rose-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><LogOut size={12}/> Resign Massal</button>
+            </div>
+          )}
+
+          {currentView.module === 'HRIS' && currentView.filter === 'RESIGN' && (
+            <div className="flex items-center gap-2 shrink-0">
+               <button onClick={() => processReactivate(null, true)} className="text-[10px] md:text-xs font-bold hover:bg-emerald-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><RotateCcw size={12}/> Aktifkan Kembali Massal</button>
             </div>
           )}
           <div className="h-6 w-px bg-slate-700 shrink-0"></div>
@@ -2303,9 +2640,20 @@ const AdminDashboard = ({ setAuth }) => {
                     <Archive size={16}/> Masuk Bank Data
                   </button>
                 )}
-                {currentView.module === 'HRIS' && (
-                  <button onClick={() => syncToTaskManagement(selectedCandidate)} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg text-xs transition-all w-full md:w-auto">
-                    <UserPlus size={16}/> Sync Akun Portal
+                {currentView.module === 'HRIS' && selectedCandidate.status === 'INTI' && (
+                  <>
+                    <button onClick={() => processResign(selectedCandidate, false)} className="flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-5 py-3 rounded-xl font-bold shadow-sm text-xs transition-all w-full md:w-auto">
+                      <LogOut size={16}/> Resign (Nonaktifkan)
+                    </button>
+                    <button onClick={() => syncToTaskManagement(selectedCandidate)} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg text-xs transition-all w-full md:w-auto">
+                      <UserPlus size={16}/> Sync Akun Portal
+                    </button>
+                  </>
+                )}
+                
+                {currentView.module === 'HRIS' && selectedCandidate.status === 'RESIGN' && (
+                  <button onClick={() => processReactivate(selectedCandidate, false)} className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg text-xs transition-all w-full md:w-auto">
+                    <RotateCcw size={16}/> Aktifkan Kembali Karyawan
                   </button>
                 )}
               </div>

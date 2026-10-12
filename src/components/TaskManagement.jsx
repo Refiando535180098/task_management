@@ -276,6 +276,28 @@ export default function TaskManagement() {
         const updatedTask = { ...selectedTask, attachments: updatedAttachments };
         setSelectedTask(updatedTask);
         setTasks(tasks.map(t => t.id === selectedTask.id ? updatedTask : t));
+
+        // NOTIFIKASI UPLOAD LAMPIRAN BUKTI
+        const assignees = getAssigneesArray(selectedTask.assignedTo);
+        const relevantUserIds = new Set([...assignees, selectedTask.assignedBy]);
+        const notifsToInsert = [];
+        
+        relevantUserIds.forEach(targetUserId => {
+          if (targetUserId && String(targetUserId) !== String(currentUser.id)) {
+             notifsToInsert.push({
+                userId: targetUserId,
+                type: 'system',
+                message: `📎 ${currentUser.name} menambahkan dokumen/foto baru pada tugas "${selectedTask.title}"`,
+                read_status: false,
+                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                taskId: selectedTask.id
+             });
+          }
+        });
+
+        if (notifsToInsert.length > 0) {
+           await supabase.from('notifications').insert(notifsToInsert);
+        }
       }
     } catch (err) {
       alert('Error terhubung ke server saat upload: ' + err.message);
@@ -754,7 +776,22 @@ export default function TaskManagement() {
         updatePayload.approved_by = null;
       }
       const { error } = await supabase.from('initial_tasks').update(updatePayload).eq('id', taskId);
-      if (error) loadTasksFromDB(); // Rollback jika error
+      
+      if (!error) {
+        // NOTIFIKASI DRAG & DROP
+        if (String(task.assignedBy) !== String(currentUser.id)) {
+           await supabase.from('notifications').insert([{
+              userId: task.assignedBy,
+              type: 'system',
+              message: `📝 ${currentUser.name} memindahkan tugas "${task.title}" menjadi ${finalStatus.toUpperCase()}`,
+              read_status: false,
+              time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+              taskId: taskId
+           }]);
+        }
+      } else {
+        loadTasksFromDB(); // Rollback jika error
+      }
     } catch (error) { loadTasksFromDB(); }
   };
 
@@ -1739,8 +1776,14 @@ export default function TaskManagement() {
          assigneesData.some(u => allowedCustom.includes(u.division) || allowedCustom.includes(getDepartment(u.division)))
       );
 
-      // Gabungkan semua izin
-      if (isMyDivision || isMyDepartment || hasCustomAccess) return true;
+      // Gabungkan semua izin (Dengan pengamanan ekstra untuk level Staff)
+      if (currentUser.role === 'staff') {
+         // Staff HANYA diizinkan melihat tugas dari divisi yang spesifik sama dengannya
+         if (isMyDivision) return true;
+      } else {
+         // Manager / Direksi bebas melihat seluruh Departemennya dan akses silang tambahan
+         if (isMyDivision || isMyDepartment || hasCustomAccess) return true; 
+      }
     }
 
     return isMyOwnTask;
