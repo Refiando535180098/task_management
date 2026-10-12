@@ -538,18 +538,25 @@ const AdminDashboard = ({ setAuth }) => {
 
     setLoading(true);
     try {
-      // 1. Pindahkan status menjadi RESIGN di HRIS
-      await supabase.from('candidates').update({ status: 'RESIGN' }).in('id', targetIds);
+      // 1. Pindahkan status menjadi RESIGN di HRIS (TAMBAHKAN PENANGKAP ERROR)
+      const { error: err1 } = await supabase.from('candidates').update({ status: 'RESIGN' }).in('id', targetIds);
+      if (err1) throw err1;
       
       // 2. Cabut hak akses portal di task management (TIDAK BISA LOGIN LAGI)
       if (targetNiks.length > 0) {
-        await supabase.from('initial_users').update({ has_portal_access: false }).in('nik', targetNiks);
+        const { error: err2 } = await supabase.from('initial_users').update({ has_portal_access: false }).in('nik', targetNiks);
+        if (err2) console.warn("Peringatan: Gagal cabut akses portal:", err2.message);
       }
 
+      // 3. UPDATE STATE LOKAL: UI Langsung Berubah Tanpa Perlu Refresh Data
+      setCandidates(candidates.map(c => targetIds.includes(c.id) ? { ...c, status: 'RESIGN' } : c));
+
       alert(`SUKSES: ${targetIds.length} karyawan berhasil di-resign dan aksesnya dicabut.`);
+      
+      // 4. Bersihkan centang atau tutup modal pop-up
       if (isBulk) setSelectedIds([]);
       else setSelectedCandidate(null);
-      fetchData();
+      
     } catch (error) {
       alert('Gagal memproses resign: ' + error.message);
     } finally {
@@ -570,17 +577,24 @@ const AdminDashboard = ({ setAuth }) => {
     setLoading(true);
     try {
       // 1. Kembalikan status menjadi INTI di HRIS
-      await supabase.from('candidates').update({ status: 'INTI' }).in('id', targetIds);
+      const { error: err1 } = await supabase.from('candidates').update({ status: 'INTI' }).in('id', targetIds);
+      if (err1) throw err1;
       
       // 2. Buka kembali hak akses portal di task management
       if (targetNiks.length > 0) {
-        await supabase.from('initial_users').update({ has_portal_access: true }).in('nik', targetNiks);
+        const { error: err2 } = await supabase.from('initial_users').update({ has_portal_access: true }).in('nik', targetNiks);
+        if (err2) console.warn("Peringatan: Gagal aktivasi portal:", err2.message);
       }
 
+      // 3. UPDATE STATE LOKAL: UI Langsung Berubah Tanpa Perlu Refresh Data
+      setCandidates(candidates.map(c => targetIds.includes(c.id) ? { ...c, status: 'INTI' } : c));
+
       alert(`SUKSES: ${targetIds.length} karyawan berhasil diaktifkan kembali.`);
+      
+      // 4. Bersihkan centang atau tutup modal pop-up
       if (isBulk) setSelectedIds([]);
       else setSelectedCandidate(null);
-      fetchData();
+      
     } catch (error) {
       alert('Gagal mengaktifkan kembali: ' + error.message);
     } finally {
