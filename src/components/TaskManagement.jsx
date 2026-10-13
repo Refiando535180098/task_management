@@ -152,6 +152,8 @@ export default function TaskManagement() {
   const [isDivMenuOpen, setIsDivMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [showKpiInfoModal, setShowKpiInfoModal] = useState(false); // <-- State Modal Info KPI
+  const [showAllKpi, setShowAllKpi] = useState(false); // <-- State Papan Peringkat Extend
+  const [sidebarDeptsOpen, setSidebarDeptsOpen] = useState({}); // <-- State untuk Tree Menu Departemen
   
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
@@ -1133,23 +1135,26 @@ export default function TaskManagement() {
   }, [selectedTask?.comments, selectedTask?.id, isChatOpen]);
 
   useEffect(() => {
-    const fetchInitialGlobalData = async () => {
-      try {
-        const { data, error } = await supabase.from('initial_users').select('*').neq('can_access_task', false);
-        if (data) {
-          const processedUsers = data.map(u => {
-            const nameParts = (u.name || 'User').trim().split(/\s+/);
-            const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            return { ...u, avatar: initials };
-          });
-          setUsers(processedUsers);
-        }
-      } catch (error) {
-        console.error('Gagal mengambil data users:', error);
-      }
-    };
-    fetchInitialGlobalData();
-  }, []);
+        const fetchInitialGlobalData = async () => {
+          try {
+            // Hapus pembatasan agar riwayat nama orang resign tetap aman di tugas lama
+            const { data, error } = await supabase.from('initial_users').select('*');
+            if (data) {
+              const processedUsers = data.map(u => {
+                const nameParts = (u.name || 'User').trim().split(/\s+/);
+                const initials = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                // Deteksi otomatis jika karyawan Resign / Nonaktif dari HRD
+                const isResign = (u.status || '').toLowerCase() === 'resign' || (u.status || '').toLowerCase() === 'nonaktif' || u.can_access_task === false;
+                return { ...u, avatar: initials, isResign };
+              });
+              setUsers(processedUsers);
+            }
+          } catch (error) {
+            console.error('Gagal mengambil data users:', error);
+          }
+        };
+        fetchInitialGlobalData();
+      }, []);
 
   useEffect(() => {
     const fetchDivisions = async () => {
@@ -1333,7 +1338,7 @@ export default function TaskManagement() {
       };
     } 
     else if (taskFormType === 'ticketing') {
-      const itUsers = users.filter(u => u.role === 'admin' || (u.division && u.division.toLowerCase() === 'it')).map(u => u.id);
+      const itUsers = users.filter(u => !u.isResign && (u.role === 'admin' || (u.division && u.division.toLowerCase() === 'it'))).map(u => u.id);
       
       if (itUsers.length === 0) {
         setIsSubmitting(false);
@@ -1889,6 +1894,13 @@ export default function TaskManagement() {
                 {isSidebarOpen && <span className="ml-3 whitespace-nowrap">Laporan & Cetak</span>}
               </button>
             )}
+
+            {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_print_reports) && (
+              <button type="button" title="History KPI" onClick={() => alert("Menu Riwayat KPI akan aktif. Data bulan ini akan diarsipkan ke mari secara otomatis pada akhir bulan untuk evaluasi HRD.")} className={`w-full flex items-center ${isSidebarOpen ? 'justify-start px-4' : 'justify-center px-0'} py-3 rounded-xl text-sm font-bold transition-all text-slate-500 hover:bg-slate-50`}>
+                <BarChart3 className="w-5 h-5 shrink-0" /> 
+                {isSidebarOpen && <span className="ml-3 whitespace-nowrap">History KPI</span>}
+              </button>
+            )}
             
             {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (
               <div className={`pt-4 border-t border-slate-100 mt-4 ${!isSidebarOpen && 'flex flex-col items-center'}`}>
@@ -1904,31 +1916,45 @@ export default function TaskManagement() {
                   {isSidebarOpen && (isDivMenuOpen ? <ChevronDown className="w-4 h-4 shrink-0"/> : <ChevronRight className="w-4 h-4 shrink-0"/>)}
                 </button>
                 
-                {/* LIST DIVISI */}
-                <div className={`transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-[400px] overflow-y-auto custom-scrollbar mt-2' : 'max-h-0 overflow-hidden'}`}>
-                  <div className="ml-5 pl-4 border-l-2 border-slate-100 space-y-1 py-1 pr-1">
-                    <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Pantauan Tim</button>
-                    {divisions.filter(div => {
+                {/* LIST DIVISI (TREE STRUCTURE) */}
+                <div className={`transition-all duration-300 ${isDivMenuOpen && isSidebarOpen ? 'max-h-[600px] overflow-y-auto custom-scrollbar mt-2' : 'max-h-0 overflow-hidden'}`}>
+                  <div className="ml-5 pl-3 border-l-2 border-slate-100 space-y-1.5 py-1 pr-1">
+                    <button type="button" onClick={() => { navigateTo('division'); setSelectedDivision('Semua Divisi'); }} className={`w-full text-left px-3 py-2 rounded-lg text-xs md:text-sm transition-all whitespace-nowrap ${selectedDivision === 'Semua Divisi' && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Semua Pantauan Tim</button>
+                    
+                    {departments.filter(dept => {
                        if (currentUser?.role === 'admin' || currentUser?.tm_access_all_tasks) return true;
-                       
-                       // Jika level Staff, HANYA izinkan lihat divisinya sendiri
-                       if (currentUser?.role === 'staff') {
-                          return div.name === currentUser?.division;
-                       }
-                       
-                       // Jika Manager/Direksi, izinkan lihat departemennya & hak akses silang
-                       const getDepartment = (divName) => {
-                          const found = divisions.find(d => d.name === divName);
-                          return found ? found.department_name : divName;
-                       };
-                       const myDept = getDepartment(currentUser?.division);
-                       const uDept = div.department_name;
+                       const getDept = (divName) => { const d = divisions.find(x => x.name === divName); return d ? d.department_name : divName; };
+                       const myDept = getDept(currentUser?.division);
                        const allowedCustom = currentUser?.accessible_divisions || [];
-                       
-                       return (uDept === myDept || div.name === currentUser?.division || allowedCustom.includes(uDept) || allowedCustom.includes(div.name));
-                    }).map(div => (
-                      <button type="button" key={div.name} onClick={() => { navigateTo('division'); setSelectedDivision(div.name); }} className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all whitespace-nowrap ${selectedDivision === div.name && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>Divisi {div.name}</button>
-                    ))}
+                       if (currentUser?.role === 'staff') return dept === myDept; 
+                       return dept === myDept || allowedCustom.includes(dept) || divisions.some(d => d.department_name === dept && allowedCustom.includes(d.name));
+                    }).map(dept => {
+                       const isOpen = sidebarDeptsOpen[dept];
+                       // Cari divisi yang boleh dilihat user di departemen ini
+                       const deptDivs = divisions.filter(d => d.department_name === dept && (
+                           currentUser?.role === 'admin' || currentUser?.tm_access_all_tasks || 
+                           (currentUser?.role === 'staff' ? d.name === currentUser?.division : true) 
+                       ));
+
+                       if (deptDivs.length === 0) return null;
+
+                       return (
+                         <div key={dept} className="mt-1">
+                           {/* HEADER DEPARTEMEN */}
+                           <button type="button" onClick={() => setSidebarDeptsOpen(p => ({...p, [dept]: !p[dept]}))} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[10px] font-black text-slate-700 hover:bg-slate-100 transition-colors uppercase tracking-widest border border-transparent hover:border-slate-200">
+                             <span className="flex items-center gap-2 truncate"><Building size={12} className="text-blue-500 shrink-0"/> {dept}</span>
+                             {isOpen ? <ChevronDown size={14} className="shrink-0 text-slate-400"/> : <ChevronRight size={14} className="shrink-0 text-slate-400"/>}
+                           </button>
+                           
+                           {/* ANAK DIVISI */}
+                           <div className={`ml-4 pl-3 border-l-2 border-slate-200 mt-1 space-y-1 transition-all duration-300 ${isOpen ? 'block' : 'hidden'}`}>
+                             {deptDivs.map(div => (
+                                <button type="button" key={div.name} onClick={() => { navigateTo('division'); setSelectedDivision(div.name); }} className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap ${selectedDivision === div.name && activeTab === 'division' ? 'text-blue-700 bg-blue-50 font-black shadow-sm' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}>{div.name}</button>
+                             ))}
+                           </div>
+                         </div>
+                       )
+                    })}
                   </div>
                 </div>
               </div>
@@ -2466,6 +2492,140 @@ export default function TaskManagement() {
                 ))}
               </div>
 
+              {/* === TABEL LEADERBOARD KPI KARYAWAN (RUMUS KEADILAN) === */}
+              {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (() => {
+                 const currentMonthStr = new Date().toISOString().substring(0, 7); // Format: YYYY-MM
+                 const staffKpiData = users.filter(u => {
+                    if (u.isResign) return false; // Hilangkan orang resign dari Leaderboard
+                    if (u.role === 'admin' || u.role === 'direksi') return false; 
+                    if (['admin', 'direksi'].includes(currentUser.role) || currentUser.tm_access_all_tasks) return true;
+                    
+                    const getDept = (divName) => { const d = divisions.find(x => x.name === divName); return d ? d.department_name : divName; };
+                    const myDept = getDept(currentUser.division);
+                    const uDept = getDept(u.division);
+                    const allowedCustom = currentUser.accessible_divisions || [];
+                    
+                    return (uDept === myDept || u.division === currentUser.division || allowedCustom.includes(uDept) || allowedCustom.includes(u.division));
+                 }).map(u => {
+                    const uTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(u.id) && t.dueDate && t.dueDate.startsWith(currentMonthStr));
+                    let uPending = 0, uProgress = 0, uOnTime = 0, uLate = 0, uOverdue = 0;
+                    const now = getNowStr();
+                    
+                    uTasks.forEach(t => {
+                        if (t.status === 'done') {
+                            if (t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
+                        } else if (t.status === 'laporan-cleaning') {
+                            uOnTime++;
+                        } else if (t.status === 'pending') {
+                            if (t.dueDate < now) uOverdue++; else uPending++;
+                        } else {
+                            if (t.dueDate < now) uOverdue++; else uProgress++;
+                        }
+                    });
+                    
+                    const totalTugas = uTasks.length;
+                    
+                    // RUMUS KEADILAN: Menilai Kuantitas (Poin) & Kualitas (%)
+                    // +10 Poin Tepat Waktu, +5 Poin Telat Selesai, -5 Poin Overdue
+                    const totalPoin = (uOnTime * 10) + (uLate * 5) - (uOverdue * 5);
+                    const totalMaxPoin = (uOnTime + uLate + uOverdue) * 10 || 1; // Cegah error bagi 0
+                    let persentaseKualitas = Math.round((totalPoin / totalMaxPoin) * 100);
+                    if (persentaseKualitas < 0) persentaseKualitas = 0;
+                    if (totalTugas === 0) persentaseKualitas = 0;
+
+                    return { ...u, uPending, uProgress, uOnTime, uLate, uOverdue, totalTugas, totalPoin, persentaseKualitas };
+                 }).sort((a, b) => b.totalPoin - a.totalPoin); // Sortir otomatis dari Poin tertinggi (Ranking)
+
+                 return (
+                   <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full mb-8 relative">
+                      <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <div>
+                           <h3 className="font-black text-sm md:text-base text-slate-800 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600"/> Papan Peringkat KPI (Bulan Ini)</h3>
+                           <p className="text-[10px] text-slate-500 font-bold mt-1 tracking-wide">Poin Produktivitas Adil: Tepat Wkt <span className="text-emerald-600">(+10)</span>, Telat <span className="text-amber-500">(+5)</span>, Overdue <span className="text-red-500">(-5)</span></p>
+                        </div>
+                      </div>
+                      
+                      <div className={`overflow-x-auto custom-scrollbar relative ${showAllKpi ? 'pb-4' : 'pb-0'}`}>
+                        <table className="w-full text-left border-collapse min-w-[1100px]">
+                          <thead>
+                            <tr className="bg-white text-[9px] uppercase tracking-widest font-black text-slate-400 border-b border-slate-100">
+                               <th className="p-4 w-12 text-center">Rank</th>
+                               <th className="p-4 w-56">Karyawan & NIK</th>
+                               <th className="p-4 w-48">Departemen (Div)</th>
+                               <th className="p-4 text-center bg-slate-50 text-slate-700">Total Kerja</th>
+                               <th className="p-4 text-center text-slate-500">Pending</th>
+                               <th className="p-4 text-center text-blue-500">Progress</th>
+                               <th className="p-4 text-center text-emerald-500">Tepat Wkt</th>
+                               <th className="p-4 text-center text-amber-500">Telat Sls</th>
+                               <th className="p-4 text-center text-red-500">Overdue</th>
+                               <th className="p-4 text-center bg-indigo-50 border-l border-indigo-100 text-indigo-700 w-40">Skor Kinerja</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                             {staffKpiData.slice(0, showAllKpi ? staffKpiData.length : 11).map((staff, idx) => {
+                               const isBlurred = !showAllKpi && idx === 10;
+                               return (
+                               <tr key={staff.id} className={`border-b border-slate-50 transition-all duration-300 ${isBlurred ? 'blur-[3px] opacity-40 select-none pointer-events-none' : 'hover:bg-slate-50'}`}>
+                                  <td className="p-4 text-center">
+                                    <div className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center font-black text-[10px] shadow-sm ${idx === 0 ? 'bg-yellow-400 text-slate-900 border-2 border-yellow-200' : idx === 1 ? 'bg-slate-300 text-slate-800' : idx === 2 ? 'bg-orange-300 text-orange-900' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div>
+                                  </td>
+                                  <td className="p-4">
+                                     <p className="font-black text-slate-800 text-xs truncate">{staff.name}</p>
+                                     <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">NIK: {staff.nik || '-'}</p>
+                                  </td>
+                                  <td className="p-4">
+                                     <p className="font-bold text-slate-700 text-[10px] uppercase truncate">{getDepartment(staff.division)}</p>
+                                     <p className="text-[9px] font-bold text-slate-400 mt-1 truncate">({staff.division})</p>
+                                  </td>
+                                  <td className="p-4 text-center font-black text-slate-800 bg-slate-50/50">{staff.totalTugas}</td>
+                                  <td className="p-4 text-center font-bold text-slate-500">{staff.uPending}</td>
+                                  <td className="p-4 text-center font-bold text-blue-600">{staff.uProgress}</td>
+                                  <td className="p-4 text-center font-black text-emerald-600">{staff.uOnTime}</td>
+                                  <td className="p-4 text-center font-bold text-amber-600">{staff.uLate}</td>
+                                  <td className="p-4 text-center font-black text-red-600">{staff.uOverdue}</td>
+                                  <td className="p-4 text-center bg-indigo-50/50 border-l border-indigo-100">
+                                     <p className="font-black text-indigo-700 text-lg leading-none mb-1">{staff.totalPoin}</p>
+                                     {staff.totalTugas === 0 ? (
+                                        <Badge type="pending">N/A (Belum Ada Data)</Badge>
+                                     ) : (
+                                        <Badge type={staff.persentaseKualitas >= 80 ? 'done' : staff.persentaseKualitas >= 50 ? 'waiting-approval' : 'overdue'}>Kual: {staff.persentaseKualitas}%</Badge>
+                                     )}
+                                  </td>
+                               </tr>
+                             )})}
+                             {staffKpiData.length === 0 && <tr><td colSpan="10" className="p-8 text-center text-xs font-bold text-slate-400">Belum ada aktivitas tugas dari tim bulan ini.</td></tr>}
+                          </tbody>
+                        </table>
+
+                        {/* --- TOMBOL OVERLAY TAMPILKAN SELURUH (BLUR EFFECT) --- */}
+                        {!showAllKpi && staffKpiData.length > 10 && (
+                           <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-white via-white/80 to-transparent flex items-end justify-center pb-6 z-10 pointer-events-none">
+                              <button 
+                                onClick={() => setShowAllKpi(true)} 
+                                className="pointer-events-auto bg-white/90 backdrop-blur-md border border-indigo-200 text-indigo-700 font-black px-6 py-2.5 rounded-full shadow-[0_8px_30px_rgba(79,70,229,0.15)] hover:bg-indigo-50 hover:text-indigo-800 hover:scale-105 active:scale-95 transition-all text-xs flex items-center gap-2"
+                              >
+                                 <ChevronDown className="w-4 h-4"/> Tampilkan Seluruh Peringkat ({staffKpiData.length} Karyawan)
+                              </button>
+                           </div>
+                        )}
+
+                      </div>
+
+                      {/* --- TOMBOL TUTUP/COLLAPSE JIKA SEDANG EXTEND --- */}
+                      {showAllKpi && staffKpiData.length > 10 && (
+                         <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
+                            <button 
+                              onClick={() => setShowAllKpi(false)} 
+                              className="bg-white border border-slate-300 text-slate-600 font-black px-6 py-2 rounded-full shadow-sm hover:bg-slate-100 transition-all text-xs flex items-center gap-2"
+                            >
+                               <ChevronDown className="w-4 h-4 rotate-180"/> Sembunyikan Peringkat
+                            </button>
+                         </div>
+                      )}
+                   </div>
+                 );
+              })()}
+
               <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full">
                 <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-black text-base md:text-lg text-slate-800">Semua Aktivitas</h3>
@@ -2786,6 +2946,7 @@ export default function TaskManagement() {
                       <select value={reportTargetUserId} onChange={(e) => setReportTargetUserId(e.target.value)} className="w-full px-3 py-2 md:px-4 md:py-3 border border-slate-300 flex items-center rounded-xl font-bold text-sm md:text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm">
                          <option value="ALL">-- CETAK LAPORAN SEMUA KARYAWAN --</option>
                          {users.filter(u => {
+                            if (u.isResign) return false; // Sembunyikan dari pilihan Laporan
                             if (u.role === 'admin' || u.role === 'direksi') return false; // Abaikan level atas
                             if (['admin', 'direksi', 'manager'].includes(currentUser.role) || currentUser.tm_access_all_tasks || currentUser.tm_print_reports) return true;
                             return u.division === currentUser.division;
@@ -2846,7 +3007,7 @@ export default function TaskManagement() {
 
                 let individualKpis = [];
                 if (isGlobalMode) {
-                   individualKpis = users.filter(u => u.role === 'staff' || u.role === 'manager').map(user => {
+                   individualKpis = users.filter(u => !u.isResign && (u.role === 'staff' || u.role === 'manager')).map(user => {
                       let uTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(user.id));
                       if (reportFilterMonth) uTasks = uTasks.filter(t => t.dueDate && t.dueDate.startsWith(reportFilterMonth));
                       
@@ -3031,64 +3192,132 @@ export default function TaskManagement() {
             </div>
           )}
 
-          {/* TAB: TIM DIVISI */}
-          {activeTab === 'division' && (currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 print:hidden animate-in fade-in duration-300 md:p-10">
-              {users.filter(u => {
-                 // 1. Hanya tampilkan staff dan manager
+          {/* TAB: TIM DIVISI (GROUPED VIEW & PROFESSIONAL CARDS) */}
+          {activeTab === 'division' && (currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (() => {
+              // 1. Saring Karyawan yang boleh dilihat
+              const filteredStaff = users.filter(u => {
+                 if (u.isResign) return false; // Sembunyikan kartu karyawan resign dari layar pantau
                  if (!(u.role === 'staff' || u.role === 'manager')) return false;
-
-                 // 2. Jika Admin memfilter 1 divisi spesifik dari Sidebar
-                 if (selectedDivision !== 'Semua Divisi') {
-                    return u.division === selectedDivision;
-                 }
-
-                 // 3. Jika memilih "Semua Pantauan Tim"
+                 if (selectedDivision !== 'Semua Divisi') return u.division === selectedDivision;
                  if (currentUser.role === 'admin' || currentUser.tm_access_all_tasks) return true;
 
-                 // Fungsi pembantu untuk mencari nama Departemen
-                 const getDepartment = (divName) => {
-                    const div = divisions.find(d => d.name === divName);
-                    return div ? div.department_name : divName;
-                 };
+                 const getDept = (divName) => { const d = divisions.find(x => x.name === divName); return d ? d.department_name : divName; };
+                 const uDept = getDept(u.division);
+                 const myDept = getDept(currentUser.division);
 
-                 const uDept = getDepartment(u.division);
-                 const myDept = getDepartment(currentUser.division);
+                 if (currentUser.role === 'staff') return u.division === currentUser.division;
+                 const allowedCustom = currentUser.accessible_divisions || [];
+                 return (uDept === myDept || u.division === currentUser.division || allowedCustom.includes(uDept) || allowedCustom.includes(u.division));
+              });
 
-                 // 4. Aturan Hak Akses Pantauan Divisi
-                 if (currentUser.role === 'staff') {
-                    // Staff HANYA bisa memantau rekan di divisinya sendiri secara spesifik
-                    if (u.division === currentUser.division) return true;
-                 } else {
-                    // Manager/Direksi bisa memantau seluruh departemennya
-                    if (uDept === myDept || u.division === currentUser.division) return true;
-                    // Dan juga memantau hak akses silang khusus dari Admin
-                    const allowedCustom = currentUser.accessible_divisions || [];
-                    if (allowedCustom.includes(uDept) || allowedCustom.includes(u.division)) return true;
-                 }
+              // 2. Kelompokkan berdasarkan Departemen -> Divisi
+              const groupedData = {};
+              filteredStaff.forEach(staff => {
+                  const dept = getDepartment(staff.division) || 'Tanpa Departemen';
+                  const div = staff.division || 'Tanpa Divisi';
+                  if (!groupedData[dept]) groupedData[dept] = {};
+                  if (!groupedData[dept][div]) groupedData[dept][div] = [];
+                  groupedData[dept][div].push(staff);
+              });
 
-                 return false;
-              }).map(staff => {
-                  const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
-                  return (
-                    <Card key={staff.id} className="p-0 flex flex-col items-center text-center hover:-translate-y-1 transition-transform border border-slate-200 shadow-sm relative overflow-hidden bg-white">
-                      <div className="absolute top-0 w-full h-1.5 md:h-2 bg-gradient-to-r from-blue-500 to-blue-800"></div>
-                      <div className="p-5 md:p-6 w-full flex flex-col items-center">
-                        <div className="w-14 h-14 md:w-20 md:h-20 bg-slate-50 text-slate-700 font-black text-xl md:text-2xl rounded-2xl flex items-center justify-center mb-3 shadow-sm border border-slate-100">{staff.avatar}</div>
-                        <h3 className="font-black text-base md:text-lg text-slate-800 tracking-tight line-clamp-1">{staff.name}</h3>
-                        <p className="text-[10px] md:text-xs text-slate-500 font-bold mb-3">{staff.position}</p>
-                        <Badge type="low">Divisi {staff.division}</Badge>
-                      </div>
-                      <div className="w-full grid grid-cols-3 gap-0.5 mt-auto bg-slate-50 border-t border-slate-100 p-1">
-                          <div className="flex flex-col items-center py-2"><span className="text-lg md:text-xl font-black text-slate-600">{staffTasks.filter(t=>t.status==='pending').length}</span><span className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Pending</span></div>
-                          <div className="flex flex-col items-center py-2 border-l border-r border-slate-200 bg-blue-50/50"><span className="text-lg md:text-xl font-black text-blue-600">{staffTasks.filter(t=>t.status==='in-progress').length}</span><span className="text-[8px] md:text-[9px] font-black text-blue-400 uppercase tracking-widest mt-0.5">Progress</span></div>
-                          <div className="flex flex-col items-center py-2"><span className="text-lg md:text-xl font-black text-emerald-600">{staffTasks.filter(t=>t.status==='done').length}</span><span className="text-[8px] md:text-[9px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">Selesai</span></div>
-                      </div>
-                    </Card>
-                  )
-              })}
-            </div>
-          )}
+              if (Object.keys(groupedData).length === 0) {
+                 return <div className="p-10 text-center text-slate-400 font-bold bg-white rounded-2xl border border-slate-200 m-6">Tidak ada karyawan yang ditemukan di area pantauan Anda.</div>;
+              }
+
+              return (
+                <div className="print:hidden animate-in fade-in duration-300 md:p-8">
+                  {Object.keys(groupedData).sort().map(dept => (
+                    <div key={dept} className="mb-12 bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200">
+                       <h2 className="text-lg md:text-xl font-black text-slate-800 mb-6 pb-3 border-b-[3px] border-slate-100 flex items-center gap-3 uppercase tracking-tight">
+                          <div className="bg-blue-100 text-blue-600 p-2 rounded-xl"><Building size={20}/></div>
+                          DEPARTEMEN {dept}
+                       </h2>
+                       
+                       <div className="space-y-8">
+                          {Object.keys(groupedData[dept]).sort().map(div => (
+                             <div key={div}>
+                                <h3 className="text-xs md:text-sm font-black text-slate-500 mb-4 ml-2 border-l-4 border-amber-500 pl-3 uppercase tracking-widest flex items-center gap-2">
+                                  <Users size={14}/> DIVISI {div}
+                                </h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
+                                  {groupedData[dept][div].map(staff => {
+                                      const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
+                                      const currentMonthStr = new Date().toISOString().substring(0, 7);
+                                      const thisMonthTasks = staffTasks.filter(t => t.dueDate && t.dueDate.startsWith(currentMonthStr));
+                                      
+                                      let uOnTime = 0, uLate = 0, uOverdue = 0;
+                                      const now = getNowStr();
+                                      thisMonthTasks.forEach(t => {
+                                          if (t.status === 'done') {
+                                              if (t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
+                                          } else if (t.status === 'laporan-cleaning') {
+                                              uOnTime++;
+                                          } else if (t.status === 'pending' || t.status === 'in-progress') {
+                                              if (t.dueDate < now) uOverdue++;
+                                          }
+                                      });
+                                      
+                                      const totalPoin = (uOnTime * 10) + (uLate * 5) - (uOverdue * 5);
+                                      const totalMaxPoin = (uOnTime + uLate + uOverdue) * 10 || 1;
+                                      let persentaseKualitas = Math.round((totalPoin / totalMaxPoin) * 100);
+                                      if (persentaseKualitas < 0) persentaseKualitas = 0;
+                                      if (thisMonthTasks.length === 0) persentaseKualitas = 0;
+
+                                      return (
+                                        <Card key={staff.id} className="p-0 flex flex-col hover:shadow-xl hover:-translate-y-1 transition-all border border-slate-200 overflow-hidden bg-white group">
+                                          {/* TOP HEADER: BADGES */}
+                                          <div className={`p-4 border-b border-slate-100 flex justify-between items-center transition-colors ${thisMonthTasks.length === 0 ? 'bg-slate-50' : persentaseKualitas >= 80 ? 'bg-emerald-50/50' : persentaseKualitas >= 50 ? 'bg-amber-50/50' : 'bg-red-50/50'}`}>
+                                             <div className="flex flex-col">
+                                               <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Skor Akurasi</span>
+                                               <span className={`font-black text-lg md:text-xl leading-none ${thisMonthTasks.length === 0 ? 'text-slate-400' : persentaseKualitas >= 80 ? 'text-emerald-600' : persentaseKualitas >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                 {thisMonthTasks.length === 0 ? 'N/A' : `${persentaseKualitas}%`}
+                                               </span>
+                                             </div>
+                                             <div className="flex flex-col items-end">
+                                               <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Total Poin</span>
+                                               <span className="font-black text-lg md:text-xl leading-none text-indigo-600">{totalPoin}</span>
+                                             </div>
+                                          </div>
+
+                                          {/* MIDDLE: PROFILE */}
+                                          <div className="p-5 flex items-center gap-4 bg-white">
+                                            <div className="w-14 h-14 bg-gradient-to-br from-slate-800 to-slate-700 text-white font-black text-xl rounded-full flex items-center justify-center shadow-md shrink-0 border-[3px] border-white ring-2 ring-slate-100 group-hover:scale-105 transition-transform">
+                                               {staff.avatar}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                               <h3 className="font-black text-sm md:text-base text-slate-900 truncate tracking-tight">{staff.name}</h3>
+                                               <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest truncate mt-0.5">{staff.position}</p>
+                                            </div>
+                                          </div>
+
+                                          {/* BOTTOM: TASK STATS */}
+                                          <div className="grid grid-cols-3 bg-slate-50 border-t border-slate-100 divide-x divide-slate-100 mt-auto">
+                                             <div className="py-3 flex flex-col items-center justify-center">
+                                               <span className="text-sm font-black text-slate-600">{staffTasks.filter(t=>t.status==='pending').length}</span>
+                                               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Pending</span>
+                                             </div>
+                                             <div className="py-3 flex flex-col items-center justify-center bg-blue-50/30">
+                                               <span className="text-sm font-black text-blue-600">{staffTasks.filter(t=>t.status==='in-progress').length}</span>
+                                               <span className="text-[8px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">Progress</span>
+                                             </div>
+                                             <div className="py-3 flex flex-col items-center justify-center">
+                                               <span className="text-sm font-black text-emerald-600">{staffTasks.filter(t=>t.status==='done').length}</span>
+                                               <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest mt-0.5">Selesai</span>
+                                             </div>
+                                          </div>
+                                        </Card>
+                                      )
+                                  })}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                  ))}
+                </div>
+              );
+          })()}
 
           {/* TAB: PENGATURAN & PENGGUNA (UNIFIED VIEW) */}
           {activeTab === 'admin_settings' && (currentUser.role === 'admin' || currentUser.tm_manage_system) && (
@@ -3133,7 +3362,7 @@ export default function TaskManagement() {
                             <p className="text-[10px] text-slate-500 mb-2 font-medium flex items-center gap-2"><GripVertical size={14}/> <i>Tarik dan lepas (Drag & Drop) kartu karyawan ke kolom departemen lain untuk memutasi mereka secara instan.</i></p>
                             
                             {departments.map(dept => {
-                               const deptUsers = users.filter(u => getDepartment(u.division) === dept && (!userSearchQuery || (u.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.nik || '').toLowerCase().includes(userSearchQuery.toLowerCase())));
+                               const deptUsers = users.filter(u => !u.isResign && getDepartment(u.division) === dept && (!userSearchQuery || (u.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || (u.nik || '').toLowerCase().includes(userSearchQuery.toLowerCase())));
                                const isExpanded = expandedUserDepts[dept] === true; // Defaultnya tertutup (collapse)
                                const isAllSelected = deptUsers.length > 0 && deptUsers.every(u => selectedUsers.includes(u.id));
                                
@@ -3787,6 +4016,7 @@ export default function TaskManagement() {
                               </div>
                               <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-white rounded-xl p-2 space-y-1 bg-white shadow-inner custom-scrollbar">
                                 {users.filter(u => {
+                                   if (u.isResign) return false; // Karyawan Resign hilang dari pilihan delegasi
                                    let hasAccess = false;
                                    if (currentUser?.role === 'direksi' || currentUser?.role === 'admin' || currentUser?.tm_access_all_tasks) hasAccess = (u.role === 'manager' || u.role === 'staff');
                                    else if (currentUser?.role === 'manager' || currentUser?.tm_monitor_division) hasAccess = (u.role === 'staff' || u.role === 'manager'); 
