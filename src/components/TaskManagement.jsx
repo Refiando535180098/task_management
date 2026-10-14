@@ -1020,12 +1020,16 @@ export default function TaskManagement() {
   const [editDescText, setEditDescText] = useState('');
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editMsgText, setEditMsgText] = useState('');
+  const [isExtending, setIsExtending] = useState(false);
+  const [extendForm, setExtendForm] = useState({ date: '', reason: '' });
 
   // Reset state saat modal dibuka/tutup
   useEffect(() => {
     setIsChatOpen(false);
     setIsEditingDesc(false);
     setEditingMsgId(null);
+    setIsExtending(false);
+    setExtendForm({ date: '', reason: '' });
   }, [selectedTask?.id]);
 
   // FUNGSI UPDATE KETERANGAN TUGAS
@@ -1040,6 +1044,59 @@ export default function TaskManagement() {
         setIsEditingDesc(false);
       }
     } catch (err) { alert("Gagal update keterangan."); }
+  };
+
+  // FUNGSI PENGAJUAN PERPANJANGAN WAKTU (DEADLINE)
+  const handleExtendDeadline = async (e) => {
+    e.preventDefault();
+    if (!extendForm.date || !extendForm.reason.trim()) return alert('Pilih tanggal baru dan isi alasan perpanjangan!');
+
+    const newDueDate = getLocalTimeWithOffset(new Date(extendForm.date));
+    const reasonText = extendForm.reason.trim();
+    
+    try {
+       const { error } = await supabase.from('initial_tasks').update({ dueDate: newDueDate }).eq('id', selectedTask.id);
+       if (!error) {
+          // Buat Log Sistem di Komentar (Chat) agar semua orang tahu
+          const logMsg = {
+            id: Date.now(),
+            userId: currentUser?.id,
+            text: `🕒 [PENGAJUAN PERPANJANGAN WAKTU]\nDeadline tugas diubah menjadi: ${formatDateTime(newDueDate)}\nAlasan Pengajuan: "${reasonText}"`,
+            timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            isSystem: true
+          };
+
+          const currentComments = Array.isArray(selectedTask.comments) ? selectedTask.comments : [];
+          const updatedCommentsArray = [...currentComments, logMsg];
+          
+          await supabase.from('initial_tasks').update({ comments: updatedCommentsArray }).eq('id', selectedTask.id);
+          
+          // Update State Lokal
+          const updatedTask = { ...selectedTask, dueDate: newDueDate, comments: updatedCommentsArray };
+          setSelectedTask(updatedTask);
+          setTasks(tasks.map(t => t.id === selectedTask.id ? updatedTask : t));
+          
+          setIsExtending(false);
+          setExtendForm({ date: '', reason: '' });
+          alert('Berhasil! Tenggat waktu telah diperpanjang dan riwayatnya telah dicatat di kolom Chat.');
+
+          // Broadcast Notif ke pembuat tugas (jika yang mengubah bukan yang buat)
+          if (String(selectedTask.assignedBy) !== String(currentUser.id)) {
+             await supabase.from('notifications').insert([{
+                userId: selectedTask.assignedBy,
+                type: 'system',
+                message: `🕒 ${currentUser.name} memperpanjang deadline tugas "${selectedTask.title}".`,
+                read_status: false,
+                time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                taskId: selectedTask.id
+             }]);
+          }
+       } else {
+         alert("Gagal memperpanjang deadline: " + error.message);
+       }
+    } catch (err) {
+       alert("Gagal terhubung ke database server.");
+    }
   };
 
   // FUNGSI HAPUS PESAN
@@ -3764,9 +3821,56 @@ export default function TaskManagement() {
                                     </div>
                                   )}
           
-                                <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm">
-                                  <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Detail Pekerjaan:</span>
-                                  {selectedTask.description || 'Tidak ada deskripsi tambahan.'}
+                                {/* --- TOMBOL & FORM PERPANJANG WAKTU --- */}
+                                {selectedTask.status !== 'done' && selectedTask.status !== 'laporan-cleaning' && (
+                                  <div className="mb-6">
+                                    {!isExtending ? (
+                                      <button onClick={() => setIsExtending(true)} className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 hover:bg-orange-100 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm w-fit">
+                                        <Clock className="w-4 h-4"/> Ajukan Perpanjangan Waktu (Extend Deadline)
+                                      </button>
+                                    ) : (
+                                      <form onSubmit={handleExtendDeadline} className="bg-orange-50 border border-orange-200 p-4 rounded-2xl shadow-sm animate-in zoom-in-95 duration-200">
+                                        <h4 className="font-black text-orange-800 text-xs mb-3 flex items-center gap-1.5"><Clock className="w-4 h-4"/> Form Pengajuan Perpanjangan Deadline</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                          <div>
+                                            <label className="block text-[9px] font-black text-orange-700 uppercase tracking-widest mb-1.5">Pilih Tenggat Waktu Baru</label>
+                                            <input required type="datetime-local" value={extendForm.date} onChange={e => setExtendForm({...extendForm, date: e.target.value})} className="w-full px-3 py-2 border border-orange-200 rounded-xl text-xs font-bold focus:outline-none focus:border-orange-500 bg-white" />
+                                          </div>
+                                          <div>
+                                            <label className="block text-[9px] font-black text-orange-700 uppercase tracking-widest mb-1.5">Alasan Keterlambatan</label>
+                                            <input required type="text" placeholder="Kenapa butuh tambahan waktu?" value={extendForm.reason} onChange={e => setExtendForm({...extendForm, reason: e.target.value})} className="w-full px-3 py-2 border border-orange-200 rounded-xl text-xs font-bold focus:outline-none focus:border-orange-500 bg-white" />
+                                          </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2 pt-2 border-t border-orange-200/50 mt-2">
+                                          <button type="button" onClick={() => setIsExtending(false)} className="px-4 py-2 bg-white text-orange-600 border border-orange-200 rounded-xl text-[10px] font-bold hover:bg-orange-100 transition-colors">Batal</button>
+                                          <button type="submit" className="px-4 py-2 bg-orange-600 text-white rounded-xl text-[10px] font-black hover:bg-orange-700 shadow-sm transition-colors">Simpan & Ajukan</button>
+                                        </div>
+                                      </form>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="text-slate-700 bg-white p-4 md:p-6 rounded-2xl border border-slate-200 font-medium text-xs md:text-sm leading-relaxed shadow-sm relative group">
+                                  <div className="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
+                                    <span className="block text-[10px] font-black text-blue-500 uppercase tracking-widest">Detail Pekerjaan:</span>
+                                    {!isEditingDesc && (
+                                      <button onClick={() => { setIsEditingDesc(true); setEditDescText(selectedTask.description || ''); }} className="text-[9px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                                        <Edit size={12}/> Edit Keterangan
+                                      </button>
+                                    )}
+                                  </div>
+                                  
+                                  {isEditingDesc ? (
+                                    <div className="animate-in fade-in zoom-in-95 duration-200">
+                                       <textarea rows="4" className="w-full border-2 border-blue-200 rounded-xl p-3 focus:outline-none focus:border-blue-500 text-sm mb-3 bg-slate-50 focus:bg-white transition-colors" value={editDescText} onChange={e => setEditDescText(e.target.value)} />
+                                       <div className="flex gap-2 justify-end">
+                                         <button onClick={() => setIsEditingDesc(false)} className="text-[10px] font-bold text-slate-500 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">Batal</button>
+                                         <button onClick={handleSaveDescription} className="text-[10px] font-black text-white px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors">Simpan Perubahan</button>
+                                       </div>
+                                    </div>
+                                  ) : (
+                                    <div className="whitespace-pre-wrap">{selectedTask.description || 'Tidak ada deskripsi tambahan.'}</div>
+                                  )}
                                 </div>
                               </div>
           
@@ -3880,6 +3984,22 @@ export default function TaskManagement() {
                               {(Array.isArray(selectedTask?.comments) ? selectedTask.comments : []).map((chat, idx) => {
                                 const isMe = String(chat?.userId) === String(currentUser?.id);
                                 const isEditingThis = editingMsgId === chat.id;
+
+                                // Jika ini adalah log otomatis dari sistem (seperti perpanjangan waktu)
+                                if (chat.isSystem) {
+                                  return (
+                                     <div key={chat.id || idx} className="flex justify-center my-4 w-full">
+                                        <div className="bg-orange-50 border border-orange-200/60 text-orange-900 text-[10px] md:text-[11px] font-medium p-3 rounded-2xl shadow-sm max-w-[90%] md:max-w-[75%] relative overflow-hidden">
+                                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-400"></div>
+                                          <div className="flex flex-col gap-1 ml-1">
+                                            <span className="font-black flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-orange-500"/> LOG SISTEM • {chat.timestamp}</span>
+                                            <span className="whitespace-pre-wrap mt-0.5 leading-relaxed">{chat.text}</span>
+                                            <span className="text-[8px] font-black text-orange-400/80 uppercase tracking-widest mt-1">Dieksekusi oleh: {getUserName(chat.userId)}</span>
+                                          </div>
+                                        </div>
+                                     </div>
+                                  );
+                                }
           
                                 return (
                                   <div key={chat.id || idx} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
