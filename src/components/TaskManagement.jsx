@@ -154,6 +154,7 @@ export default function TaskManagement() {
   const [showKpiInfoModal, setShowKpiInfoModal] = useState(false); // <-- State Modal Info KPI
   const [showAllKpi, setShowAllKpi] = useState(false); // <-- State Papan Peringkat Extend
   const [sidebarDeptsOpen, setSidebarDeptsOpen] = useState({}); // <-- State untuk Tree Menu Departemen
+  const [kpiFilterMonth, setKpiFilterMonth] = useState(''); // <-- State Filter Periode Bulan KPI
   
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
@@ -2253,16 +2254,17 @@ export default function TaskManagement() {
                       highPriorityTasksList.push(t);
                    }
 
+                   const hasDue = !!t.dueDate;
                    if (t.status === 'done') {
-                      if (t.completed_at && t.completed_at > t.dueDate) doneLateExec++;
+                      if (hasDue && t.completed_at && t.completed_at > t.dueDate) doneLateExec++;
                       else doneOnTimeExec++;
                    } else if (t.status === 'laporan-cleaning') {
                       doneOnTimeExec++; // Laporan OB dihitung tepat waktu
                    } else if (t.status === 'pending') {
-                      if (t.dueDate < nowStrExec) overdueExec++;
+                      if (hasDue && t.dueDate < nowStrExec) overdueExec++;
                       else pendingExec++;
                    } else {
-                      if (t.dueDate < nowStrExec) overdueExec++;
+                      if (hasDue && t.dueDate < nowStrExec) overdueExec++;
                       else progressExec++;
                    }
                 });
@@ -2551,9 +2553,8 @@ export default function TaskManagement() {
 
               {/* === TABEL LEADERBOARD KPI KARYAWAN (RUMUS KEADILAN) === */}
               {(currentUser.role === 'admin' || currentUser.role === 'direksi' || currentUser.role === 'manager' || currentUser.tm_monitor_division) && (() => {
-                 const currentMonthStr = new Date().toISOString().substring(0, 7); // Format: YYYY-MM
                  const staffKpiData = users.filter(u => {
-                    if (u.isResign) return false; // Hilangkan orang resign dari Leaderboard
+                    if (u.isResign) return false; 
                     if (u.role === 'admin' || u.role === 'direksi') return false; 
                     if (['admin', 'direksi'].includes(currentUser.role) || currentUser.tm_access_all_tasks) return true;
                     
@@ -2564,41 +2565,54 @@ export default function TaskManagement() {
                     
                     return (uDept === myDept || u.division === currentUser.division || allowedCustom.includes(uDept) || allowedCustom.includes(u.division));
                  }).map(u => {
-                    const uTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(u.id) && t.dueDate && t.dueDate.startsWith(currentMonthStr));
+                    // Filter berdasarkan bulan jika dipilih, jika kosong ambil semua tugas dari awal
+                    const uTasks = tasks.filter(t => {
+                       if (!getAssigneesArray(t.assignedTo).includes(u.id)) return false;
+                       if (kpiFilterMonth && (!t.dueDate || !t.dueDate.startsWith(kpiFilterMonth))) return false;
+                       return true;
+                    });
+                    
                     let uPending = 0, uProgress = 0, uOnTime = 0, uLate = 0, uOverdue = 0;
                     const now = getNowStr();
                     
                     uTasks.forEach(t => {
+                        const hasDue = !!t.dueDate;
                         if (t.status === 'done') {
-                            if (t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
+                            if (hasDue && t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
                         } else if (t.status === 'laporan-cleaning') {
                             uOnTime++;
                         } else if (t.status === 'pending') {
-                            if (t.dueDate < now) uOverdue++; else uPending++;
+                            if (hasDue && t.dueDate < now) uOverdue++; else uPending++;
                         } else {
-                            if (t.dueDate < now) uOverdue++; else uProgress++;
+                            if (hasDue && t.dueDate < now) uOverdue++; else uProgress++;
                         }
                     });
                     
                     const totalTugas = uTasks.length;
                     
                     // RUMUS KEADILAN: Menilai Kuantitas (Poin) & Kualitas (%)
-                    // +10 Poin Tepat Waktu, +5 Poin Telat Selesai, -5 Poin Overdue
                     const totalPoin = (uOnTime * 10) + (uLate * 5) - (uOverdue * 5);
-                    const totalMaxPoin = (uOnTime + uLate + uOverdue) * 10 || 1; // Cegah error bagi 0
+                    const totalMaxPoin = (uOnTime + uLate + uOverdue) * 10 || 1; 
                     let persentaseKualitas = Math.round((totalPoin / totalMaxPoin) * 100);
                     if (persentaseKualitas < 0) persentaseKualitas = 0;
                     if (totalTugas === 0) persentaseKualitas = 0;
 
                     return { ...u, uPending, uProgress, uOnTime, uLate, uOverdue, totalTugas, totalPoin, persentaseKualitas };
-                 }).sort((a, b) => b.totalPoin - a.totalPoin); // Sortir otomatis dari Poin tertinggi (Ranking)
+                 }).sort((a, b) => b.totalPoin - a.totalPoin); 
 
                  return (
                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden w-full mb-8 relative">
-                      <div className="p-5 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <div className="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50">
                         <div>
-                           <h3 className="font-black text-sm md:text-base text-slate-800 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600"/> Papan Peringkat KPI (Bulan Ini)</h3>
+                           <h3 className="font-black text-sm md:text-base text-slate-800 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-600"/> Papan Peringkat KPI ({kpiFilterMonth ? `Periode ${kpiFilterMonth}` : 'Semua Waktu'})</h3>
                            <p className="text-[10px] text-slate-500 font-bold mt-1 tracking-wide">Poin Produktivitas Adil: Tepat Wkt <span className="text-emerald-600">(+10)</span>, Telat <span className="text-amber-500">(+5)</span>, Overdue <span className="text-red-500">(-5)</span></p>
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-center gap-2 shrink-0">
+                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter Periode:</span>
+                           <div className="flex items-center gap-2">
+                              <input type="month" value={kpiFilterMonth} onChange={(e) => setKpiFilterMonth(e.target.value)} className="px-3 py-2 md:py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:border-indigo-500 shadow-sm" />
+                              {kpiFilterMonth && <button onClick={() => setKpiFilterMonth('')} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-2 md:py-1.5 rounded-lg transition-colors border border-red-200 bg-white">Reset</button>}
+                           </div>
                         </div>
                       </div>
                       
@@ -3045,8 +3059,9 @@ export default function TaskManagement() {
                 let tDoneLate = 0;
 
                 targetTasks.forEach(t => {
+                  const hasDue = !!t.dueDate;
                   if (t.status === 'done') {
-                    if (t.completed_at && t.completed_at > t.dueDate) {
+                    if (hasDue && t.completed_at && t.completed_at > t.dueDate) {
                       tDoneLate++;
                       totalKpiScore += 0.5; 
                     } else {
@@ -3072,8 +3087,9 @@ export default function TaskManagement() {
                       let utScore = 0; let utOnTime = 0; let utLate = 0;
                       
                       uTasks.forEach(t => {
+                         const hasDue = !!t.dueDate;
                          if (t.status === 'done') {
-                            if (t.completed_at && t.completed_at > t.dueDate) { utLate++; utScore += 0.5; }
+                            if (hasDue && t.completed_at && t.completed_at > t.dueDate) { utLate++; utScore += 0.5; }
                             else { utOnTime++; utScore += 1; }
                          } else if (t.status === 'laporan-cleaning') {
                             utOnTime++; utScore += 1;
@@ -3283,6 +3299,21 @@ export default function TaskManagement() {
 
               return (
                 <div className="print:hidden animate-in fade-in duration-300 md:p-8">
+                  {/* --- FILTER PERIODE KPI UNTUK PANTAU DIVISI --- */}
+                  <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-[2rem] shadow-sm border border-slate-200">
+                     <div className="flex items-center gap-3">
+                        <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl"><Filter size={18}/></div>
+                        <div>
+                          <h3 className="font-black text-sm text-slate-800 tracking-tight">Filter Periode KPI Karyawan</h3>
+                          <p className="text-[10px] text-slate-500 font-bold mt-0.5 uppercase tracking-widest">{kpiFilterMonth ? `Data ditampilkan: ${kpiFilterMonth}` : 'Menampilkan Semua Waktu (All-Time)'}</p>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-2 w-full md:w-auto">
+                        <input type="month" value={kpiFilterMonth} onChange={(e) => setKpiFilterMonth(e.target.value)} className="w-full md:w-auto px-4 py-2 border border-slate-300 rounded-xl text-xs md:text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 shadow-sm" />
+                        {kpiFilterMonth && <button onClick={() => setKpiFilterMonth('')} className="px-4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 border border-red-200 bg-white rounded-xl transition-colors shadow-sm">Reset</button>}
+                     </div>
+                  </div>
+
                   {Object.keys(groupedData).sort().map(dept => (
                     <div key={dept} className="mb-12 bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200">
                        <h2 className="text-lg md:text-xl font-black text-slate-800 mb-6 pb-3 border-b-[3px] border-slate-100 flex items-center gap-3 uppercase tracking-tight">
@@ -3299,19 +3330,33 @@ export default function TaskManagement() {
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
                                   {groupedData[dept][div].map(staff => {
-                                      const staffTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(staff.id));
-                                      const currentMonthStr = new Date().toISOString().substring(0, 7);
-                                      const thisMonthTasks = staffTasks.filter(t => t.dueDate && t.dueDate.startsWith(currentMonthStr));
+                                      // Gunakan filter periode jika ada, jika tidak tampilkan Semua Waktu
+                                      const filteredTasks = tasks.filter(t => {
+                                          if (!getAssigneesArray(t.assignedTo).includes(staff.id)) return false;
+                                          if (kpiFilterMonth && (!t.dueDate || !t.dueDate.startsWith(kpiFilterMonth))) return false;
+                                          return true;
+                                      });
                                       
                                       let uOnTime = 0, uLate = 0, uOverdue = 0;
+                                      let uPendingCount = 0, uProgressCount = 0, uDoneCount = 0; // Untuk Card Bottom Stats
                                       const now = getNowStr();
-                                      thisMonthTasks.forEach(t => {
+                                      
+                                      filteredTasks.forEach(t => {
+                                          const hasDue = !!t.dueDate;
                                           if (t.status === 'done') {
-                                              if (t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
+                                              uDoneCount++;
+                                              if (hasDue && t.completed_at && t.completed_at > t.dueDate) uLate++; else uOnTime++;
                                           } else if (t.status === 'laporan-cleaning') {
+                                              uDoneCount++;
                                               uOnTime++;
-                                          } else if (t.status === 'pending' || t.status === 'in-progress') {
-                                              if (t.dueDate < now) uOverdue++;
+                                          } else if (t.status === 'pending') {
+                                              uPendingCount++;
+                                              if (hasDue && t.dueDate < now) uOverdue++;
+                                          } else if (t.status === 'in-progress') {
+                                              uProgressCount++;
+                                              if (hasDue && t.dueDate < now) uOverdue++;
+                                          } else {
+                                              if (hasDue && t.dueDate < now) uOverdue++;
                                           }
                                       });
                                       
@@ -3319,16 +3364,16 @@ export default function TaskManagement() {
                                       const totalMaxPoin = (uOnTime + uLate + uOverdue) * 10 || 1;
                                       let persentaseKualitas = Math.round((totalPoin / totalMaxPoin) * 100);
                                       if (persentaseKualitas < 0) persentaseKualitas = 0;
-                                      if (thisMonthTasks.length === 0) persentaseKualitas = 0;
+                                      if (filteredTasks.length === 0) persentaseKualitas = 0;
 
                                       return (
                                         <Card key={staff.id} className="p-0 flex flex-col hover:shadow-xl hover:-translate-y-1 transition-all border border-slate-200 overflow-hidden bg-white group">
                                           {/* TOP HEADER: BADGES */}
-                                          <div className={`p-4 border-b border-slate-100 flex justify-between items-center transition-colors ${thisMonthTasks.length === 0 ? 'bg-slate-50' : persentaseKualitas >= 80 ? 'bg-emerald-50/50' : persentaseKualitas >= 50 ? 'bg-amber-50/50' : 'bg-red-50/50'}`}>
+                                          <div className={`p-4 border-b border-slate-100 flex justify-between items-center transition-colors ${filteredTasks.length === 0 ? 'bg-slate-50' : persentaseKualitas >= 80 ? 'bg-emerald-50/50' : persentaseKualitas >= 50 ? 'bg-amber-50/50' : 'bg-red-50/50'}`}>
                                              <div className="flex flex-col">
                                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Skor Akurasi</span>
-                                               <span className={`font-black text-lg md:text-xl leading-none ${thisMonthTasks.length === 0 ? 'text-slate-400' : persentaseKualitas >= 80 ? 'text-emerald-600' : persentaseKualitas >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                 {thisMonthTasks.length === 0 ? 'N/A' : `${persentaseKualitas}%`}
+                                               <span className={`font-black text-lg md:text-xl leading-none ${filteredTasks.length === 0 ? 'text-slate-400' : persentaseKualitas >= 80 ? 'text-emerald-600' : persentaseKualitas >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                 {filteredTasks.length === 0 ? 'N/A' : `${persentaseKualitas}%`}
                                                </span>
                                              </div>
                                              <div className="flex flex-col items-end">
@@ -3351,15 +3396,15 @@ export default function TaskManagement() {
                                           {/* BOTTOM: TASK STATS */}
                                           <div className="grid grid-cols-3 bg-slate-50 border-t border-slate-100 divide-x divide-slate-100 mt-auto">
                                              <div className="py-3 flex flex-col items-center justify-center">
-                                               <span className="text-sm font-black text-slate-600">{staffTasks.filter(t=>t.status==='pending').length}</span>
+                                               <span className="text-sm font-black text-slate-600">{uPendingCount}</span>
                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Pending</span>
                                              </div>
                                              <div className="py-3 flex flex-col items-center justify-center bg-blue-50/30">
-                                               <span className="text-sm font-black text-blue-600">{staffTasks.filter(t=>t.status==='in-progress').length}</span>
+                                               <span className="text-sm font-black text-blue-600">{uProgressCount}</span>
                                                <span className="text-[8px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">Progress</span>
                                              </div>
                                              <div className="py-3 flex flex-col items-center justify-center">
-                                               <span className="text-sm font-black text-emerald-600">{staffTasks.filter(t=>t.status==='done').length}</span>
+                                               <span className="text-sm font-black text-emerald-600">{uDoneCount}</span>
                                                <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest mt-0.5">Selesai</span>
                                              </div>
                                           </div>
