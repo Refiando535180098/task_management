@@ -3,13 +3,15 @@ import { QRCodeCanvas } from 'qrcode.react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
-import { Search, Download, RefreshCw, QrCode, ArrowLeft, LogOut, X, User, MapPin, Briefcase, FileText, CheckCircle2, Archive, RotateCcw, Save, UserPlus, Edit, DownloadCloud, Trash2, Building2, Map, CheckSquare, Layers, Menu, ChevronDown, ChevronRight, Settings, PlusCircle, Upload, Info } from 'lucide-react';
+import { Search, Download, RefreshCw, QrCode, ArrowLeft, LogOut, X, User, MapPin, Briefcase, FileText, CheckCircle2, Archive, RotateCcw, Save, UserPlus, Edit, DownloadCloud, Trash2, Building2, Map, CheckSquare, Layers, Menu, ChevronDown, ChevronRight, Settings, PlusCircle, Upload, Info, Printer, Trophy, AlertCircle } from 'lucide-react';
 
 const AdminDashboard = ({ setAuth }) => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   
   // STATE UTAMA (DATA)
+  const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [masterSites, setMasterSites] = useState([]);
   const [masterPositions, setMasterPositions] = useState([]);
@@ -21,6 +23,24 @@ const AdminDashboard = ({ setAuth }) => {
   const [payrollStep, setPayrollStep] = useState(0);
   const [selectedPayrollSite, setSelectedPayrollSite] = useState('');
   const [payrollPeriod, setPayrollPeriod] = useState(new Date().toISOString().slice(0, 7));
+
+  // STATE REKAP ABSENSI (DATABASE)
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [searchAttendance, setSearchAttendance] = useState('');
+  const [filterPeriodAttendance, setFilterPeriodAttendance] = useState('');
+  const [siteTimeConfig, setSiteTimeConfig] = useState({});
+  const [expandedAttendanceRow, setExpandedAttendanceRow] = useState(null);
+  const [searchConfigSite, setSearchConfigSite] = useState('');
+  
+  // STATE EDIT & APPROVAL HAPUS ABSENSI
+  const [editingAtt, setEditingAtt] = useState(null);
+  const [editAttData, setEditAttData] = useState({ jamMasuk: '', jamKeluar: '', keterangan_asli: '' });
+  const [pendingDeletes, setPendingDeletes] = useState([]); 
+
+  // STATE PARAMETER KPI ABSENSI (DATABASE)
+  const [kpiConfig, setKpiConfig] = useState({ baseScore: 100, potongMangkir: 20, potongIzin: 5, potongTelatPerMenit: 0.5 });
+  const [isKpiConfigExpanded, setIsKpiConfigExpanded] = useState(false);
+  const [isConfigExpanded, setIsConfigExpanded] = useState(false);
 
   // STATE BARU: Parameter Absen HRD
   const [totalHariKerjaSebulan, setTotalHariKerjaSebulan] = useState(22); // Pembagi Gaji Prorata
@@ -43,12 +63,38 @@ const AdminDashboard = ({ setAuth }) => {
   
   // STATE NAVIGASI SIDEBAR & VIEW
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
-  const [currentView, setCurrentView] = useState({ module: 'RECRUITMENT', filter: 'PENDING', title: 'Pelamar Baru' });
-  const [expandedMenus, setExpandedMenus] = useState({ recruitment: true, hris: false, payroll: false, regions: {} });
+  const [currentView, setCurrentView] = useState({ module: 'DASHBOARD', filter: 'OVERVIEW', title: 'Dashboard HRD' });
+  
+  // STATE DASHBOARD ANALYTICS (Variabel yang sempat terhapus)
+  const [dashSearch, setDashSearch] = useState('');
+  const [dashSortBy, setDashSortBy] = useState('terbaru');
+  const [isAnalyticsExpanded, setIsAnalyticsExpanded] = useState(false); 
+
+  // STATE FILTER ABSENSI DASHBOARD
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [attFilterStartDate, setAttFilterStartDate] = useState(todayStr); // Default Hari Berjalan
+  const [attFilterEndDate, setAttFilterEndDate] = useState(todayStr);
+  const [attFilterPeriod, setAttFilterPeriod] = useState('');
+  const [attFilterSite, setAttFilterSite] = useState('');
+  const [attSelectedCategory, setAttSelectedCategory] = useState(null); // 'HADIR', 'MANGKIR', 'IZIN', 'CUTI'
+
+  // STATE LEADERBOARD KPI
+  const [leaderboardFilterPeriod, setLeaderboardFilterPeriod] = useState(new Date().toISOString().slice(0, 7)); // Default bulan ini
+  const [leaderboardFilterType, setLeaderboardFilterType] = useState('ALL'); // 'ALL', 'ABSENSI', 'TASK'
+  const [leaderboardSearch, setLeaderboardSearch] = useState('');
+  const [isGeneratingKpiPdf, setIsGeneratingKpiPdf] = useState(false);
+  
+  const [expandedMenus, setExpandedMenus] = useState({ recruitment: true, hris: false, payroll: false, attendance: false, regions: {} });
   
   // STATE FILTER GLOBAL
   const [searchTerm, setSearchTerm] = useState('');
   const [filterJasa, setFilterJasa] = useState('');
+
+  // STATE FILTER SPESIFIK RECRUITMENT
+  const [filterGender, setFilterGender] = useState('');
+  const [filterAge, setFilterAge] = useState('');
+  const [filterEdu, setFilterEdu] = useState('');
+  const [filterHeight, setFilterHeight] = useState('');
 
   // Tambahkan di bagian atas bersama state lainnya
   const [applicants, setApplicants] = useState([]);
@@ -171,12 +217,15 @@ const AdminDashboard = ({ setAuth }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [candRes, siteRes, posRes, usersRes, payRes] = await Promise.all([
+      const [candRes, siteRes, posRes, usersRes, payRes, attRes, settingsRes, tasksRes] = await Promise.all([
         supabase.from('candidates').select('*').order('created_at', { ascending: false }),
         supabase.from('master_sites').select('*').order('region', { ascending: true }),
         supabase.from('master_positions').select('*').order('name', { ascending: true }),
-        supabase.from('initial_users').select('division'),
-        supabase.from('finance_payroll').select('*, initial_users!finance_payroll_user_id_fkey(name, nik)').order('created_at', { ascending: false }) // Tarik riwayat gaji
+        supabase.from('initial_users').select('id, division, nik, name'), 
+        supabase.from('finance_payroll').select('*, initial_users!finance_payroll_user_id_fkey(name, nik)').order('created_at', { ascending: false }),
+        supabase.from('hrd_attendance_records').select('*').order('tanggal', { ascending: true }),
+        supabase.from('hrd_settings').select('*'),
+        supabase.from('initial_tasks').select('*') // <-- INI PENTING
       ]);
       
       if (candRes.error) throw candRes.error;
@@ -186,13 +235,51 @@ const AdminDashboard = ({ setAuth }) => {
       setCandidates(candRes.data || []);
       setMasterSites(siteRes.data || []);
       setMasterPositions(posRes.data || []);
-      setPayrollHistory(payRes.data || []); // Simpan riwayat gaji ke state
+      setPayrollHistory(payRes.data || []);
+      setUsers(usersRes.data || []); 
+      if (tasksRes && tasksRes.data) {
+          setTasks(tasksRes.data); // MENYIMPAN DATA TUGAS KE DALAM STATE 'tasks'
+      }
+      
+      // Sinkronisasi Pengaturan HRD (Jam Site & KPI)
+      if (settingsRes.data) {
+         const siteCfg = settingsRes.data.find(s => s.setting_type === 'SITE_TIME');
+         if (siteCfg) setSiteTimeConfig(siteCfg.setting_data);
+         
+         const kpiCfg = settingsRes.data.find(s => s.setting_type === 'KPI_CONFIG');
+         if (kpiCfg) setKpiConfig(kpiCfg.setting_data);
+      }
+
+      // Formatting Data Absensi (Konversi struktur datar DB ke bentuk hierarki / grouped yang dipakai tabel Dashboard)
+      if (attRes.data) {
+         const groupedAtt = {};
+         attRes.data.forEach(r => {
+             if (!groupedAtt[r.nik_karyawan]) {
+                 groupedAtt[r.nik_karyawan] = {
+                    nik: r.nik_karyawan,
+                    nama: r.nama_karyawan,
+                    periode: r.periode_bulan,
+                    site: r.site_penempatan,
+                    records: []
+                 };
+             }
+             groupedAtt[r.nik_karyawan].records.push({
+                 id: r.id, // ID Supabase untuk kemudahan hapus/edit
+                 hari: r.hari,
+                 tanggal: r.tanggal,
+                 jamMasuk: r.jam_masuk,
+                 jamKeluar: r.jam_keluar,
+                 telatMenit: r.telat_menit,
+                 keterangan_asli: r.keterangan
+             });
+         });
+         setAttendanceData(Object.values(groupedAtt));
+      }
       
       // Sinkronisasi Divisi dari Task Management & HRIS
       let tmDivisions = [];
       if (usersRes.data) tmDivisions = usersRes.data.map(u => u.division).filter(Boolean);
       let candDivisions = candRes.data.map(c => c.bidang_jasa).filter(Boolean);
-      
       const uniqueDivisions = [...new Set([...tmDivisions, ...candDivisions])].sort();
       setMasterDivisions(uniqueDivisions);
 
@@ -203,7 +290,11 @@ const AdminDashboard = ({ setAuth }) => {
     }
   };
 
-  const handleRefresh = () => { setSearchTerm(''); setFilterJasa(''); fetchData(); };
+  const handleRefresh = () => { 
+    setSearchTerm(''); setFilterJasa(''); 
+    setFilterGender(''); setFilterAge(''); setFilterEdu(''); setFilterHeight(''); 
+    fetchData(); 
+  };
 
   const toggleMenu = (menu) => { setExpandedMenus(prev => ({ ...prev, [menu]: !prev[menu] })); };
   const toggleRegion = (region) => { setExpandedMenus(prev => ({ ...prev, regions: { ...prev.regions, [region]: !prev.regions[region] } })); };
@@ -401,10 +492,15 @@ const AdminDashboard = ({ setAuth }) => {
 
   const fetchApplicants = async () => {
       if (!user) return;
+      
       let query = supabase
           .from('applicants')
-          .select('*')
-          .eq('tenant_id', currentUser.tenant_id); // Jika menggunakan sistem multi-tenant
+          .select('*');
+
+      // Perbaikan: Gunakan user.tenant_id jika sistem multi-tenant digunakan
+      if (user.tenant_id) {
+          query = query.eq('tenant_id', user.tenant_id);
+      }
 
       // Logika Filter Tanggal Berdasarkan kolom 'created_at'
       if (startDate) {
@@ -679,6 +775,352 @@ const AdminDashboard = ({ setAuth }) => {
     XLSX.writeFile(workbook, 'Template_Import_Karyawan.xlsx');
   };
 
+  // --- FUNGSI DOWNLOAD TEMPLATE REKAP ABSENSI ---
+  const downloadAttendanceTemplate = () => {
+    const templateData = [
+      {
+        "Nama Lengkap": "REFIANDO VANDANA",
+        "NIK / Username": "O-31-140225-00047",
+        "Jam Masuk": "2026-09-14 09:21:31",
+        "Jam Keluar": "2026-09-14 18:05:00",
+        "Keterangan (Opsional)": "Tepat Waktu"
+      },
+      {
+        "Nama Lengkap": "KUSNADI",
+        "NIK / Username": "O-31-191124-00014",
+        "Jam Masuk": "2026-09-15 08:00:00",
+        "Jam Keluar": "Belum Checkout",
+        "Keterangan (Opsional)": "Lupa Absen Pulang"
+      },
+      {
+        "Nama Lengkap": "Sari Rahma",
+        "NIK / Username": "O-31-200525-00030",
+        "Jam Masuk": "2026-09-16",
+        "Jam Keluar": "",
+        "Keterangan (Opsional)": "OFF"
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    worksheet['!cols'] = [ { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 30 } ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template_Absensi');
+    XLSX.writeFile(workbook, 'Template_Upload_Absensi.xlsx');
+  };
+
+  const handleSiteTimeConfigChange = async (siteName, field, value) => {
+    const newConfig = {
+      ...siteTimeConfig,
+      [siteName]: { ...siteTimeConfig[siteName], [field]: value }
+    };
+    setSiteTimeConfig(newConfig);
+    // Simpan otomatis ke Supabase saat jam diubah
+    try {
+        const { data: existing } = await supabase.from('hrd_settings').select('id').eq('setting_type', 'SITE_TIME').single();
+        if (existing) {
+            await supabase.from('hrd_settings').update({ setting_data: newConfig }).eq('id', existing.id);
+        } else {
+            await supabase.from('hrd_settings').insert([{ setting_type: 'SITE_TIME', setting_data: newConfig }]);
+        }
+    } catch (err) { console.error("Gagal menyimpan konfigurasi jam site:", err); }
+  };
+
+  const handleUploadRekapAbsensi = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if(!window.confirm("Unggah dan masukkan data absensi ini ke dalam Database? Data yang duplikat pada tanggal yang sama tidak akan tertimpa otomatis, pastikan data yang diunggah belum pernah dimasukkan.")) return;
+    
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const payloadToInsert = [];
+
+        data.forEach(row => {
+           const nik = String(row['NIK'] || row['NIK / Username'] || row['NIK Karyawan'] || '').trim();
+           if (!nik) return;
+
+           const dbKaryawan = candidates.find(c => c.nik_karyawan === nik);
+           const nama = row['Nama Lengkap'] || row['Nama'] || dbKaryawan?.nama_lengkap || 'Tanpa Nama';
+           // BACA RAW DATA TANPA STRING() AGAR TIPE DATE & NUMBER EXCEL TIDAK RUSAK
+           const rawMasuk = row['Jam Masuk'] || row['jam masuk'] || '';
+           const rawKeluar = row['Jam Keluar'] || row['jam keluar'] || '';
+           const rawKet = row['Keterangan'] || row['Keterangan (Opsional)'] || row['keterangan'] || row['Jadwal'] || row['jadwal'] || ''; 
+           
+           const siteKaryawan = dbKaryawan?.lokasi_penempatan || 'Site Tidak Terdaftar';
+           
+           let tanggalExcel = row['Tanggal'] || '';
+           let jamMasuk = null;
+           let jamKeluar = null;
+           
+           const processDateTime = (rawVal) => {
+               if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '' || String(rawVal).toLowerCase().includes('belum')) return { tgl: '', jam: null };
+               
+               // 1. JIKA EXCEL MENGUBAHNYA MENJADI FORMAT TANGGAL ASLI JAVASCRIPT
+               if (rawVal instanceof Date) {
+                   if (isNaN(rawVal)) return { tgl: '', jam: null };
+                   // PENTING: Gunakan getUTC...() agar jam asli Excel tidak ditambah +7 jam oleh komputer Anda!
+                   const yy = rawVal.getUTCFullYear();
+                   const mm = String(rawVal.getUTCMonth() + 1).padStart(2, '0');
+                   const dd = String(rawVal.getUTCDate()).padStart(2, '0');
+                   const h = String(rawVal.getUTCHours()).padStart(2, '0');
+                   const m = String(rawVal.getUTCMinutes()).padStart(2, '0');
+                   return { tgl: `${yy}-${mm}-${dd}`, jam: `${h}:${m}` };
+               }
+               
+               // 2. JIKA EXCEL MENGUBAHNYA MENJADI ANGKA SERI (SERIAL NUMBER EXCEL)
+               if (typeof rawVal === 'number') {
+                   // Perhitungan manual ini menghasilkan waktu UTC baku
+                   const dateObj = new Date(Math.round((rawVal - 25569) * 86400 * 1000));
+                   if (isNaN(dateObj)) return { tgl: '', jam: null };
+                   const yy = dateObj.getUTCFullYear();
+                   const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                   const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+                   const h = String(dateObj.getUTCHours()).padStart(2, '0');
+                   const m = String(dateObj.getUTCMinutes()).padStart(2, '0');
+                   return { tgl: `${yy}-${mm}-${dd}`, jam: `${h}:${m}` };
+               }
+
+               // 3. JIKA EXCEL MEMBACANYA SEBAGAI TEKS STRING BIASA
+               const str = String(rawVal).trim();
+               const matchIso = str.match(/(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::\d{2})?)?/);
+               if (matchIso) return { tgl: `${matchIso[1]}-${matchIso[2]}-${matchIso[3]}`, jam: matchIso[4] ? `${matchIso[4]}:${matchIso[5]}` : null };
+               
+               const matchId = str.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::\d{2})?)?/);
+               if (matchId) return { tgl: `${matchId[3]}-${matchId[2]}-${matchId[1]}`, jam: matchId[4] ? `${matchId[4]}:${matchId[5]}` : null };
+               
+               const matchTime = str.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
+               if (matchTime) return { tgl: '', jam: `${matchTime[1].padStart(2, '0')}:${matchTime[2]}` };
+               
+               return { tgl: '', jam: null };
+           };
+
+           const parsedMasuk = processDateTime(rawMasuk);
+           const parsedKeluar = processDateTime(rawKeluar);
+
+           if (parsedMasuk.tgl) tanggalExcel = parsedMasuk.tgl;
+           else if (parsedKeluar.tgl) tanggalExcel = parsedKeluar.tgl;
+
+           jamMasuk = parsedMasuk.jam;
+           jamKeluar = parsedKeluar.jam;
+
+           let periode = '';
+           let hari = '';
+           let dateStr = '-';
+           
+           if (tanggalExcel) {
+             if (typeof tanggalExcel === 'number') {
+                const dateObj = new Date((tanggalExcel - (25567 + 2)) * 86400 * 1000);
+                if (!isNaN(dateObj)) {
+                   dateStr = dateObj.toISOString().split('T')[0];
+                   periode = dateStr.slice(0, 7);
+                   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                   hari = days[dateObj.getDay()];
+                }
+             } else if (typeof tanggalExcel === 'string') {
+                const parts = tanggalExcel.split('-');
+                if (parts.length === 3) {
+                   dateStr = tanggalExcel;
+                   periode = `${parts[0]}-${parts[1]}`;
+                   const localDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
+                   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                   hari = days[localDate.getDay()];
+                }
+             }
+           }
+
+           const isLibur = String(rawKet).toUpperCase().includes('LIBUR') || String(rawKet).toUpperCase().includes('OFF');
+           let batasMasuk = siteTimeConfig[siteKaryawan]?.masuk || '08:00'; 
+           
+           if (!isLibur && rawKet) {
+               const matchJadwal = String(rawKet).match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
+               if (matchJadwal) batasMasuk = `${matchJadwal[1].padStart(2, '0')}:${matchJadwal[2]}`;
+           }
+           
+           let telatMenit = 0;
+           if (!isLibur && jamMasuk && jamMasuk > batasMasuk) {
+              const [masukH, masukM] = jamMasuk.split(':').map(Number);
+              const [batasH, batasM] = batasMasuk.split(':').map(Number);
+              telatMenit = ((masukH * 60) + masukM) - ((batasH * 60) + batasM);
+           }
+           
+           if(dateStr !== '-') {
+               payloadToInsert.push({
+                   nik_karyawan: nik,
+                   nama_karyawan: nama,
+                   periode_bulan: filterPeriodAttendance || periode || new Date().toISOString().slice(0, 7),
+                   tanggal: dateStr,
+                   hari: hari || '-',
+                   jam_masuk: jamMasuk || '-',
+                   jam_keluar: jamKeluar || '-',
+                   keterangan: isLibur ? 'OFF / Libur' : rawKet,
+                   telat_menit: telatMenit > 0 ? telatMenit : 0,
+                   site_penempatan: siteKaryawan
+               });
+           }
+        });
+
+        if (payloadToInsert.length > 0) {
+            const { error: insertErr } = await supabase.from('hrd_attendance_records').insert(payloadToInsert);
+            if (insertErr) throw insertErr;
+            alert(`Berhasil menyimpan ${payloadToInsert.length} rekaman absensi ke Database!`);
+            fetchData(); // Refresh UI langsung dari Database
+        } else {
+            alert("Tidak ada data valid dengan format tanggal yang ditemukan untuk disimpan.");
+        }
+      } catch (err) { 
+        alert("Gagal menyimpan ke database: " + err.message); 
+      } finally { 
+        setLoading(false);
+        e.target.value = null; 
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // --- FUNGSI EDIT & HAPUS REKAP ABSENSI ---
+  const handleEditAttClick = (nik, rIdx, rec) => {
+    if (!user?.can_edit_hrd && user?.role !== 'admin') { alert("Akses ditolak"); return; }
+    setEditingAtt({ nik, rIdx });
+    setEditAttData({ jamMasuk: rec.jamMasuk !== '-' ? rec.jamMasuk : '', jamKeluar: rec.jamKeluar !== '-' ? rec.jamKeluar : '', keterangan_asli: rec.keterangan_asli });
+  };
+
+  const handleSaveAttEdit = async () => {
+    if (!editingAtt) return;
+    const { nik, rIdx } = editingAtt;
+    const empData = attendanceData.find(item => item.nik === nik);
+    if (!empData) return;
+    
+    const recordId = empData.records[rIdx].id; // Harus punya ID Supabase
+
+    let batasMasuk = siteTimeConfig[empData.site]?.masuk || '08:00';
+    const isLibur = String(editAttData.keterangan_asli).toUpperCase().includes('LIBUR') || String(editAttData.keterangan_asli).toUpperCase().includes('OFF');
+    
+    if (!isLibur && editAttData.keterangan_asli) {
+        const matchJadwal = String(editAttData.keterangan_asli).match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
+        if (matchJadwal) batasMasuk = `${matchJadwal[1].padStart(2, '0')}:${matchJadwal[2]}`;
+    }
+
+    let telatMenit = 0;
+    if (!isLibur && editAttData.jamMasuk && editAttData.jamMasuk > batasMasuk) {
+        const [masukH, masukM] = editAttData.jamMasuk.split(':').map(Number);
+        const [batasH, batasM] = batasMasuk.split(':').map(Number);
+        telatMenit = ((masukH * 60) + masukM) - ((batasH * 60) + batasM);
+    }
+
+    try {
+        setLoading(true);
+        const payloadUpdate = {
+            jam_masuk: editAttData.jamMasuk || '-',
+            jam_keluar: editAttData.jamKeluar || '-',
+            keterangan: isLibur ? 'OFF / Libur' : editAttData.keterangan_asli,
+            telat_menit: telatMenit > 0 ? telatMenit : 0
+        };
+
+        const { error } = await supabase.from('hrd_attendance_records').update(payloadUpdate).eq('id', recordId);
+        if (error) throw error;
+        
+        alert("Berhasil mengupdate data absensi.");
+        setEditingAtt(null);
+        fetchData();
+    } catch (err) { alert("Gagal update data: " + err.message); } finally { setLoading(false); }
+  };
+
+  const handleDeleteAttClick = async (nik, rIdx) => {
+    const empData = attendanceData.find(item => item.nik === nik);
+    const recordId = empData?.records[rIdx]?.id;
+    if (!recordId) return;
+
+    if (user?.role === 'admin') {
+        if(window.confirm('Hapus data absen ini secara PERMANEN dari Database?')) {
+            try {
+                setLoading(true);
+                const { error } = await supabase.from('hrd_attendance_records').delete().eq('id', recordId);
+                if (error) throw error;
+                alert("Data berhasil dihapus.");
+                fetchData();
+            } catch (err) { alert("Gagal hapus: " + err.message); } finally { setLoading(false); }
+        }
+    } else {
+        // Jika bukan admin, hanya simulasi di UI untuk minta approval
+        if(window.confirm('Anda bukan Admin. Kirim permohonan hapus data ini ke Admin untuk approval?')) {
+            setPendingDeletes([...pendingDeletes, { nik, rIdx, recordId }]);
+            alert('Permohonan hapus (Approval) telah dikirim ke Admin.');
+        }
+    }
+  };
+
+  const handleApproveDelete = async (nik, rIdx) => {
+    if (user?.role !== 'admin') return;
+    const req = pendingDeletes.find(p => p.nik === nik && p.rIdx === rIdx);
+    if (!req) return;
+
+    try {
+        setLoading(true);
+        const { error } = await supabase.from('hrd_attendance_records').delete().eq('id', req.recordId);
+        if (error) throw error;
+        alert('Penghapusan disetujui dan data dihilangkan permanen.');
+        setPendingDeletes(pendingDeletes.filter(p => !(p.nik === nik && p.rIdx === rIdx)));
+        fetchData();
+    } catch (err) { alert("Gagal menyetujui hapus: " + err.message); } finally { setLoading(false); }
+  };
+
+  const handleRejectDelete = (nik, rIdx) => {
+    if (user?.role !== 'admin') return;
+    setPendingDeletes(pendingDeletes.filter(p => !(p.nik === nik && p.rIdx === rIdx)));
+    alert('Permohonan hapus ditolak.');
+  };
+
+  // --- FUNGSI CETAK LAPORAN KPI KE PDF ---
+  const handlePrintKpiReport = async () => {
+    if (!window.html2pdf) {
+       // Panggil CDN html2pdf secara dinamis jika belum ada di index.html
+       const script = document.createElement('script');
+       script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+       document.head.appendChild(script);
+       script.onload = () => executePdfGeneration();
+    } else {
+       executePdfGeneration();
+    }
+  };
+
+  const executePdfGeneration = () => {
+    setIsGeneratingKpiPdf(true);
+    setTimeout(() => {
+      const element = document.getElementById('kpi-report-print-area');
+      const opt = {
+        margin:       [10, 10, 10, 10], 
+        filename:     `Laporan_KPI_Karyawan_${leaderboardFilterPeriod || 'All-Time'}.pdf`,
+        image:        { type: 'jpeg', quality: 1 },
+        html2canvas:  { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 }, 
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      
+      window.html2pdf().set(opt).from(element).save().then(() => {
+          setIsGeneratingKpiPdf(false);
+      });
+    }, 2000); // Naikkan jeda waktu agar layout stabil sebelum dipotret
+  };
+  
+  // (Tambahan) Update fungsi Simpan Pengaturan KPI agar masuk ke Database
+  const saveKpiConfigToDB = async () => {
+     try {
+        const { data: existing } = await supabase.from('hrd_settings').select('id').eq('setting_type', 'KPI_CONFIG').single();
+        if (existing) {
+            await supabase.from('hrd_settings').update({ setting_data: kpiConfig }).eq('id', existing.id);
+        } else {
+            await supabase.from('hrd_settings').insert([{ setting_type: 'KPI_CONFIG', setting_data: kpiConfig }]);
+        }
+        alert('Parameter KPI berhasil disimpan ke Database!'); 
+        setIsKpiConfigExpanded(false);
+    } catch (err) { alert("Gagal menyimpan KPI: " + err.message); }
+  };
+
   // --- FUNGSI PAYROLL HRD OTOMATIS ---
   const handleUploadAttendance = (e) => {
     const file = e.target.files[0];
@@ -689,7 +1131,7 @@ const AdminDashboard = ({ setAuth }) => {
     reader.onload = (evt) => {
       try {
         const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
         
@@ -1017,6 +1459,7 @@ const AdminDashboard = ({ setAuth }) => {
     reader.readAsBinaryString(file);
   };
 
+  // RUMUS HELPER DASHBOARD ANALYTICS
   const safeParseJSON = (jsonStr) => { 
     if (!jsonStr) return []; 
     let parsed;
@@ -1024,7 +1467,186 @@ const AdminDashboard = ({ setAuth }) => {
     else try { parsed = JSON.parse(jsonStr); } catch (e) { return []; }
     return Array.isArray(parsed) ? parsed : []; 
   };
+
+  const calculateAge = (birthDate) => {
+    if (!birthDate) return 0;
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+  };
+
+  const getHighestEducation = (riwayatString) => {
+    if (!riwayatString) return 'Tidak Diketahui';
+    try {
+      const history = JSON.parse(riwayatString);
+      if (Array.isArray(history) && history.length > 0) return history[0]?.tingkat || 'Tidak Diketahui';
+    } catch (e) {
+      // Jika HRD mengetik manual teks biasa (bukan format array JSON recruitment), langsung gunakan teksnya
+      return String(riwayatString).trim();
+    }
+    return typeof riwayatString === 'string' ? riwayatString : 'Tidak Diketahui';
+  };
+
+  // KALKULASI DATA CARD DASHBOARD
+  const statsInti = candidates.filter(c => c.status === 'INTI').length;
+  const statsResign = candidates.filter(c => c.status === 'RESIGN').length;
+  const statsPending = candidates.filter(c => c.status === 'PENDING').length;
+  const statsBank = candidates.filter(c => c.status === 'BANK_DATA').length;
+  const statsSiteClient = masterSites.filter(s => s.kategori_karyawan === 'Pekerja Site').length;
+
+  // DATA TABLE DASHBOARD (Dengan Sorting & Filter)
+  let dashboardData = candidates.filter(c => c.status === 'INTI');
   
+  if (dashSearch) {
+    dashboardData = dashboardData.filter(c => 
+      c.nama_lengkap?.toLowerCase().includes(dashSearch.toLowerCase()) || 
+      c.nik_karyawan?.includes(dashSearch)
+    );
+  }
+  dashboardData.sort((a, b) => {
+    if (dashSortBy === 'umur_tua') return calculateAge(b.tanggal_lahir) - calculateAge(a.tanggal_lahir);
+    if (dashSortBy === 'umur_muda') return calculateAge(a.tanggal_lahir) - calculateAge(b.tanggal_lahir);
+    if (dashSortBy === 'nama_asc') return (a.nama_lengkap || '').localeCompare(b.nama_lengkap || '');
+    if (dashSortBy === 'nama_desc') return (b.nama_lengkap || '').localeCompare(a.nama_lengkap || '');
+    return new Date(b.created_at) - new Date(a.created_at); // terbaru default
+  });
+
+  // --- KALKULASI DEMOGRAFI HR ANALYTICS ---
+  const ages = dashboardData.map(c => calculateAge(c.tanggal_lahir)).filter(a => a > 0);
+  
+  // Menghitung jumlah per kelompok umur
+  const usiaMuda = ages.filter(age => age <= 25).length; // Gen Z / *Fresh Graduate*
+  const usiaMenengah = ages.filter(age => age > 25 && age < 40).length; // Milenial / Produktif
+  const usiaSenior = ages.filter(age => age >= 40).length; // Senior / Berpengalaman
+
+  const totalLaki = dashboardData.filter(c => c.jenis_kelamin === 'Laki-laki').length;
+  const totalPerempuan = dashboardData.filter(c => c.jenis_kelamin === 'Perempuan').length;
+
+  const totalSMA = dashboardData.filter(c => {
+    const edu = getHighestEducation(c.riwayat_pendidikan).toLowerCase();
+    return edu.includes('sma') || edu.includes('smk') || edu.includes('slta') || edu.includes('stm');
+  }).length;
+
+  const totalKuliah = dashboardData.filter(c => {
+    const edu = getHighestEducation(c.riwayat_pendidikan).toLowerCase();
+    return edu.includes('s1') || edu.includes('d3') || edu.includes('d4') || edu.includes('sarjana') || edu.includes('diploma') || edu.includes('s2');
+  }).length;
+
+  // KALKULASI DASHBOARD KEHADIRAN & KPI (BERDASARKAN FILTER)
+  const activeEmployeesForAtt = candidates.filter(c => c.status === 'INTI' && (!attFilterSite || c.lokasi_penempatan === attFilterSite));
+
+  const attendanceSummary = activeEmployeesForAtt.map(emp => {
+    const empAtt = attendanceData.find(a => a.nik === emp.nik_karyawan);
+    
+    // Variabel Default jika tidak ada record
+    let status = 'MANGKIR'; 
+    let timeIn = '-';
+    let timeOut = '-';
+    let ket = '-';
+    let dateMatched = '-';
+    
+    // Variabel Akumulatif
+    let totalLateMinutes = 0;
+    let totalMangkir = 0;
+    let totalIzin = 0;
+    let totalHadir = 0;
+    let totalLibur = 0;
+    let totalCuti = 0;
+
+    if (empAtt && empAtt.records.length > 0) {
+      // 1. Saring record berdasarkan filter tanggal (jika ada)
+      const validRecords = empAtt.records.filter(r => {
+        // Cek filter bulan: pastikan format disamakan ke YYYY-MM
+        if (attFilterPeriod) {
+           let filterBulan = attFilterPeriod; // Misal bentuknya sudah '2026-10'
+           // Jika bentuknya 'October 2026', kita conver ke '2026-10'
+           if (filterBulan.includes(' ')) {
+              const d = new Date(filterBulan);
+              if (!isNaN(d)) filterBulan = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+           }
+           if (!r.tanggal.startsWith(filterBulan)) return false;
+        }
+        
+        if (!attFilterPeriod && attFilterStartDate && r.tanggal < attFilterStartDate) return false;
+        if (!attFilterPeriod && attFilterEndDate && r.tanggal > attFilterEndDate) return false;
+        return true;
+      });
+
+      // 2. Hitung statistik kumulatif dari semua record yang valid
+      validRecords.forEach(r => {
+         const k = String(r.keterangan_asli || '').toLowerCase();
+         if (k.includes('izin')) totalIzin++;
+         else if (k.includes('cuti')) totalCuti++;
+         else if (k.includes('libur') || k.includes('off')) totalLibur++; 
+         else if (r.jamMasuk !== '-' || k.includes('hadir')) {
+             totalHadir++;
+             totalLateMinutes += (r.telatMenit || 0);
+         } else {
+             totalMangkir++; 
+         }
+      });
+
+      // 3. Menentukan Status Utama untuk ditampilkan di tabel
+      // Prioritas: Apa pun yang paling mendominasi di rentang waktu tersebut, 
+      // tapi jika hanya lihat 1 hari, maka status hari itulah yang dipakai.
+      if (validRecords.length > 0) {
+        const lastRec = validRecords[validRecords.length - 1]; // Mengambil hari terakhir sebagai representasi detail
+        
+        // Logika Status Utama
+        if (totalHadir > 0) status = 'HADIR';
+        else if (totalMangkir > 0 && totalHadir === 0) status = 'MANGKIR';
+        else if (totalIzin > 0) status = 'IZIN';
+        else if (totalLibur > 0) status = 'LIBUR';
+        else if (totalCuti > 0) status = 'CUTI';
+
+        timeIn = lastRec.jamMasuk;
+        timeOut = lastRec.jamKeluar;
+        ket = lastRec.keterangan_asli || (status === 'HADIR' ? 'Hadir (Mesin/Web)' : status);
+        dateMatched = lastRec.tanggal;
+      } else {
+         // Jika filter menghasilkan 0 record valid, berarti dia mangkir
+         totalMangkir = 1;
+      }
+    } else {
+       // Jika tidak ada data absen sama sekali untuk NIK ini, dihitung mangkir
+       totalMangkir = 1;
+    }
+
+    // --- RUMUS OTOMATIS KPI ABSENSI ---
+    let kpiScore = Number(kpiConfig.baseScore) 
+                   - (totalMangkir * Number(kpiConfig.potongMangkir)) 
+                   - (totalIzin * Number(kpiConfig.potongIzin)) 
+                   - (totalLateMinutes * Number(kpiConfig.potongTelatPerMenit));
+                   
+    if (kpiScore < 0) kpiScore = 0; // Cegah nilai KPI minus
+
+    return { 
+      ...emp, 
+      statusAbsen: status, 
+      timeIn, 
+      timeOut, 
+      ket, 
+      dateMatched, 
+      kpiScore: Number(kpiScore.toFixed(2)), 
+      totalLateMinutes,
+      // Tambahan data statistik untuk metrics di Dashboard
+      stats: { totalHadir, totalMangkir, totalIzin, totalCuti, totalLibur } 
+    };
+  });
+
+  const attMetrics = {
+    HADIR: attendanceSummary.filter(a => a.statusAbsen === 'HADIR').length,
+    MANGKIR: attendanceSummary.filter(a => a.statusAbsen === 'MANGKIR').length,
+    IZIN: attendanceSummary.filter(a => a.statusAbsen === 'IZIN').length,
+    CUTI: attendanceSummary.filter(a => a.statusAbsen === 'CUTI').length,
+    LIBUR: attendanceSummary.filter(a => a.statusAbsen === 'LIBUR').length, // HITUNG TOTAL LIBUR
+  };
+
+  // ======================================================
+  // BLOK KODE YANG SEBELUMNYA TIDAK SENGAJA TERHAPUS
   const groupedSites = masterSites.reduce((acc, site) => {
     if (!acc[site.region]) acc[site.region] = [];
     acc[site.region].push(site);
@@ -1038,10 +1660,8 @@ const AdminDashboard = ({ setAuth }) => {
     if (currentView.filter === 'ALL') {
       displayData = candidates.filter(c => c.status === 'INTI'); 
     } else if (currentView.filter === 'RESIGN') {
-      // Tampilkan data yang sudah resign
       displayData = candidates.filter(c => c.status === 'RESIGN');
     } else {
-      // Filter berdasarkan Lokasi
       displayData = candidates.filter(c => c.status === 'INTI' && c.lokasi_penempatan === currentView.filter);
     }
   }
@@ -1051,24 +1671,42 @@ const AdminDashboard = ({ setAuth }) => {
     displayData = displayData.filter(c => 
       (c.nama_lengkap && c.nama_lengkap.toLowerCase().includes(lowerSearch)) ||
       (c.nik_karyawan && c.nik_karyawan.includes(searchTerm)) ||
-      (c.referensi_dari && c.referensi_dari.toLowerCase().includes(lowerSearch)) // <-- Tambahan filter pencarian
+      (c.referensi_dari && c.referensi_dari.toLowerCase().includes(lowerSearch))
     );
   }
   if (filterJasa) displayData = displayData.filter(c => c.bidang_jasa === filterJasa);
 
-  // ====== TAMBAHKAN KODE INI UNTUK FILTER TANGGAL ======
+  // FILTER SPESIFIK RECRUITMENT
+  if (currentView.module === 'RECRUITMENT') {
+    if (filterGender) displayData = displayData.filter(c => c.jenis_kelamin === filterGender);
+    if (filterHeight) displayData = displayData.filter(c => Number(c.tinggi_badan) >= Number(filterHeight));
+    if (filterAge) {
+      displayData = displayData.filter(c => {
+        const age = calculateAge(c.tanggal_lahir);
+        if (filterAge === 'under_25') return age > 0 && age <= 25;
+        if (filterAge === '26_35') return age >= 26 && age <= 35;
+        if (filterAge === '36_45') return age >= 36 && age <= 45;
+        if (filterAge === 'over_45') return age > 45;
+        return true;
+      });
+    }
+    if (filterEdu) {
+      displayData = displayData.filter(c => {
+        const edu = getHighestEducation(c.riwayat_pendidikan).toLowerCase();
+        if (filterEdu === 'sma') return edu.includes('sma') || edu.includes('smk') || edu.includes('slta') || edu.includes('stm');
+        if (filterEdu === 'diploma') return edu.includes('d3') || edu.includes('d4') || edu.includes('diploma') || edu.includes('akademi');
+        if (filterEdu === 'sarjana') return edu.includes('s1') || edu.includes('sarjana') || edu.includes('s2') || edu.includes('s3');
+        return true;
+      });
+    }
+  }
+
   if (startDate || endDate) {
     displayData = displayData.filter(c => {
-      // Pastikan ada tanggal dibuat
       if (!c.created_at) return true; 
-
-      // Ambil timestamp dari created_at
       const applyDate = new Date(c.created_at).getTime();
-      
-      // Setup batas waktu (Start dari jam 00:00, End sampai jam 23:59)
       const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : null;
-
       if (start && applyDate < start) return false;
       if (end && applyDate > end) return false;
       return true;
@@ -1136,6 +1774,7 @@ const AdminDashboard = ({ setAuth }) => {
     { key: 'no_telp', label: 'Telp Alternatif', type: 'text' },
     { key: 'alamat_domisili', label: 'Alamat Domisili', type: 'text' },
     { key: 'alamat_lengkap', label: 'Alamat KTP Lengkap', type: 'text' },
+    { key: 'riwayat_pendidikan', label: 'Pendidikan Terakhir', type: 'text' },
     { key: 'status_pernikahan', label: 'Status PTKP', type: 'select', options: ['TK/0','TK/1','TK/2','TK/3','K/0','K/1','K/2','K/3'] },
     { key: 'detail_anak', label: 'Data Anak', type: 'text' },
     { key: 'nama_pasangan', label: 'Nama Pasangan', type: 'text' },
@@ -1196,7 +1835,15 @@ const AdminDashboard = ({ setAuth }) => {
            </button>
            <div className="my-2 border-t border-slate-800"></div>
            
-           {/* MENU RECRUITMENT */}
+           {/* MENU DASHBOARD UTAMA */}
+           <div className="mb-2">
+             <button 
+               onClick={() => handleNavClick('DASHBOARD', 'OVERVIEW', 'Dashboard HRD')} 
+               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-bold ${currentView.module === 'DASHBOARD' ? 'bg-amber-500/10 text-amber-500' : 'hover:bg-slate-800 hover:text-white'}`}
+             >
+                <Layers size={16}/> Dashboard Utama
+             </button>
+           </div>
            {(user?.can_access_recruitment || user?.role === 'admin') && (
              <div>
                <button onClick={() => toggleMenu('recruitment')} className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors">
@@ -1263,6 +1910,22 @@ const AdminDashboard = ({ setAuth }) => {
              </div>
            )}
 
+           {/* MENU REKAP ABSENSI */}
+           {(user?.can_access_hris || user?.role === 'admin') && (
+             <div className="mt-2 mb-2">
+               <button onClick={() => toggleMenu('attendance')} className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors">
+                  <div className="flex items-center gap-3 text-sm font-bold"><CheckSquare size={16} className="text-teal-400"/> Rekap Absensi</div>
+                  {expandedMenus.attendance ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+               </button>
+               {expandedMenus.attendance && (
+                  <div className="ml-10 mt-1 space-y-1 border-l border-slate-800 pl-3">
+                    <button onClick={() => handleNavClick('ATTENDANCE', 'SUMMARY', 'Rekap & Data Absensi Karyawan')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-colors mb-1 ${currentView.module === 'ATTENDANCE' && currentView.filter === 'SUMMARY' ? 'bg-teal-600 text-white' : 'hover:bg-slate-800 text-teal-400'}`}>Data Upload Absensi</button>
+                    <button onClick={() => handleNavClick('ATTENDANCE', 'LEADERBOARD', 'Leaderboard & Ranking KPI')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-colors mb-1 ${currentView.module === 'ATTENDANCE' && currentView.filter === 'LEADERBOARD' ? 'bg-teal-600 text-white' : 'hover:bg-slate-800 text-teal-400'}`}>Ranking KPI Pegawai</button>
+                  </div>
+               )}
+             </div>
+           )}
+
            {/* MENU PENGATURAN SITE (HANYA ADMIN) */}
            {user?.role === 'admin' && (
              <div>
@@ -1321,7 +1984,973 @@ const AdminDashboard = ({ setAuth }) => {
             </div>
           )}
 
-          {currentView.module === 'PAYROLL' ? (
+          {currentView.module === 'DASHBOARD' ? (
+            <div className="animate-fade-in max-w-7xl mx-auto space-y-6">
+              
+              {/* HEADER WELCOME */}
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-6 md:p-8 text-white shadow-lg relative overflow-hidden">
+                <div className="relative z-10">
+                  <h1 className="text-2xl md:text-3xl font-black mb-2">Welcome to HRIS Dashboard</h1>
+                  <p className="text-slate-300 text-sm md:text-base max-w-2xl">Ringkasan statistik kepegawaian, performa rekrutmen, dan analitik profil karyawan secara *real-time*.</p>
+                </div>
+                <div className="absolute -right-10 -bottom-10 opacity-10"><Layers size={200} /></div>
+              </div>
+
+              {/* TOP CARDS: 5 BLOK INFORMASI UTAMA */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-b-4 border-b-emerald-500">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Karyawan Aktif</p>
+                    <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-lg"><User size={16}/></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-800">{statsInti || 0}</h3>
+                  <p className="text-[10px] text-emerald-600 font-bold mt-1">Total Pegawai INTI</p>
+                </div>
+                
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-b-4 border-b-rose-500">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Data Resign</p>
+                    <div className="bg-rose-100 text-rose-600 p-1.5 rounded-lg"><LogOut size={16}/></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-800">{statsResign || 0}</h3>
+                  <p className="text-[10px] text-rose-600 font-bold mt-1">Riwayat Keluar/Resign</p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-b-4 border-b-blue-500">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Pelamar Terkini</p>
+                    <div className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><UserPlus size={16}/></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-800">{statsPending || 0}</h3>
+                  <p className="text-[10px] text-blue-600 font-bold mt-1">Belum di-review (Pending)</p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-b-4 border-b-amber-500">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Bank Data</p>
+                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg"><Archive size={16}/></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-800">{statsBank || 0}</h3>
+                  <p className="text-[10px] text-amber-600 font-bold mt-1">Arsip Calon Pekerja</p>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-b-4 border-b-indigo-500 col-span-2 md:col-span-1">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Site Client</p>
+                    <div className="bg-indigo-100 text-indigo-600 p-1.5 rounded-lg"><MapPin size={16}/></div>
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-800">{statsSiteClient || 0}</h3>
+                  <p className="text-[10px] text-indigo-600 font-bold mt-1">Penempatan Tersedia</p>
+                </div>
+              </div>
+
+              {/* LIVE ABSENSI DASHBOARD */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 overflow-hidden">
+                 <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
+                    <div>
+                       <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><CheckSquare size={20} className="text-teal-500"/> Live Absensi & Kehadiran</h3>
+                       <p className="text-xs text-slate-500 font-medium mt-1">Pilih filter tanggal atau site untuk mensortir data dari rekap absensi yang diupload.</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                       {/* FILTER SITE */}
+                       <div className="flex-1 md:w-36">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Filter Site</label>
+                          <select value={attFilterSite} onChange={e => { setAttFilterSite(e.target.value); setAttSelectedCategory(null); }} className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-teal-500 text-slate-700">
+                             <option value="">Semua Site</option>
+                             {masterSites.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                          </select>
+                       </div>
+                       {/* FILTER PERIODE BULAN */}
+                       <div className="flex-1 md:w-32">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Cari Perbulan</label>
+                          <input 
+                             type="month" 
+                             value={attFilterPeriod} 
+                             onChange={e => { setAttFilterPeriod(e.target.value); setAttFilterStartDate(''); setAttFilterEndDate(''); setAttSelectedCategory(null); }} 
+                             className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-teal-500 text-slate-800" 
+                             pattern="[0-9]{4}-[0-9]{2}"
+                          />
+                       </div>
+                       {/* FILTER RANGE TANGGAL */}
+                       <div className="flex-1 md:w-32">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Dari Tanggal</label>
+                          <input type="date" disabled={!!attFilterPeriod} value={attFilterStartDate} onChange={e => { setAttFilterStartDate(e.target.value); setAttSelectedCategory(null); }} className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-teal-500 disabled:opacity-50" />
+                       </div>
+                       <div className="flex-1 md:w-32">
+                          <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Sampai Tanggal</label>
+                          <input type="date" disabled={!!attFilterPeriod} value={attFilterEndDate} onChange={e => { setAttFilterEndDate(e.target.value); setAttSelectedCategory(null); }} className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-teal-500 disabled:opacity-50" />
+                       </div>
+                    </div>
+                 </div>
+
+                 {attendanceData.length === 0 ? (
+                    <div className="text-center py-6 bg-amber-50 rounded-xl border border-amber-100">
+                      <p className="text-xs text-amber-700 font-bold flex items-center justify-center gap-2"><Info size={16}/> Belum ada database absensi. Buka menu Rekap Absensi dan Upload Excel terlebih dahulu.</p>
+                    </div>
+                 ) : (
+                    <>
+                      {/* INTERACTIVE CARDS */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                         <div onClick={() => setAttSelectedCategory(attSelectedCategory === 'HADIR' ? null : 'HADIR')} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all transform hover:-translate-y-1 ${attSelectedCategory === 'HADIR' ? 'bg-emerald-50 border-emerald-500 shadow-md' : 'bg-white border-emerald-100 hover:border-emerald-300 shadow-sm'}`}>
+                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider mb-1">Sudah Absen</p>
+                            <h3 className="text-3xl font-black text-emerald-700">{attMetrics?.HADIR || 0}</h3>
+                         </div>
+                         <div onClick={() => setAttSelectedCategory(attSelectedCategory === 'MANGKIR' ? null : 'MANGKIR')} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all transform hover:-translate-y-1 ${attSelectedCategory === 'MANGKIR' ? 'bg-rose-50 border-rose-500 shadow-md' : 'bg-white border-rose-100 hover:border-rose-300 shadow-sm'}`}>
+                            <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider mb-1">Mangkir (Alpa)</p>
+                            <h3 className="text-3xl font-black text-rose-700">{attMetrics?.MANGKIR || 0}</h3>
+                         </div>
+                         <div onClick={() => setAttSelectedCategory(attSelectedCategory === 'LIBUR' ? null : 'LIBUR')} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all transform hover:-translate-y-1 ${attSelectedCategory === 'LIBUR' ? 'bg-slate-100 border-slate-500 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'}`}>
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">Jadwal Off / Libur</p>
+                            <h3 className="text-3xl font-black text-slate-700">{attMetrics?.LIBUR || 0}</h3>
+                         </div>
+                         <div onClick={() => setAttSelectedCategory(attSelectedCategory === 'IZIN' ? null : 'IZIN')} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all transform hover:-translate-y-1 ${attSelectedCategory === 'IZIN' ? 'bg-amber-50 border-amber-500 shadow-md' : 'bg-white border-amber-100 hover:border-amber-300 shadow-sm'}`}>
+                            <p className="text-[9px] font-black text-amber-600 uppercase tracking-wider mb-1">Sedang Izin</p>
+                            <h3 className="text-3xl font-black text-amber-700">{attMetrics?.IZIN || 0}</h3>
+                         </div>
+                         <div onClick={() => setAttSelectedCategory(attSelectedCategory === 'CUTI' ? null : 'CUTI')} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all transform hover:-translate-y-1 ${attSelectedCategory === 'CUTI' ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-blue-100 hover:border-blue-300 shadow-sm'}`}>
+                            <p className="text-[9px] font-black text-blue-600 uppercase tracking-wider mb-1">Sedang Cuti</p>
+                            <h3 className="text-3xl font-black text-blue-700">{attMetrics?.CUTI || 0}</h3>
+                         </div>
+                      </div>
+
+                      {/* DATA TABLE YANG MUNCUL KETIKA KARTU DI KLIK */}
+                      {attSelectedCategory && (
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden animate-fade-in shadow-inner bg-slate-50">
+                          
+                          {/* HEADER TABEL DENGAN TAMBAHAN WARNA LIBUR */}
+                          <div className={`px-4 py-3 text-xs font-black text-white uppercase tracking-widest ${attSelectedCategory === 'HADIR' ? 'bg-emerald-500' : attSelectedCategory === 'MANGKIR' ? 'bg-rose-500' : attSelectedCategory === 'LIBUR' ? 'bg-slate-600' : attSelectedCategory === 'IZIN' ? 'bg-amber-500' : 'bg-blue-500'}`}>
+                             Daftar Karyawan ({attSelectedCategory})
+                          </div>
+                          
+                          <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                             <table className="w-full text-left text-sm whitespace-nowrap bg-white">
+                               <thead className="bg-slate-50 sticky top-0 text-[10px] text-slate-500 uppercase z-10 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.05)]">
+                                 <tr>
+                                   <th className="px-4 py-3 font-black">Nama / NIK</th>
+                                   <th className="px-4 py-3 font-black">Lokasi Penempatan</th>
+                                   <th className="px-4 py-3 font-black text-center">Tanggal Record</th>
+                                   <th className="px-4 py-3 font-black text-center">Jam Absen</th>
+                                   <th className="px-4 py-3 font-black text-center">Score KPI</th>
+                                   <th className="px-4 py-3 font-black text-right">Keterangan</th>
+                                 </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-100">
+                                 {attendanceSummary && attendanceSummary.filter(a => a.statusAbsen === attSelectedCategory).map((emp, i) => (
+                                   <tr key={i} className="hover:bg-slate-50">
+                                     <td className="px-4 py-2">
+                                        <p className="font-bold text-slate-800 text-xs">{emp.nama_lengkap}</p>
+                                        <p className="text-[10px] text-slate-400">NIK: {emp.nik_karyawan}</p>
+                                     </td>
+                                     <td className="px-4 py-2 text-xs font-medium text-slate-600">{emp.lokasi_penempatan}</td>
+                                     <td className="px-4 py-2 text-center text-xs text-slate-500">{emp.dateMatched}</td>
+                                     <td className="px-4 py-2 text-center text-xs font-bold text-slate-700">
+                                        {attSelectedCategory === 'HADIR' ? <span className="text-emerald-600">{emp.timeIn} - {emp.timeOut}</span> : '-'}
+                                     </td>
+                                     <td className="px-4 py-2 text-center">
+                                        <span className={`px-2 py-1.5 rounded-lg text-[11px] font-black border shadow-sm ${emp.kpiScore >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : emp.kpiScore >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                          {emp.kpiScore}
+                                        </span>
+                                        {emp.totalLateMinutes > 0 && <span className="block text-[9px] text-red-500 font-bold mt-1.5">Telat {emp.totalLateMinutes} mnt</span>}
+                                     </td>
+                                     <td className="px-4 py-2 text-right">
+                                        {/* LABEL KETERANGAN DENGAN TAMBAHAN WARNA LIBUR */}
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${attSelectedCategory === 'HADIR' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : attSelectedCategory === 'MANGKIR' ? 'bg-rose-50 text-rose-700 border border-rose-100' : attSelectedCategory === 'LIBUR' ? 'bg-slate-200 text-slate-700 border border-slate-300' : attSelectedCategory === 'IZIN' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
+                                          {emp.ket}
+                                        </span>
+                                     </td>
+                                   </tr>
+                                 ))}
+                                 {attendanceSummary && attendanceSummary.filter(a => a.statusAbsen === attSelectedCategory).length === 0 && (
+                                   <tr><td colSpan="5" className="text-center py-6 text-xs text-slate-400 italic">Tidak ada data untuk kategori ini.</td></tr>
+                                 )}
+                               </tbody>
+                             </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                 )}
+              </div>
+
+              {/* HR ANALYTICS TABLE (SEKARANG BISA COLLAPSE) */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div 
+                  className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between md:items-center gap-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition"
+                  onClick={() => setIsAnalyticsExpanded(!isAnalyticsExpanded)}
+                >
+                  <div>
+                    <h3 className="font-black text-slate-800 flex items-center gap-2"><Briefcase size={18} className="text-amber-500"/> Analitik Data Karyawan Aktif</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Gunakan fitur sortir untuk memetakan demografi usia, pendidikan, dan NIK.</p>
+                  </div>
+                  <div className="flex items-center gap-4 w-full md:w-auto">
+                    <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold uppercase tracking-widest">{dashboardData ? dashboardData.length : 0} Karyawan</span>
+                    <button className="text-slate-400 border border-slate-300 p-2 rounded-lg bg-white">
+                      {isAnalyticsExpanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                    </button>
+                  </div>
+                </div>
+
+                {isAnalyticsExpanded && (
+                  <div className="animate-fade-in">
+                    
+                    {/* DEMOGRAFI CARDS */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-slate-50 border-b border-slate-100">
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center items-center text-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Gender Pegawai</span>
+                            <p className="text-xs font-bold text-slate-700">L: <span className="text-blue-600">{totalLaki}</span> | P: <span className="text-rose-600">{totalPerempuan}</span></p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center text-center h-full">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 border-b border-slate-100 pb-1">Distribusi Umur</span>
+                            <div className="flex justify-center gap-3 text-[10px] font-bold">
+                               <div className="flex flex-col"><span className="text-slate-400">&lt;25 thn</span><span className="text-emerald-600 text-xs">{usiaMuda} org</span></div>
+                               <div className="w-px bg-slate-100"></div>
+                               <div className="flex flex-col"><span className="text-slate-400">26-39 thn</span><span className="text-blue-600 text-xs">{usiaMenengah} org</span></div>
+                               <div className="w-px bg-slate-100"></div>
+                               <div className="flex flex-col"><span className="text-slate-400">&gt;40 thn</span><span className="text-orange-600 text-xs">{usiaSenior} org</span></div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center items-center text-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lulusan SMA / SMK</span>
+                            <p className="text-xs font-bold text-amber-600">{totalSMA} Orang</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center items-center text-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Lulusan Kuliah</span>
+                            <p className="text-xs font-bold text-indigo-600">{totalKuliah} Orang</p>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-white border-b border-slate-100 flex gap-2 w-full">
+                      <div className="relative flex-1 md:w-48">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                        <input type="text" placeholder="Cari NIK / Nama..." value={dashSearch} onChange={(e) => setDashSearch(e.target.value)} className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold" />
+                      </div>
+                      <select value={dashSortBy} onChange={(e) => setDashSortBy(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-500 shrink-0">
+                        <option value="terbaru">Data Terbaru</option>
+                        <option value="umur_tua">Umur: Paling Tua</option>
+                        <option value="umur_muda">Umur: Paling Muda</option>
+                        <option value="nama_asc">Nama: A - Z</option>
+                        <option value="nama_desc">Nama: Z - A</option>
+                      </select>
+                    </div>
+                    <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+                      <table className="min-w-full text-left text-sm whitespace-nowrap">
+                        <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm text-[10px] text-slate-500 uppercase">
+                          <tr>
+                            <th className="px-6 py-4 font-black">Karyawan & NIK</th>
+                            <th className="px-6 py-4 font-black text-center">Umur</th>
+                            <th className="px-6 py-4 font-black">Pendidikan Tertinggi</th>
+                            <th className="px-6 py-4 font-black">Divisi & Jabatan</th>
+                            <th className="px-6 py-4 font-black text-right">Site Penempatan</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {dashboardData && dashboardData.length > 0 ? (
+                            dashboardData.map((emp, idx) => {
+                              const age = calculateAge(emp.tanggal_lahir);
+                              const edu = getHighestEducation(emp.riwayat_pendidikan);
+                              return (
+                                <tr key={idx} className="hover:bg-amber-50/30 transition-colors">
+                                  <td className="px-6 py-3">
+                                    <div className="font-black text-slate-800 text-sm">{emp.nama_lengkap}</div>
+                                    <div className="text-[10px] font-bold text-slate-400 mt-0.5">NIK: <span className="text-blue-600">{emp.nik_karyawan || 'Belum Diatur'}</span></div>
+                                  </td>
+                                  <td className="px-6 py-3 text-center">
+                                    {age > 0 ? <span className={`px-2.5 py-1 rounded-md text-[10px] font-black border ${age >= 40 ? 'bg-orange-50 text-orange-700 border-orange-200' : age <= 25 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>{age} Thn</span> : <span className="text-slate-300 text-[10px]">-</span>}
+                                  </td>
+                                  <td className="px-6 py-3 text-xs font-bold text-slate-700">{edu}</td>
+                                  <td className="px-6 py-3">
+                                    <div className="font-bold text-slate-800 text-xs">{emp.bidang_jasa || '-'}</div>
+                                    <div className="text-[10px] text-slate-500">{emp.posisi_jabatan || '-'}</div>
+                                  </td>
+                                  <td className="px-6 py-3 text-right">
+                                    <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold">{emp.lokasi_penempatan || 'Belum Diatur'}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan="5" className="px-6 py-8 text-center text-slate-500 font-medium text-xs">
+                                Tidak ada data karyawan yang cocok.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+          </div>
+          ) : currentView.module === 'ATTENDANCE' && currentView.filter === 'SUMMARY' ? (
+             <div className="animate-fade-in max-w-7xl mx-auto">
+                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mb-6">
+                   <h2 className="font-black text-2xl text-slate-800 mb-2 flex items-center gap-2"><CheckSquare className="text-teal-500"/> Rekap & Upload Absensi</h2>
+                   <p className="text-slate-500 text-sm mb-6">Atur jam masuk/keluar per site, lalu unggah file Excel absen untuk melihat hasil ringkasan dan kalkulasi jam keterlambatan.</p>
+                   
+                   {/* KONFIGURASI PARAMETER KPI ABSENSI */}
+                   <div className="bg-white p-0 rounded-2xl border border-slate-200 mb-6 overflow-hidden shadow-sm">
+                     <div 
+                        className="bg-slate-50 p-4 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => setIsKpiConfigExpanded(!isKpiConfigExpanded)}
+                     >
+                        <div>
+                           <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                             <Settings size={16} className="text-amber-500"/> Atur Parameter Score KPI
+                           </h3>
+                           <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">
+                             Tentukan nilai awal dan bobot pemotongan (Alpa, Izin, Telat) untuk hitung otomatis Score KPI Karyawan.
+                           </p>
+                        </div>
+                        <button className="text-slate-400 bg-white border border-slate-200 p-1.5 rounded-lg">
+                           {isKpiConfigExpanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                        </button>
+                     </div>
+
+                     {isKpiConfigExpanded && (
+                       <div className="p-5 border-t border-slate-100 bg-white animate-fade-in">
+                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nilai Awal (Base)</label>
+                               <input type="number" value={kpiConfig.baseScore} onChange={e => setKpiConfig({...kpiConfig, baseScore: e.target.value})} className="w-full text-xs font-bold text-slate-800 p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-amber-500" />
+                            </div>
+                            <div>
+                               <label className="block text-[10px] font-black text-rose-400 uppercase mb-1">Potong Mangkir (Poin)</label>
+                               <input type="number" value={kpiConfig.potongMangkir} onChange={e => setKpiConfig({...kpiConfig, potongMangkir: e.target.value})} className="w-full text-xs font-bold text-rose-600 p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-amber-500 bg-rose-50" />
+                            </div>
+                            <div>
+                               <label className="block text-[10px] font-black text-amber-400 uppercase mb-1">Potong Izin (Poin)</label>
+                               <input type="number" value={kpiConfig.potongIzin} onChange={e => setKpiConfig({...kpiConfig, potongIzin: e.target.value})} className="w-full text-xs font-bold text-amber-600 p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-amber-500 bg-amber-50" />
+                            </div>
+                            <div>
+                               <label className="block text-[10px] font-black text-orange-400 uppercase mb-1">Potong Telat (/Menit)</label>
+                               <input type="number" step="0.1" value={kpiConfig.potongTelatPerMenit} onChange={e => setKpiConfig({...kpiConfig, potongTelatPerMenit: e.target.value})} className="w-full text-xs font-bold text-orange-600 p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-amber-500 bg-orange-50" />
+                            </div>
+                         </div>
+                         <button onClick={() => { localStorage.setItem('syntegra_kpi_config', JSON.stringify(kpiConfig)); alert('Parameter KPI berhasil disimpan!'); setIsKpiConfigExpanded(false); }} className="bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-bold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition w-full md:w-auto shadow-md">
+                            <Save size={14}/> Simpan Pengaturan KPI
+                         </button>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* KONFIGURASI JAM SITE (DESAIN BARU DINAMIS) */}
+                   <div className="bg-white p-0 rounded-2xl border border-slate-200 mb-6 overflow-hidden shadow-sm">
+                     {/* Header Accordion */}
+                     <div 
+                        className="bg-slate-50 p-4 flex justify-between items-center cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+                     >
+                        <div>
+                           <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                             <Settings size={16} className="text-teal-600"/> Atur Jam Masuk & Keluar Tiap Site
+                           </h3>
+                           <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">
+                             Tentukan batas jam masuk per-site agar kalkulasi telat akurat. Default: 08:00 - 17:00.
+                           </p>
+                        </div>
+                        <button className="text-slate-400 bg-white border border-slate-200 p-1.5 rounded-lg">
+                           {isConfigExpanded ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                        </button>
+                     </div>
+
+                     {/* Body Accordion (Tampil jika expanded) */}
+                     {isConfigExpanded && (
+                       <div className="p-4 border-t border-slate-100 bg-white">
+                         {/* Search Bar untuk mencari Site */}
+                         <div className="relative max-w-sm mb-4">
+                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                           <input 
+                              type="text" 
+                              placeholder="Cari nama site..." 
+                              value={searchConfigSite}
+                              onChange={(e) => setSearchConfigSite(e.target.value)}
+                              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-teal-500 font-medium"
+                           />
+                         </div>
+
+                         {/* List Konfigurasi (Tampilan List Vertikal 2 Kolom di Desktop, 1 Kolom di Mobile) */}
+                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                           {masterSites
+                             .filter(site => site.name.toLowerCase().includes(searchConfigSite.toLowerCase()))
+                             .map(site => (
+                               <div key={site.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-3 rounded-xl hover:border-teal-300 transition-colors group">
+                                 {/* Nama Site & Region */}
+                                 <div className="flex-1 min-w-0 w-full">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0"></span>
+                                      <p className="font-black text-xs text-slate-800 truncate" title={site.name}>{site.name}</p>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 ml-3.5 truncate">{site.region || 'Region Tidak Diketahui'}</p>
+                                 </div>
+
+                                 {/* Input Jam */}
+                                 <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 bg-white p-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                   <div className="relative">
+                                     <span className="absolute -top-2 left-2 bg-white px-1 text-[8px] font-bold text-slate-400 uppercase leading-none">Masuk</span>
+                                     <input 
+                                        type="time" 
+                                        value={siteTimeConfig[site.name]?.masuk || '08:00'} 
+                                        onChange={(e) => handleSiteTimeConfigChange(site.name, 'masuk', e.target.value)} 
+                                        className="w-[85px] text-[11px] py-1.5 px-2 bg-transparent border-none outline-none font-bold text-emerald-700 cursor-pointer text-center" 
+                                     />
+                                   </div>
+                                   <span className="text-slate-300 text-xs">-</span>
+                                   <div className="relative">
+                                     <span className="absolute -top-2 left-2 bg-white px-1 text-[8px] font-bold text-slate-400 uppercase leading-none">Keluar</span>
+                                     <input 
+                                        type="time" 
+                                        value={siteTimeConfig[site.name]?.keluar || '17:00'} 
+                                        onChange={(e) => handleSiteTimeConfigChange(site.name, 'keluar', e.target.value)} 
+                                        className="w-[85px] text-[11px] py-1.5 px-2 bg-transparent border-none outline-none font-bold text-blue-700 cursor-pointer text-center" 
+                                     />
+                                   </div>
+                                 </div>
+                               </div>
+                           ))}
+                           {masterSites.filter(site => site.name.toLowerCase().includes(searchConfigSite.toLowerCase())).length === 0 && (
+                             <div className="col-span-full text-center py-6 text-xs font-bold text-slate-400">
+                               Site tidak ditemukan.
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* FILTER & UPLOAD */}
+                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 items-end">
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cari Nama / NIK</label>
+                       <input type="text" value={searchAttendance} onChange={e => setSearchAttendance(e.target.value)} placeholder="Ketik pencarian..." className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:border-teal-500" />
+                     </div>
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filter Periode Bulanan</label>
+                       <input type="month" value={filterPeriodAttendance} onChange={e => setFilterPeriodAttendance(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:outline-none focus:border-teal-500 font-bold" />
+                     </div>
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">1. Format Excel Baru</label>
+                       <button onClick={downloadAttendanceTemplate} className="w-full flex items-center justify-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-2 rounded-xl transition font-bold text-sm shadow-sm">
+                         <Download size={16} className="text-teal-600"/> Download Template
+                       </button>
+                     </div>
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">2. Upload Data Excel</label>
+                       <label className="flex items-center justify-center w-full bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 py-2 rounded-xl cursor-pointer transition font-bold text-sm shadow-sm">
+                         <Upload size={16} className="mr-2"/> Upload Absen
+                         <input type="file" className="hidden" accept=".xls, .xlsx" onChange={handleUploadRekapAbsensi} />
+                       </label>
+                     </div>
+                   </div>
+
+                   {/* TABEL HASIL */}
+                   <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                     <table className="min-w-full text-left text-sm whitespace-nowrap">
+                       <thead className="bg-slate-100 text-[10px] text-slate-500 uppercase border-b border-slate-200">
+                         <tr>
+                           <th className="px-4 py-3 font-black">Karyawan (NIK)</th>
+                           <th className="px-4 py-3 font-black text-center">Periode</th>
+                           <th className="px-4 py-3 font-black text-center">Site Penempatan</th>
+                           <th className="px-4 py-3 font-black text-center">Detail Kehadiran</th>
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                         {attendanceData
+                           .filter(item => 
+                             (item.nama.toLowerCase().includes(searchAttendance.toLowerCase()) || item.nik.includes(searchAttendance)) &&
+                             (filterPeriodAttendance === '' || item.periode === filterPeriodAttendance)
+                           )
+                           .map((item, idx) => (
+                           <React.Fragment key={idx}>
+                             <tr className="hover:bg-slate-50 transition-colors">
+                               <td className="px-4 py-3">
+                                 <div className="font-bold text-slate-800">{item.nama}</div>
+                                 <div className="text-[10px] text-slate-500">NIK: {item.nik}</div>
+                               </td>
+                               <td className="px-4 py-3 text-center font-bold text-teal-700 bg-teal-50/50">{item.periode}</td>
+                               <td className="px-4 py-3 text-center text-xs font-medium text-slate-600">{item.site}</td>
+                               <td className="px-4 py-3 text-center">
+                                 <button onClick={() => setExpandedAttendanceRow(expandedAttendanceRow === idx ? null : idx)} className="text-teal-600 bg-teal-50 border border-teal-100 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-100 transition flex items-center gap-1 mx-auto shadow-sm">
+                                   {expandedAttendanceRow === idx ? <ChevronDown size={14}/> : <ChevronRight size={14}/>} Buka {item.records.length} Hari Kehadiran
+                                 </button>
+                               </td>
+                             </tr>
+                             {/* DROPDOWN EXPAND ROW */}
+                             {expandedAttendanceRow === idx && (
+                               <tr>
+                                 <td colSpan="4" className="bg-slate-50 p-4 border-b border-slate-200 shadow-inner">
+                                   <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-lg bg-white custom-scrollbar">
+                                     <table className="w-full text-left text-xs">
+                                       <thead className="bg-slate-100 sticky top-0 text-[10px] uppercase text-slate-500 shadow-sm z-10">
+                                         <tr>
+                                           <th className="px-4 py-2">Hari, Tanggal</th>
+                                           <th className="px-4 py-2 text-center">Jam Masuk</th>
+                                           <th className="px-4 py-2 text-center">Jam Keluar</th>
+                                           <th className="px-4 py-2 text-right">Keterangan</th>
+                                           <th className="px-4 py-2 text-center">Aksi</th>
+                                         </tr>
+                                       </thead>
+                                       <tbody className="divide-y divide-slate-100">
+                                         {item.records.map((rec, rIdx) => {
+                                           const isEditing = editingAtt?.nik === item.nik && editingAtt?.rIdx === rIdx;
+                                           const isPendingDelete = pendingDeletes.some(p => p.nik === item.nik && p.rIdx === rIdx);
+
+                                           return (
+                                           <tr key={rIdx} className={`hover:bg-slate-50 ${isPendingDelete ? 'bg-rose-50/50' : ''}`}>
+                                             <td className="px-4 py-2 font-medium">{rec.hari}, {rec.tanggal}</td>
+                                             {isEditing ? (
+                                                <>
+                                                  <td className="px-4 py-2 text-center"><input type="time" value={editAttData.jamMasuk} onChange={e => setEditAttData({...editAttData, jamMasuk: e.target.value})} className="border rounded px-1 py-1 text-xs focus:outline-blue-500" /></td>
+                                                  <td className="px-4 py-2 text-center"><input type="time" value={editAttData.jamKeluar} onChange={e => setEditAttData({...editAttData, jamKeluar: e.target.value})} className="border rounded px-1 py-1 text-xs focus:outline-blue-500" /></td>
+                                                  <td className="px-4 py-2 text-right"><input type="text" value={editAttData.keterangan_asli} onChange={e => setEditAttData({...editAttData, keterangan_asli: e.target.value})} className="border rounded px-2 py-1 text-xs w-full focus:outline-blue-500" /></td>
+                                                  <td className="px-4 py-2 text-center flex items-center justify-center gap-2">
+                                                    <button onClick={handleSaveAttEdit} className="text-emerald-600 hover:text-white hover:bg-emerald-500 border border-emerald-500 rounded px-2 py-1 transition">Simpan</button>
+                                                    <button onClick={() => setEditingAtt(null)} className="text-slate-500 hover:text-slate-800 bg-slate-200 rounded px-2 py-1 transition">Batal</button>
+                                                  </td>
+                                                </>
+                                             ) : (
+                                                <>
+                                                  <td className="px-4 py-2 text-center font-bold text-emerald-600">{rec.jamMasuk}</td>
+                                                  <td className="px-4 py-2 text-center font-bold text-blue-600">{rec.jamKeluar}</td>
+                                                  <td className="px-4 py-2 text-right">
+                                                    <div className="flex flex-col items-end">
+                                                      <span className="font-bold">{rec.keterangan_asli}</span>
+                                                      {rec.telatMenit > 0 ? (
+                                                        <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded text-[9px] border border-red-100 mt-1">Telat {rec.telatMenit} Menit</span>
+                                                      ) : (
+                                                        <span className="text-slate-400 text-[9px] font-bold mt-1">Tepat Waktu</span>
+                                                      )}
+                                                    </div>
+                                                  </td>
+                                                  <td className="px-4 py-2 text-center align-middle">
+                                                    {isPendingDelete ? (
+                                                        user?.role === 'admin' ? (
+                                                          <div className="flex flex-col gap-1 items-center">
+                                                            <span className="text-[9px] text-rose-600 font-bold border border-rose-200 bg-white px-2 rounded-full mb-1">Menunggu Approval Hapus</span>
+                                                            <div className="flex justify-center gap-1.5">
+                                                              <button onClick={() => handleApproveDelete(item.nik, rIdx)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow-sm transition">Setuju</button>
+                                                              <button onClick={() => handleRejectDelete(item.nik, rIdx)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-[10px] font-bold transition">Tolak</button>
+                                                            </div>
+                                                          </div>
+                                                        ) : (
+                                                          <span className="text-[10px] text-orange-500 font-bold bg-orange-50 border border-orange-200 px-2 py-1 rounded animate-pulse">Menunggu Approval Admin...</span>
+                                                        )
+                                                    ) : (
+                                                        <div className="flex justify-center gap-2">
+                                                          <button onClick={() => handleEditAttClick(item.nik, rIdx, rec)} className="text-blue-500 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg transition" title="Edit Baris"><Edit size={14}/></button>
+                                                          <button onClick={() => handleDeleteAttClick(item.nik, rIdx)} className="text-rose-500 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition" title="Hapus Baris"><Trash2 size={14}/></button>
+                                                        </div>
+                                                    )}
+                                                  </td>
+                                                </>
+                                             )}
+                                           </tr>
+                                           );
+                                         })}
+                                       </tbody>
+                                     </table>
+                                   </div>
+                                 </td>
+                               </tr>
+                             )}
+                           </React.Fragment>
+                         ))}
+                         {attendanceData.length === 0 && (
+                           <tr><td colSpan="4" className="text-center py-12 text-slate-400 text-xs font-bold bg-slate-50/50">Belum ada data absensi yang diunggah. Silahkan upload excel terlebih dahulu.</td></tr>
+                         )}
+                       </tbody>
+                     </table>
+                   </div>
+                </div>
+             </div>
+             ) : currentView.module === 'ATTENDANCE' && currentView.filter === 'LEADERBOARD' ? (
+             <div className="animate-fade-in max-w-7xl mx-auto">
+                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mb-6">
+                   <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
+                      <div>
+                         <h2 className="font-black text-2xl text-slate-800 mb-2 flex items-center gap-2"><Briefcase className="text-amber-500"/> Leaderboard & Ranking KPI</h2>
+                         <p className="text-slate-500 text-sm">Akumulasi performa karyawan berdasarkan kedisiplinan (Absensi) dan kinerja tugas (Task Management).</p>
+                      </div>
+                   </div>
+
+                   {/* FILTER LEADERBOARD & TOMBOL CETAK */}
+                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6 flex flex-col xl:flex-row gap-4 xl:items-end justify-between">
+                      <div className="flex flex-col md:flex-row gap-4 flex-1">
+                          <div className="flex-1">
+                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cari Karyawan / NIK</label>
+                             <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input type="text" value={leaderboardSearch} onChange={e => setLeaderboardSearch(e.target.value)} placeholder="Ketik pencarian..." className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700 shadow-sm" />
+                             </div>
+                          </div>
+                          <div className="flex-1">
+                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Periode Bulan</label>
+                             <input type="month" value={leaderboardFilterPeriod} onChange={e => setLeaderboardFilterPeriod(e.target.value)} className="w-full py-2.5 px-4 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700 shadow-sm" />
+                          </div>
+                          <div className="flex-1">
+                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Tampilkan Nilai</label>
+                             <select value={leaderboardFilterType} onChange={e => setLeaderboardFilterType(e.target.value)} className="w-full py-2.5 px-4 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700 shadow-sm cursor-pointer">
+                                <option value="ALL">Total (Absen + Task)</option>
+                                <option value="ABSENSI">Hanya KPI Absensi</option>
+                                <option value="TASK">Hanya KPI Task Management</option>
+                             </select>
+                          </div>
+                      </div>
+                      
+                      {/* Tombol Cetak Dipindah Kesini agar Rapi */}
+                      <div className="shrink-0 pt-2 xl:pt-0 border-t border-slate-200 xl:border-0 mt-2 xl:mt-0">
+                         <button onClick={handlePrintKpiReport} disabled={isGeneratingKpiPdf} className={`w-full xl:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-black shadow-md transition-all text-xs md:text-sm ${isGeneratingKpiPdf ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-900 hover:bg-black text-white hover:-translate-y-0.5'}`}>
+                            <Printer size={16} /> {isGeneratingKpiPdf ? 'Menyusun Dokumen...' : 'Cetak Laporan PDF'}
+                         </button>
+                      </div>
+                   </div>
+
+                   {/* KALKULASI RANKING KPI (DESAIN LIST TUNGGAL & LAPORAN) */}
+                   {(() => {
+                      // 1. Ambil data SEMUA karyawan Inti
+                      const activeKaryawan = candidates.filter(c => c.status === 'INTI');
+                      
+                      // 2. Kalkulasi Nilai untuk setiap karyawan
+                      let rankingData = activeKaryawan.map(emp => {
+                         let kpiAbsen = 0; let totalMangkir = 0; let totalIzin = 0; let totalTelat = 0; let totalHadir = 0;
+                         let hasAbsensiData = false; 
+                         
+                         const empAtt = attendanceData.find(a => a.nik === emp.nik_karyawan);
+                         if (empAtt) {
+                            const filteredRecords = empAtt.records.filter(r => r.tanggal.startsWith(leaderboardFilterPeriod));
+                            if (filteredRecords.length > 0) {
+                                hasAbsensiData = true; 
+                                filteredRecords.forEach(r => {
+                                   const k = String(r.keterangan_asli || '').toLowerCase();
+                                   if (k.includes('izin')) totalIzin++;
+                                   else if (k.includes('cuti') || k.includes('libur') || k.includes('off')) { /* Aman */ }
+                                   else if (r.jamMasuk !== '-' || k.includes('hadir')) { 
+                                       totalHadir++; totalTelat += (r.telatMenit || 0); 
+                                   } else { totalMangkir++; }
+                                });
+                                kpiAbsen = kpiConfig.baseScore - (totalMangkir * kpiConfig.potongMangkir) - (totalIzin * kpiConfig.potongIzin) - (totalTelat * kpiConfig.potongTelatPerMenit);
+                                if (kpiAbsen < 0) kpiAbsen = 0;
+                            }
+                         }
+
+                         const matchedUser = users.find(u => u.nik === emp.nik_karyawan);
+                         let uPending = 0; let uProgress = 0; let uOnTime = 0; let uLate = 0; let uOverdue = 0;
+                         let skorKinerja = 0; let persentaseKualitas = 0; let taskTotal = 0;
+                         const pad = (n) => String(n).padStart(2, '0');
+                         const d = new Date();
+                         const nowLocalStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                         
+                         if (matchedUser && tasks && tasks.length > 0) {
+                             const userTasks = tasks.filter(task => {
+                                 let assignees = [];
+                                 try { assignees = typeof task.assignedTo === 'string' ? JSON.parse(task.assignedTo) : task.assignedTo; } catch(e) { assignees = [task.assignedTo]; }
+                                 if (!Array.isArray(assignees)) assignees = [assignees];
+                                 if (!assignees.map(String).includes(String(matchedUser.id))) return false;
+                                 if (leaderboardFilterPeriod && (!task.dueDate || !task.dueDate.startsWith(leaderboardFilterPeriod))) return false;
+                                 return true;
+                             });
+                             
+                             taskTotal = userTasks.length;
+                             userTasks.forEach(task => {
+                                 const hasDue = !!task.dueDate;
+                                 if (task.status === 'done') {
+                                     if (hasDue && task.completed_at && task.completed_at > task.dueDate) uLate++; else uOnTime++;
+                                 } else if (task.status === 'laporan-cleaning') uOnTime++;
+                                 else if (task.status === 'pending') { if (hasDue && task.dueDate < nowLocalStr) uOverdue++; else uPending++; } 
+                                 else { if (hasDue && task.dueDate < nowLocalStr) uOverdue++; else uProgress++; }
+                             });
+                             
+                             skorKinerja = (uOnTime * 10) + (uLate * 5) - (uOverdue * 5);
+                             const maxPossibleScore = (uOnTime + uLate + uOverdue) * 10 || 1;
+                             persentaseKualitas = Math.round((skorKinerja / maxPossibleScore) * 100);
+                             if (persentaseKualitas < 0) persentaseKualitas = 0;
+                             if (taskTotal === 0) { persentaseKualitas = 0; skorKinerja = 0; }
+                         }
+
+                         let totalKpi = 0;
+                         if (hasAbsensiData && taskTotal > 0) totalKpi = (kpiAbsen + skorKinerja) / 2;
+                         else if (hasAbsensiData) totalKpi = kpiAbsen; 
+                         else if (taskTotal > 0) totalKpi = skorKinerja;
+
+                         return {
+                            ...emp,
+                            kpiAbsen: Number(kpiAbsen.toFixed(2)),
+                            taskStats: { 
+                               taskTotal: taskTotal, 
+                               taskPending: uPending, 
+                               taskProgress: uProgress, 
+                               taskTepat: uOnTime, 
+                               taskTelat: uLate, 
+                               taskOverdue: uOverdue, 
+                               skorKinerja: skorKinerja, 
+                               kual: `${persentaseKualitas}%` 
+                            },
+                            totalKpi: Number(totalKpi.toFixed(2)),
+                            hasData: hasAbsensiData || taskTotal > 0,
+                            hasAbsensi: hasAbsensiData
+                         };
+                      });
+
+                      // Terapkan Filter & Sorting
+                      if (leaderboardSearch) {
+                         const lowerS = leaderboardSearch.toLowerCase();
+                         rankingData = rankingData.filter(r => (r.nama_lengkap && r.nama_lengkap.toLowerCase().includes(lowerS)) || (r.nik_karyawan && r.nik_karyawan.includes(leaderboardSearch)));
+                      }
+                      
+                      rankingData.sort((a, b) => {
+                         if (leaderboardFilterType === 'ABSENSI') return b.kpiAbsen - a.kpiAbsen;
+                         if (leaderboardFilterType === 'TASK') return b.taskStats.skorKinerja - a.taskStats.skorKinerja;
+                         return b.totalKpi - a.totalKpi; 
+                      });
+
+                      const getMedalClass = (index, hasData) => {
+                         if (!hasData) return 'bg-slate-100 text-slate-400 border-slate-200';
+                         if (index === 0) return 'bg-yellow-300 text-yellow-900 border-yellow-400 shadow-md'; 
+                         if (index === 1) return 'bg-slate-300 text-slate-700 border-slate-400 shadow-sm'; 
+                         if (index === 2) return 'bg-orange-300 text-orange-900 border-orange-400 shadow-sm'; 
+                         return 'bg-white text-slate-500 border-slate-200';
+                      };
+
+                      // Analisis Sorotan Eksekutif (Top 3 Terbaik & 3 Terbawah)
+                      const validStaff = rankingData.filter(r => r.hasData);
+                      const topPerformers = validStaff.slice(0, 3);
+                      // Karyawan terburuk adalah mereka yang punya skor totalKpi < 60 atau mangkir/overdue berlebih
+                      const bottomPerformers = [...validStaff].reverse().filter(r => r.totalKpi < 60 || r.taskStats.taskOverdue > 2).slice(0, 3);
+
+                      return (
+                         <div className={`bg-white border border-slate-200 rounded-[2rem] shadow-sm relative ${isGeneratingKpiPdf ? 'overflow-visible' : 'overflow-hidden'}`}>
+                            {/* === AREA YANG AKAN MASUK KE DALAM CETAKAN PDF === */}
+                            <div id="kpi-report-print-area" className={`${isGeneratingKpiPdf ? 'p-8 text-black bg-white w-[740px] m-0 origin-top-left' : 'p-0 w-full'}`}>
+                               
+                               {/* KOP SURAT PROFESIONAL (HANYA MUNCUL DI PDF) */}
+                               {isGeneratingKpiPdf && (
+                                 <div className="flex justify-between items-start border-b-[3px] border-black pb-4 mb-5 w-full">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-14 h-14 shrink-0">
+                                         <img src="/Logo_apps.png" alt="Logo Perusahaan" className="w-full h-full object-contain" />
+                                      </div>
+                                      <div>
+                                        <h1 className="text-xl font-black uppercase tracking-widest text-black leading-none">Syntegra Hub</h1>
+                                        <p className="text-xs font-bold text-black mt-1 uppercase">Laporan Evaluasi & Kinerja Karyawan (KPI)</p>
+                                        <p className="text-[9px] text-black mt-0.5 font-medium">Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64, Tangerang Selatan</p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right flex flex-col items-end shrink-0">
+                                       <div className="border-[1.5px] border-black px-3 py-1 mb-1.5 inline-block">
+                                          <p className="text-xs font-black text-black uppercase tracking-widest leading-none">RAPOR KPI</p>
+                                       </div>
+                                       <p className="text-[10px] font-bold text-black">Periode: {leaderboardFilterPeriod ? new Date(leaderboardFilterPeriod + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) : 'Semua Waktu'}</p>
+                                       <p className="text-[8px] text-black mt-1 font-bold">Dicetak: {new Date().toLocaleDateString('id-ID')} | {new Date().toLocaleTimeString('id-ID')}</p>
+                                    </div>
+                                 </div>
+                               )}
+
+                               {/* KESIMPULAN KINERJA KARYAWAN (SOROTAN DIREKSI) */}
+                               {isGeneratingKpiPdf && (
+                                 <div className="mb-5 grid grid-cols-2 gap-4 break-inside-avoid w-full">
+                                    {/* Kolom Terbaik */}
+                                    <div className="border border-black overflow-hidden bg-white">
+                                       <div className="bg-gray-100 px-3 py-1.5 border-b border-black flex items-center justify-between">
+                                          <h3 className="font-black text-[10px] text-black uppercase tracking-widest">Kinerja Terbaik (Top 3)</h3>
+                                          <span className="text-[8px] font-bold text-black border border-black px-1.5 py-0.5">Target Bonus</span>
+                                       </div>
+                                       <div className="p-2.5 bg-white space-y-1.5">
+                                          {topPerformers.length === 0 ? <p className="text-[9px] text-black font-bold italic text-center py-1">Belum ada data.</p> :
+                                           topPerformers.map((emp, i) => (
+                                              <div key={i} className="flex justify-between items-center border-b border-gray-300 pb-1 last:border-0 last:pb-0">
+                                                 <div className="flex flex-col truncate pr-2">
+                                                    <span className="font-black text-black text-[10px] truncate">{emp.nama_lengkap}</span>
+                                                    <span className="text-black text-[8px] font-bold mt-0.5 truncate">{emp.posisi_jabatan}</span>
+                                                 </div>
+                                                 <span className="font-black text-black text-sm shrink-0">{emp.totalKpi}</span>
+                                              </div>
+                                           ))
+                                          }
+                                       </div>
+                                    </div>
+
+                                    {/* Kolom Terburuk */}
+                                    <div className="border border-black overflow-hidden bg-white">
+                                       <div className="bg-gray-100 px-3 py-1.5 border-b border-black flex items-center justify-between">
+                                          <h3 className="font-black text-[10px] text-black uppercase tracking-widest">Sorotan Evaluasi (Bottom 3)</h3>
+                                          <span className="text-[8px] font-bold text-black border border-black px-1.5 py-0.5">Butuh Teguran</span>
+                                       </div>
+                                       <div className="p-2.5 bg-white space-y-1.5">
+                                          {bottomPerformers.length === 0 ? <p className="text-[9px] text-black font-bold italic text-center py-1">Aman.</p> :
+                                           bottomPerformers.map((emp, i) => (
+                                              <div key={i} className="flex justify-between items-center border-b border-gray-300 pb-1 last:border-0 last:pb-0">
+                                                 <div className="flex flex-col truncate pr-2">
+                                                    <span className="font-black text-black text-[10px] truncate">{emp.nama_lengkap}</span>
+                                                    <span className="text-black text-[8px] font-bold mt-0.5 truncate">{emp.posisi_jabatan}</span>
+                                                 </div>
+                                                 <span className="font-black text-black text-sm shrink-0">{emp.totalKpi}</span>
+                                              </div>
+                                           ))
+                                          }
+                                       </div>
+                                    </div>
+                                 </div>
+                               )}
+
+                               {/* TABEL LEADERBOARD UTAMA */}
+                               <div className={`${isGeneratingKpiPdf ? 'pb-4 w-full' : 'overflow-x-auto custom-scrollbar pb-6 w-full'}`}>
+                                  {/* PENTING: Tambahkan table-fixed dan break-words agar teks panjang turun ke bawah, tidak melebarkan tabel */}
+                                  <table className={`w-full text-left ${isGeneratingKpiPdf ? 'border-collapse border border-black bg-white table-fixed break-words' : 'text-xs min-w-full whitespace-nowrap'}`}>
+                                     
+                                     {/* HEADER TABEL: GAYA DASHBOARD VS GAYA EXCEL */}
+                                     <thead className={`font-black uppercase tracking-widest ${isGeneratingKpiPdf ? 'text-[8px] bg-gray-100 text-black border-b border-black' : 'text-[10px] text-slate-400 border-b border-slate-200 bg-slate-50 sticky top-0 z-10 shadow-sm'}`}>
+                                        <tr>
+                                           <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[6%]' : 'px-4 py-4 text-center w-12 border-r border-slate-200'}`}>Rank</th>
+                                           <th className={`${isGeneratingKpiPdf ? 'border border-black px-1.5 py-1.5 w-[30%]' : 'px-4 py-4 border-r border-slate-200'}`}>Karyawan & NIK</th>
+                                           <th className={`${isGeneratingKpiPdf ? 'border border-black px-1.5 py-1.5 w-[24%]' : 'px-4 py-4 border-r border-slate-200'}`}>Lokasi & Jabatan</th>
+                                           
+                                           {leaderboardFilterType === 'TASK' && (
+                                              <>
+                                                <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[8%]' : 'px-3 py-4 text-center'}`}>Kerja</th>
+                                                <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[8%]' : 'px-3 py-4 text-center text-blue-500'}`}>Progres</th>
+                                                <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[8%]' : 'px-3 py-4 text-center text-emerald-500'}`}>Tepat</th>
+                                                <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[8%]' : 'px-3 py-4 text-center text-amber-500'}`}>Telat</th>
+                                                <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[8%]' : 'px-3 py-4 text-center text-red-500 border-r border-slate-200'}`}>Overdue</th>
+                                              </>
+                                           )}
+                                           
+                                           {(leaderboardFilterType === 'ALL' || leaderboardFilterType === 'TASK') && (
+                                              <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[12%]' : 'px-4 py-4 text-center border-r border-slate-200 ' + (leaderboardFilterType === 'ALL' ? 'bg-white text-indigo-600' : 'bg-indigo-50/50 text-indigo-600')}`}>Skor TM</th>
+                                           )}
+                                           
+                                           {(leaderboardFilterType === 'ALL' || leaderboardFilterType === 'ABSENSI') && (
+                                              <th className={`${isGeneratingKpiPdf ? 'border border-black px-1 py-1.5 text-center w-[12%]' : 'px-4 py-4 text-center border-r border-slate-200 ' + (leaderboardFilterType === 'ALL' ? 'bg-white text-blue-600' : 'bg-blue-50/50 text-blue-600')}`}>Skor Absen</th>
+                                           )}
+                                           
+                                           {leaderboardFilterType === 'ALL' && (
+                                              <th className={`${isGeneratingKpiPdf ? 'border border-black px-1.5 py-1.5 text-center w-[16%] bg-gray-100' : 'px-6 py-4 text-center border-r border-slate-200 w-40 bg-indigo-50/50'}`}>
+                                                 {isGeneratingKpiPdf ? 'TOTAL SCORE' : (
+                                                    <>
+                                                       <div className="font-black uppercase tracking-widest text-[10px] text-indigo-700">TOTAL SCORE</div>
+                                                       <div className="text-[8px] font-bold mt-1 text-indigo-500">Gabungan</div>
+                                                    </>
+                                                 )}
+                                              </th>
+                                           )}
+                                        </tr>
+                                     </thead>
+                                     
+                                     {/* ISI TABEL: GAYA DASHBOARD VS GAYA EXCEL */}
+                                     <tbody className={isGeneratingKpiPdf ? 'bg-white text-[9px]' : 'divide-y divide-slate-100 text-xs'}>
+                                        {rankingData.map((emp, idx) => (
+                                           <tr key={emp.id} className={`${isGeneratingKpiPdf ? 'text-black bg-white border-b border-black' : 'transition-colors ' + (!emp.hasData ? 'opacity-60 bg-slate-50/50' : 'hover:bg-slate-50')} break-inside-avoid`}>
+                                              
+                                              {/* Kolom Rank */}
+                                              <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-4 py-3 text-center align-middle border-r border-slate-100'}`}>
+                                                 {isGeneratingKpiPdf ? (
+                                                    <span className="font-bold">{idx + 1}</span>
+                                                 ) : (
+                                                    <div className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center font-black border ${getMedalClass(idx, emp.hasData)}`}>{idx + 1}</div>
+                                                 )}
+                                              </td>
+                                              
+                                              {/* Kolom Nama & NIK */}
+                                              <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1.5 py-1.5 align-middle truncate' : 'px-4 py-3 align-middle border-r border-slate-100'}`}>
+                                                 <div className={`font-black ${isGeneratingKpiPdf ? 'text-[9px] text-black truncate' : 'text-xs md:text-sm text-slate-800'}`}>{emp.nama_lengkap}</div>
+                                                 <div className={`font-bold uppercase tracking-wider ${isGeneratingKpiPdf ? 'text-[7px] text-black mt-0.5 truncate' : 'text-[9px] text-slate-400 mt-0.5'}`}>NIK: {emp.nik_karyawan || '-'}</div>
+                                              </td>
+
+                                              {/* Kolom Jabatan */}
+                                              <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1.5 py-1.5 align-middle truncate' : 'px-4 py-3 align-middle border-r border-slate-100'}`}>
+                                                 <div className={`font-bold ${isGeneratingKpiPdf ? 'text-[8px] text-black truncate' : 'text-xs text-slate-600'}`}>{emp.lokasi_penempatan || 'Site Tdk Terdaftar'}</div>
+                                                 <div className={`font-medium ${isGeneratingKpiPdf ? 'text-[7px] text-black mt-0.5 truncate' : 'text-[9px] text-slate-400 mt-0.5'}`}>{emp.bidang_jasa} • {emp.posisi_jabatan}</div>
+                                              </td>
+
+                                              {/* Kolom Detail Kerja (Khusus Mode Filter Task) */}
+                                              {leaderboardFilterType === 'TASK' && (
+                                                 <>
+                                                    <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-3 py-3 text-center align-middle font-black text-sm text-slate-800'}`}>{emp.taskStats.taskTotal}</td>
+                                                    <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-3 py-3 text-center align-middle font-bold text-blue-600'}`}>{emp.taskStats.taskPending}</td>
+                                                    <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-3 py-3 text-center align-middle font-black text-emerald-600'}`}>{emp.taskStats.taskTepat}</td>
+                                                    <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-3 py-3 text-center align-middle font-bold text-amber-500'}`}>{emp.taskStats.taskTelat}</td>
+                                                    <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-3 py-3 text-center align-middle font-black text-red-600 border-r border-slate-100'}`}>{emp.taskStats.taskOverdue}</td>
+                                                 </>
+                                              )}
+                                              
+                                              {/* Kolom Skor TM */}
+                                              {(leaderboardFilterType === 'ALL' || leaderboardFilterType === 'TASK') && (
+                                                 <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-4 py-3 text-center align-middle border-r border-slate-100 ' + (leaderboardFilterType === 'ALL' ? 'bg-white' : 'bg-indigo-50/20')}`}>
+                                                    {emp.taskStats.taskTotal > 0 ? (
+                                                       <div className="flex flex-col items-center justify-center h-full">
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-[10px] text-black' : 'text-lg ' + (leaderboardFilterType === 'ALL' ? 'text-slate-800' : 'text-indigo-700')}`}>{emp.taskStats.skorKinerja}</span>
+                                                       </div>
+                                                    ) : (
+                                                       <div className={`flex flex-col items-center justify-center h-full ${isGeneratingKpiPdf ? 'text-black' : 'opacity-60'}`}>
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-[10px]' : 'text-lg text-slate-300'}`}>0</span>
+                                                          {!isGeneratingKpiPdf && <span className="bg-slate-100 text-slate-400 border border-slate-200 text-[8px] font-black px-2 py-0.5 rounded-full mt-1">N/A</span>}
+                                                       </div>
+                                                    )}
+                                                 </td>
+                                              )}
+
+                                              {/* Kolom Skor Absen */}
+                                              {(leaderboardFilterType === 'ALL' || leaderboardFilterType === 'ABSENSI') && (
+                                                 <td className={`${isGeneratingKpiPdf ? 'border-r border-black px-1 py-1.5 text-center align-middle' : 'px-4 py-3 text-center align-middle border-r border-slate-100 ' + (leaderboardFilterType === 'ALL' ? 'bg-white' : 'bg-blue-50/20')}`}>
+                                                    {emp.hasData && emp.kpiAbsen > 0 ? (
+                                                       <div className="flex flex-col items-center justify-center h-full">
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-[10px] text-black' : 'text-lg text-slate-800'}`}>{emp.kpiAbsen}</span>
+                                                       </div>
+                                                    ) : (
+                                                       <div className={`flex flex-col items-center justify-center h-full ${isGeneratingKpiPdf ? 'text-black' : 'opacity-60'}`}>
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-[10px]' : 'text-lg text-slate-300'}`}>0</span>
+                                                          {!isGeneratingKpiPdf && <span className="bg-slate-100 text-slate-400 border border-slate-200 text-[8px] font-black px-2 py-0.5 rounded-full mt-1">N/A</span>}
+                                                       </div>
+                                                    )}
+                                                 </td>
+                                              )}
+
+                                              {/* Kolom Total Gabungan */}
+                                              {leaderboardFilterType === 'ALL' && (
+                                                 <td className={`${isGeneratingKpiPdf ? 'px-2 py-1.5 text-center align-middle bg-gray-100' : 'px-6 py-3 text-center align-middle border-r border-slate-100 bg-indigo-50/20'}`}>
+                                                    {emp.hasData ? (
+                                                       <div className="flex flex-col items-center justify-center h-full">
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-xs text-black' : 'text-xl md:text-2xl ' + (emp.totalKpi >= 90 ? 'text-emerald-600' : emp.totalKpi >= 70 ? 'text-amber-500' : 'text-rose-600')}`}>
+                                                             {emp.totalKpi}
+                                                          </span>
+                                                       </div>
+                                                    ) : (
+                                                       <div className={`flex flex-col items-center justify-center h-full ${isGeneratingKpiPdf ? 'text-black' : 'opacity-60'}`}>
+                                                          <span className={`font-black ${isGeneratingKpiPdf ? 'text-xs' : 'text-xl text-slate-300'}`}>0</span>
+                                                       </div>
+                                                    )}
+                                                 </td>
+                                              )}
+                                           </tr>
+                                        ))}
+                                     </tbody>
+                                  </table>
+                               </div>
+
+                               {/* TANDA TANGAN (HANYA MUNCUL DI PDF) */}
+                               {isGeneratingKpiPdf && (
+                                  <div className="flex justify-between mt-8 pt-4 px-8 break-inside-avoid w-full">
+                                     <div className="text-center w-48">
+                                        <p className="mb-20 font-bold text-black text-[10px]">Mengetahui,<br/>Direktur Utama / HR Manager</p>
+                                        <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px]">
+                                           ( ......................................... )
+                                        </p>
+                                     </div>
+                                     <div className="text-center w-48">
+                                        <p className="mb-20 font-bold text-black text-[10px]">Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>System Admin / Pembuat Laporan</p>
+                                        <p className="font-bold text-black border-t border-black pt-1 uppercase text-[10px]">
+                                           {currentUser?.name || 'Administrator'}
+                                        </p>
+                                     </div>
+                                  </div>
+                               )}
+                            </div>
+                         </div>
+                      );
+                   })()}
+                </div>
+             </div>
+          ) : currentView.module === 'PAYROLL' ? (
              <div className="animate-fade-in max-w-7xl mx-auto">
                 {currentView.filter === 'PROCESS' && (
                    <>
@@ -1789,6 +3418,43 @@ const AdminDashboard = ({ setAuth }) => {
                     )}
                   </div>
 
+                  {/* FILTER TAMBAHAN KHUSUS RECRUITMENT */}
+                {currentView.module === 'RECRUITMENT' && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100 animate-fade-in">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Filter Gender</label>
+                      <select value={filterGender} onChange={(e) => setFilterGender(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-blue-500 text-slate-700 font-bold">
+                        <option value="">Semua Gender</option>
+                        <option value="Laki-laki">Laki-laki</option>
+                        <option value="Perempuan">Perempuan</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Filter Umur</label>
+                      <select value={filterAge} onChange={(e) => setFilterAge(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-blue-500 text-slate-700 font-bold">
+                        <option value="">Semua Umur</option>
+                        <option value="under_25">Gen Z (Maks 25 Thn)</option>
+                        <option value="26_35">Milenial (26 - 35 Thn)</option>
+                        <option value="36_45">Senior (36 - 45 Thn)</option>
+                        <option value="over_45">Veteran (&gt; 45 Thn)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Pendidikan Terakhir</label>
+                      <select value={filterEdu} onChange={(e) => setFilterEdu(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-blue-500 text-slate-700 font-bold">
+                        <option value="">Semua Pendidikan</option>
+                        <option value="sma">SMA / SMK / Sederajat</option>
+                        <option value="diploma">D3 / Diploma</option>
+                        <option value="sarjana">S1 / Sarjana ke atas</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Min. Tinggi (cm)</label>
+                      <input type="number" value={filterHeight} onChange={(e) => setFilterHeight(e.target.value)} placeholder="Contoh: 165" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-blue-500 text-slate-700 font-bold" />
+                    </div>
+                  </div>
+                )}
+
                   <div className="flex gap-2 h-[42px] overflow-x-auto">
                     {currentView.module === 'HRIS' && (
                       <>
@@ -1821,17 +3487,26 @@ const AdminDashboard = ({ setAuth }) => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {displayData.map((c) => (
+                        {displayData.map((c) => {
+                          const edu = getHighestEducation(c.riwayat_pendidikan);
+                          const age = calculateAge(c.tanggal_lahir);
+                          return (
                           <tr key={c.id} className={`transition-colors ${selectedIds.includes(c.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50/50'}`}>
                             <td className="px-4 py-4 text-center align-top pt-5"><input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => toggleSelect(c.id)} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600 cursor-pointer" /></td>
                             <td className="px-4 py-4">
                               <div className="font-black text-slate-900 text-sm">{c.nama_lengkap}</div>
-                              {currentView.module === 'HRIS' ? (
-                                <div className="text-[11px] font-bold text-blue-700 mt-1 flex items-center gap-1"><span className="bg-blue-100 px-2 py-0.5 rounded border border-blue-200">NIK: {c.nik_karyawan || 'Belum Diisi'}</span></div>
-                              ) : (
-                                <div className="text-[11px] font-medium text-slate-500 mt-0.5">{c.jenis_kelamin} • {c.tanggal_lahir}</div>
+                              {currentView.module === 'HRIS' && (
+                                <div className="text-[11px] font-bold text-blue-700 mt-1 mb-1 flex items-center gap-1"><span className="bg-blue-100 px-2 py-0.5 rounded border border-blue-200 shadow-sm">NIK: {c.nik_karyawan || 'Belum Diatur'}</span></div>
                               )}
-                              <div className="text-[11px] font-bold text-slate-500 mt-1 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> HP: {c.no_hp || '-'}</div>
+                              <div className="text-[10px] font-medium mt-0.5 flex flex-wrap items-center gap-1">
+                                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded">
+                                  {c.jenis_kelamin || 'Gender (-)'} {age > 0 ? `• ${age} Thn` : ''}
+                                </span>
+                                <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded font-bold">
+                                  {edu !== 'Tidak Diketahui' ? edu : 'Pendidikan (-)'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] font-bold text-slate-500 mt-1.5 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-sm"></span> HP: {c.no_hp || '-'}</div>
                             </td>
                             <td className="px-4 py-4">
                               <div className="font-bold text-slate-800 text-[11px] mb-1">{c.bidang_jasa}</div>
@@ -1839,7 +3514,9 @@ const AdminDashboard = ({ setAuth }) => {
                               
                               {currentView.module === 'HRIS' ? (
                                 <div className="mt-1">
-                                  {c.kategori_karyawan === 'Internal HO' ? <span className="inline-flex items-center gap-1 bg-slate-900 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Building2 size={10}/> Karyawan Internal</span> : <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Map size={10}/> Pekerja Site</span>}
+
+<Map size={10}/>
+{c.kategori_karyawan === 'Internal HO' ? <span className="inline-flex items-center gap-1 bg-slate-900 text-white text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"><Building2 size={10}/> Karyawan Internal</span> : <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase"> Pekerja Site</span>}
                                 </div>
                               ) : (
                                 <div className="text-[11px] text-slate-500 flex items-start gap-1"><MapPin size={12} className="mt-0.5 flex-shrink-0"/> {c.alamat_domisili || '-'}</div>
@@ -1854,7 +3531,8 @@ const AdminDashboard = ({ setAuth }) => {
                               <button onClick={() => { setSelectedCandidate(c); setLokasiInput(c.lokasi_penempatan || ''); setNikInput(c.nik_karyawan || ''); setIsEditingProfile(false); setEditProfileData(c); }} className="bg-slate-100 hover:bg-slate-200 text-blue-700 border border-slate-200 text-xs px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm w-full md:w-auto">Buka Profil</button>
                             </td>
                           </tr>
-                        ))}
+                        );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2373,6 +4051,8 @@ const AdminDashboard = ({ setAuth }) => {
                         <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Penguasaan Bahasa ID</label><select value={editProfileData.bahasa_indonesia || ''} onChange={e => setEditProfileData({...editProfileData, bahasa_indonesia: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-blue-500"><option value="Baik">Baik</option><option value="Cukup">Cukup</option><option value="Kurang">Kurang</option></select></div>
                         <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Penguasaan Bahasa EN</label><select value={editProfileData.bahasa_inggris || ''} onChange={e => setEditProfileData({...editProfileData, bahasa_inggris: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-blue-500"><option value="Baik">Baik</option><option value="Cukup">Cukup</option><option value="Kurang">Kurang</option></select></div>
                         
+                        <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Pendidikan Terakhir</label><textarea value={editProfileData.riwayat_pendidikan || ''} onChange={e => setEditProfileData({...editProfileData, riwayat_pendidikan: e.target.value})} placeholder="Contoh: S1 Sistem Informasi - Univ Brawijaya / SMA Negeri 1" rows="2" className="w-full bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-indigo-500"></textarea></div>
+
                         <div className="md:col-span-2"><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Riwayat Pekerjaan</label><textarea value={editProfileData.riwayat_kerja || ''} onChange={e => setEditProfileData({...editProfileData, riwayat_kerja: e.target.value})} rows="3" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-blue-500"></textarea></div>
                         <div className="grid grid-cols-2 gap-2">
                            <div><label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 px-1">Gaji Terakhir</label><input type="text" value={editProfileData.gaji_terakhir || ''} onChange={e => setEditProfileData({...editProfileData, gaji_terakhir: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm focus:outline-none focus:border-blue-500" /></div>
@@ -2677,6 +4357,18 @@ const AdminDashboard = ({ setAuth }) => {
         </div>
       )}
 
+      {/* --- CSS KHUSUS UNTUK CETAK LAPORAN PDF --- */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .print\\:hidden { display: none !important; }
+          .print\\:text-black { color: #000 !important; }
+          .print\\:bg-white { background-color: #fff !important; }
+          .print\\:bg-slate-100 { background-color: #f1f5f9 !important; }
+          .bg-white { background-color: #fff !important; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+      `}} />
     </div>
   );
 };

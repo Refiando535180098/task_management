@@ -112,6 +112,15 @@ const PortalHome = () => {
   const [myPayslips, setMyPayslips] = useState([]);
   const [showMyPayslipsModal, setShowMyPayslipsModal] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+  // State untuk KPI Periode Berjalan
+  const [myKpi, setMyKpi] = useState({
+    periode: new Date().toISOString().slice(0, 7),
+    kpiTask: 0,
+    kpiAbsen: 0,
+    totalKpi: 0,
+    hasTask: false,
+    hasAbsen: false
+  });
 
   // ==========================================
   //     FITUR BARU: HITUNG KENDARAAN PASAR
@@ -293,6 +302,86 @@ const PortalHome = () => {
       } else {
         setMyPayslips([]);
       }
+      // --- HITUNG KPI PERIODE BERJALAN (TASK + ABSENSI) ---
+      const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM bulan berjalan
+      const [tasksRes, attRes, cfgRes] = await Promise.all([
+        supabase.from('initial_tasks').select('*'),
+        supabase.from('hrd_attendance_records').select('*').eq('nik_karyawan', data.nik),
+        supabase.from('hrd_settings').select('*').eq('setting_type', 'KPI_CONFIG').maybeSingle()
+      ]);
+
+      const kpiCfg = cfgRes?.data?.setting_data || { baseScore: 100, potongMangkir: 20, potongIzin: 5, potongTelatPerMenit: 0.5 };
+
+      // 1. Hitung KPI Absensi Periode Berjalan
+      let kpiAbsen = 0;
+      let hasAbsensiData = false;
+      if (attRes.data && attRes.data.length > 0) {
+        const filteredAtt = attRes.data.filter(r => r.tanggal && r.tanggal.startsWith(currentPeriod));
+        if (filteredAtt.length > 0) {
+          hasAbsensiData = true;
+          let totalIzin = 0, totalTelat = 0, totalMangkir = 0;
+          filteredAtt.forEach(r => {
+            const k = String(r.keterangan || '').toLowerCase();
+            if (k.includes('izin')) totalIzin++;
+            else if (k.includes('cuti') || k.includes('libur') || k.includes('off')) { /* Aman */ }
+            else if (r.jam_masuk !== '-' || k.includes('hadir')) {
+              totalTelat += (Number(r.telat_menit) || 0);
+            } else {
+              totalMangkir++;
+            }
+          });
+          kpiAbsen = Number(kpiCfg.baseScore) - (totalMangkir * Number(kpiCfg.potongMangkir)) - (totalIzin * Number(kpiCfg.potongIzin)) - (totalTelat * Number(kpiCfg.potongTelatPerMenit));
+          if (kpiAbsen < 0) kpiAbsen = 0;
+        }
+      }
+
+      // 2. Hitung KPI Task Periode Berjalan
+      let skorKinerja = 0;
+      let taskTotal = 0;
+      if (tasksRes.data && tasksRes.data.length > 0) {
+        const pad = (n) => String(n).padStart(2, '0');
+        const d = new Date();
+        const nowLocalStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+        const userTasks = tasksRes.data.filter(task => {
+          let assignees = [];
+          try { assignees = typeof task.assignedTo === 'string' ? JSON.parse(task.assignedTo) : task.assignedTo; } catch(e) { assignees = [task.assignedTo]; }
+          if (!Array.isArray(assignees)) assignees = [assignees];
+          if (!assignees.map(String).includes(String(data.id))) return false;
+          if (!task.dueDate || !task.dueDate.startsWith(currentPeriod)) return false;
+          return true;
+        });
+
+        taskTotal = userTasks.length;
+        let uOnTime = 0, uLate = 0, uOverdue = 0;
+        userTasks.forEach(task => {
+          const hasDue = !!task.dueDate;
+          if (task.status === 'done') {
+            if (hasDue && task.completed_at && task.completed_at > task.dueDate) uLate++; else uOnTime++;
+          } else if (task.status === 'laporan-cleaning') {
+            uOnTime++;
+          } else {
+            if (hasDue && task.dueDate < nowLocalStr) uOverdue++;
+          }
+        });
+        skorKinerja = (uOnTime * 10) + (uLate * 5) - (uOverdue * 5);
+        if (taskTotal === 0) skorKinerja = 0;
+      }
+
+      // 3. Hitung Total KPI Gabungan
+      let totalKpi = 0;
+      if (hasAbsensiData && taskTotal > 0) totalKpi = (kpiAbsen + skorKinerja) / 2;
+      else if (hasAbsensiData) totalKpi = kpiAbsen;
+      else if (taskTotal > 0) totalKpi = skorKinerja;
+
+      setMyKpi({
+        periode: currentPeriod,
+        kpiTask: Number(skorKinerja.toFixed(2)),
+        kpiAbsen: Number(kpiAbsen.toFixed(2)),
+        totalKpi: Number(totalKpi.toFixed(2)),
+        hasTask: taskTotal > 0,
+        hasAbsen: hasAbsensiData
+      });
     }
   };
 
@@ -719,25 +808,49 @@ const PortalHome = () => {
                 <p className="text-slate-400 text-xs md:text-sm">Portal Hub ERP SYNTEGRA System</p>
               </div>
 
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl w-full md:w-auto min-w-[280px]">
-                <div className="flex items-center gap-3 mb-2 border-b border-white/10 pb-2">
-                   <div className="bg-yellow-500 p-1.5 rounded-full text-slate-950"><UserCircle size={18}/></div>
-                   <div>
-                     <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Nomor Induk Karyawan</p>
-                     <p className="font-black text-xs md:text-sm text-slate-100">{user.nik || '-'}</p>
-                   </div>
+              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl w-full md:w-auto min-w-[300px]">
+                <div className="flex items-center justify-between gap-3 mb-2 border-b border-white/10 pb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-yellow-500 p-1.5 rounded-full text-slate-950"><UserCircle size={18}/></div>
+                      <div>
+                        <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Nomor Induk Karyawan</p>
+                        <p className="font-black text-xs md:text-sm text-slate-100">{user.nik || '-'}</p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                      Periode {myKpi.periode}
+                    </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                   <div>
-                     <p className="text-[9px] text-slate-400 uppercase font-bold">Divisi</p>
-                     <p className="font-bold text-yellow-400 truncate">{user.division || user.role}</p>
-                   </div>
-                   <div>
-                     <p className="text-[9px] text-slate-400 uppercase font-bold">Jabatan</p>
-                     <p className="font-bold text-white truncate">{user.position || user.role}</p>
-                   </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3 pb-3 border-b border-white/10">
+                    <div>
+                      <p className="text-[9px] text-slate-400 uppercase font-bold">Divisi</p>
+                      <p className="font-bold text-yellow-400 truncate">{user.division || user.role}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-slate-400 uppercase font-bold">Jabatan</p>
+                      <p className="font-bold text-white truncate">{user.position || user.role}</p>
+                    </div>
                 </div>
-              </div>
+
+                {/* HIGHLIGHT TOTAL KPI & RINCIAN KECIL */}
+                <div className="bg-slate-900/80 border border-white/10 rounded-xl p-3 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[9px] text-amber-400 uppercase font-black tracking-widest">Total Perolehan KPI</p>
+                      <p className={`text-2xl md:text-3xl font-black leading-none mt-1 ${myKpi.totalKpi >= 90 ? 'text-emerald-400' : myKpi.totalKpi >= 70 ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {myKpi.totalKpi}
+                      </p>
+                    </div>
+                    <div className="text-right space-y-1 border-l border-white/10 pl-4">
+                      <p className="text-[10px] text-slate-300 font-bold">
+                        KPI Task: <span className="text-indigo-400 font-black">{myKpi.hasTask ? myKpi.kpiTask : '0 (N/A)'}</span>
+                      </p>
+                      <p className="text-[10px] text-slate-300 font-bold">
+                        KPI Absen: <span className="text-teal-400 font-black">{myKpi.hasAbsen ? myKpi.kpiAbsen : '0 (N/A)'}</span>
+                      </p>
+                    </div>
+                </div>
+            </div>
            </div>
         </div>
 
