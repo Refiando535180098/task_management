@@ -1665,11 +1665,12 @@ export default function TaskManagement() {
           return setIsGeneratingPDF(false);
         }
         const opt = {
-          margin:       [10, 10, 15, 10], 
+          margin:       [10, 10, 12, 10], 
           filename:     `Executive_Summary_${new Date().toISOString().split('T')[0]}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+          html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, windowWidth: 794, scrollY: 0 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-no-break', 'tr'] }
         };
         await html2pdf().set(opt).from(element).save();
         setIsGeneratingPDF(false); 
@@ -1681,6 +1682,7 @@ export default function TaskManagement() {
   };
 
   const handleDownloadPDF = () => {
+    window.scrollTo(0, 0);
     setIsGeneratingPDF(true);
     setTimeout(async () => {
       try {
@@ -1690,11 +1692,12 @@ export default function TaskManagement() {
           return setIsGeneratingPDF(false);
         }
         const opt = {
-          margin:       [10, 10, 15, 10], 
+          margin:       [8, 10, 10, 10], 
           filename:     `Laporan_Kinerja_${new Date().toISOString().split('T')[0]}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+          html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, windowWidth: 794, scrollX: 0, scrollY: 0 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-no-break'] }
         };
         await html2pdf().set(opt).from(element).save();
         setIsGeneratingPDF(false); 
@@ -3153,159 +3156,244 @@ export default function TaskManagement() {
                 return (
                   <div className={`${isGeneratingPDF ? '' : 'max-h-[calc(100vh-260px)] overflow-y-auto custom-scrollbar'} pb-10`}>
                     
-                    <Card id="report-pdf-content" className={`p-4 md:p-6 border-0 shadow-sm bg-white ${isGeneratingPDF ? 'text-black overflow-visible' : 'overflow-hidden'}`}>
-                      
-                      <div className="border-b-4 border-amber-600 pb-4 mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div className="flex items-center gap-4 w-full md:w-auto">
-                          <div className={`${isGeneratingPDF ? 'w-20 h-20' : 'w-12 h-12 md:w-16 md:h-16'} flex items-center justify-center shrink-0`}>
+                    {!isGeneratingPDF && (
+                      <div className="flex justify-between items-center bg-slate-900 text-white px-5 py-3.5 rounded-2xl mb-4 shadow-md print:hidden max-w-[794px] mx-auto">
+                        <div className="flex items-center gap-3">
+                          <Printer className="w-5 h-5 text-amber-400 shrink-0" />
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-wider">Pratinjau Dokumen A4 Portrait</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Tata letak laporan telah disesuaikan secara presisi untuk kertas A4 Portrait.</p>
+                          </div>
+                        </div>
+                        <button type="button" onClick={handleDownloadPDF} className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-500 rounded-xl font-black text-xs shadow-md transition-all shrink-0 cursor-pointer">
+                          <Download className="w-4 h-4"/> Unduh PDF (A4)
+                        </button>
+                      </div>
+                    )}
+
+                    <Card
+                      id="report-pdf-content"
+                      className={`bg-white mx-auto ${
+                        isGeneratingPDF
+                          ? 'w-[718px] max-w-[718px] pt-1 px-1 pb-8 border-0 shadow-none rounded-none text-slate-900 overflow-visible'
+                          : 'w-full max-w-[794px] p-6 md:p-10 border border-slate-200 shadow-lg rounded-xl overflow-hidden'
+                      }`}
+                    >
+                      {/* KOP SURAT KORPORAT RESMI */}
+                      <div className="border-b-[3px] border-slate-900 pb-3.5 mb-1 flex justify-between items-center gap-4 pdf-no-break">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-14 h-14 flex items-center justify-center shrink-0">
                             <img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" />
                           </div>
-                          <div className="flex-1">
-                            <h1 className={`${isGeneratingPDF ? 'text-3xl' : 'text-lg md:text-xl'} font-black text-slate-900 tracking-tight uppercase leading-tight`}>{sysConfig.brandName}</h1>
-                            <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[8px] md:text-[12px]'} font-bold text-slate-600 mt-1 leading-snug`}>Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br /> WetanTangerang, Kec. Serpong, Banten 15310</p>
-                            <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[8px] md:text-[12px]'} font-bold text-slate-600`}>Telp: 0800 1778889</p>
-                          </div>
-                        </div>
-
-                        {!isGeneratingPDF && (
-                          <div className="flex w-full md:w-auto justify-end shrink-0 pt-3 md:pt-0">
-                            <button type="button" onClick={handleDownloadPDF} className="flex items-center justify-center gap-2 px-6 py-3 w-full md:w-auto bg-blue-600 text-white hover:bg-blue-700 rounded-xl font-bold text-xs md:text-sm shadow-md transition-all">
-                              <Download className="w-4 h-4 md:w-5 md:h-5"/> Unduh PDF
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-center py-2 mb-4">
-                        <h2 className={`${isGeneratingPDF ? 'text-2xl' : 'text-base md:text-lg'} font-black text-slate-800 uppercase tracking-widest underline underline-offset-4 decoration-2`}>
-                          {isGlobalMode ? 'Laporan Kinerja Global' : 'Laporan Kinerja Karyawan'}
-                        </h2>
-                        <p className={`${isGeneratingPDF ? 'text-sm' : 'text-[10px] md:text-xs'} text-slate-500 font-bold mt-2`}>Periode: {periodeCetak}</p>
-                      </div>
-
-                      <div className="mb-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border border-slate-300 rounded-xl p-3 md:p-4">
-                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Karyawan / Target</span><span className={`font-black text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.name}</span></div>
-                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Posisi Jabatan</span><span className={`font-bold text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.position}</span></div>
-                          <div><span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Departemen</span><span className={`font-bold text-slate-800 ${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} block mt-1`}>{targetUser.division}</span></div>
                           <div>
-                            <span className={`block ${isGeneratingPDF ? 'text-xs' : 'text-[8px] md:text-[9px]'} font-black text-slate-400 uppercase tracking-widest`}>Penyelesaian (KPI)</span>
-                            <span className={`font-black text-emerald-600 ${isGeneratingPDF ? 'text-xl' : 'text-sm md:text-base'} block`}>{tRate}%</span>
-                            <span className={`block ${isGeneratingPDF ? 'text-[10px]' : 'text-[7px] md:text-[8px]'} font-bold text-slate-500 mt-1`}>Tepat: {tDoneOnTime} | Telat: {tDoneLate} | Total: {tTotal}</span>
+                            <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">{sysConfig.brandName}</h1>
+                            <p className="text-[10px] font-semibold text-slate-600 mt-1.5 leading-snug">
+                              Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br />
+                              Lengkong Wetan, Kec. Serpong, Kota Tangerang Selatan, Banten 15310
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-700 mt-0.5">Telp: 0800 1778889</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-b border-amber-500 mb-5"></div>
+
+                      {/* JUDUL LAPORAN */}
+                      <div className="text-center mb-5 pdf-no-break">
+                        <h2 className="text-base font-black text-slate-900 uppercase tracking-[0.15em]">
+                          {isGlobalMode ? 'LAPORAN KINERJA GLOBAL' : 'LAPORAN KINERJA KARYAWAN'}
+                        </h2>
+                        <div className="w-48 h-[1.5px] bg-slate-800 mx-auto my-1"></div>
+                        <p className="text-[11px] text-slate-600 font-bold">Periode Evaluasi: {periodeCetak}</p>
+                      </div>
+
+                      {/* KOTAK INFORMASI KARYAWAN / TARGET */}
+                      <div className="mb-6 border border-slate-300 rounded-lg overflow-hidden bg-slate-50/60 pdf-no-break">
+                        <div className="grid grid-cols-4 divide-x divide-slate-300">
+                          <div className="p-3">
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Karyawan / Target</span>
+                            <span className="font-black text-slate-900 text-xs block mt-1 leading-snug break-words">{targetUser.name}</span>
+                          </div>
+                          <div className="p-3">
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Posisi Jabatan</span>
+                            <span className="font-bold text-slate-800 text-xs block mt-1 leading-snug break-words">{targetUser.position || '-'}</span>
+                          </div>
+                          <div className="p-3">
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Departemen / Divisi</span>
+                            <span className="font-bold text-slate-800 text-xs block mt-1 leading-snug break-words">{targetUser.division || '-'}</span>
+                          </div>
+                          <div className="p-3 bg-white">
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Pencapaian (KPI)</span>
+                            <div className="flex items-baseline gap-2 mt-0.5">
+                              <span className={`font-black text-lg leading-none ${tRate >= 80 ? 'text-emerald-600' : tRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{tRate}%</span>
+                              <span className="text-[8px] font-bold text-slate-500">({tDoneTotal}/{tTotal} Selesai)</span>
+                            </div>
+                            <span className="block text-[8px] font-bold text-slate-500 mt-1">
+                              Tepat: {tDoneOnTime} | Telat: {tDoneLate} | Total: {tTotal}
+                            </span>
                           </div>
                         </div>
                       </div>
 
+                      {/* REKAP KPI PERORANGAN (JIKA MODE GLOBAL) */}
                       {isGlobalMode && (
-                        <div className="w-full mb-8">
-                          <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><BarChart3 className="w-4 h-4"/> Rekap KPI Perorangan (Seluruh Karyawan)</h3>
-                          <div className="overflow-x-auto custom-scrollbar pb-2">
-                            <table className="w-full text-left border-collapse border border-slate-300 min-w-[600px]">
-                              <thead>
-                                <tr className="bg-slate-100 text-slate-800 uppercase tracking-widest font-black border-b border-slate-300">
-                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>No</th>
-                                  <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Nama Karyawan</th>
-                                  <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Divisi</th>
-                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Total Tugas</th>
-                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Tepat Wkt</th>
-                                  <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Terlambat</th>
-                                  <th className={`px-3 py-2 border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Skor KPI</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {individualKpis.length === 0 ? (
-                                   <tr><td colSpan="7" className="py-4 text-center text-xs font-bold text-slate-400">Belum ada data.</td></tr>
-                                ) : individualKpis.map((kpi, idx) => (
-                                  <tr key={kpi.id} className="border-b border-slate-300 break-inside-avoid hover:bg-slate-50 transition-colors">
-                                     <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{idx + 1}</td>
-                                     <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.name}</td>
-                                     <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.division}</td>
-                                     <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.total}</td>
-                                     <td className={`px-3 py-2 font-bold text-emerald-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.onTime}</td>
-                                     <td className={`px-3 py-2 font-bold text-orange-600 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{kpi.late}</td>
-                                     <td className={`px-3 py-2 font-black text-center ${isGeneratingPDF ? 'text-base' : 'text-xs'} ${kpi.rate >= 80 ? 'text-emerald-600' : kpi.rate >= 50 ? 'text-amber-500' : 'text-red-600'}`}>{kpi.rate}%</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                        <div className="w-full mb-6">
+                          <div className="flex items-center justify-between mb-2 pdf-no-break">
+                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                              <BarChart3 className="w-3.5 h-3.5 text-slate-700"/> I. Rekapitulasi KPI Perorangan
+                            </h3>
+                            <span className="text-[9px] font-bold text-slate-500">Total Personel: {individualKpis.length}</span>
+                          </div>
+
+                          <div className="w-full">
+                            {/* Header Rekap */}
+                            <div className="grid grid-cols-12 bg-slate-800 text-white uppercase tracking-wider font-black text-[8px] border border-slate-800 pdf-no-break">
+                              <div className="col-span-1 px-2 py-2 text-center border-r border-slate-700">No</div>
+                              <div className="col-span-4 px-2.5 py-2 border-r border-slate-700">Nama Karyawan</div>
+                              <div className="col-span-2 px-2 py-2 border-r border-slate-700">Divisi</div>
+                              <div className="col-span-1 px-1.5 py-2 text-center border-r border-slate-700">Total</div>
+                              <div className="col-span-1 px-1.5 py-2 text-center border-r border-slate-700">Tepat</div>
+                              <div className="col-span-1 px-1.5 py-2 text-center border-r border-slate-700">Telat</div>
+                              <div className="col-span-2 px-2 py-2 text-center">Skor KPI</div>
+                            </div>
+
+                            {/* Body Rekap */}
+                            {individualKpis.length === 0 ? (
+                              <div className="py-4 text-center text-[10px] font-bold text-slate-400 border border-t-0 border-slate-300">Belum ada data.</div>
+                            ) : individualKpis.map((kpi, idx) => (
+                              <div
+                                key={kpi.id}
+                                className={`grid grid-cols-12 text-[9px] border border-slate-300 -mt-[1px] pdf-no-break ${idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}`}
+                              >
+                                <div className="col-span-1 px-2 py-1.5 font-bold text-slate-600 border-r border-slate-300 text-center">{idx + 1}</div>
+                                <div className="col-span-4 px-2.5 py-1.5 font-bold text-slate-800 border-r border-slate-300 break-words">{kpi.name}</div>
+                                <div className="col-span-2 px-2 py-1.5 font-semibold text-slate-600 border-r border-slate-300 break-words">{kpi.division}</div>
+                                <div className="col-span-1 px-1.5 py-1.5 font-bold text-blue-700 border-r border-slate-300 text-center">{kpi.total}</div>
+                                <div className="col-span-1 px-1.5 py-1.5 font-bold text-emerald-700 border-r border-slate-300 text-center">{kpi.onTime}</div>
+                                <div className="col-span-1 px-1.5 py-1.5 font-bold text-amber-600 border-r border-slate-300 text-center">{kpi.late}</div>
+                                <div className={`col-span-2 px-2 py-1.5 font-black text-center ${kpi.rate >= 80 ? 'text-emerald-600' : kpi.rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{kpi.rate}%</div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
+                      {/* RINCIAN AKTIVITAS PEKERJAAN */}
                       <div className="w-full">
-                        <h3 className={`${isGeneratingPDF ? 'text-base' : 'text-xs md:text-sm'} font-black text-slate-800 mb-3 flex items-center gap-2`}><FileText className="w-4 h-4"/> Rincian Aktivitas Pekerjaan</h3>
-                        <div className="overflow-x-auto custom-scrollbar pb-4">
-                          <table className="w-full text-left border-collapse border border-slate-300 min-w-[800px]">
-                            <thead>
-                            <tr className="bg-slate-100 text-slate-800 uppercase tracking-widest font-black border-b border-slate-300">
-                              <th className={`px-3 py-2 border-r border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>No</th>
-                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Deskripsi Tugas</th>
-                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Dikerjakan Oleh</th>
-                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Pemberi Tugas & Waktu</th>
-                              <th className={`px-3 py-2 border-r border-slate-300 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Data Approval</th>
-                              <th className={`px-3 py-2 border-slate-300 text-center ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {targetTasks.map((t, index) => { 
-                              const nowLocalStr = getNowStr();
-                              const isNotDoneOverdue = t.dueDate < nowLocalStr && t.status !== 'done';
-                              const isDoneLate = t.status === 'done' && t.completed_at && t.completed_at > t.dueDate;
-                              
-                              return (
-                                <tr key={t.id} onClick={() => handleOpenTaskDetail(t)} className="border-b border-slate-300 break-inside-avoid cursor-pointer hover:bg-slate-50 transition-colors">
-                                  <td className={`px-3 py-2 font-bold text-slate-600 border-r border-slate-300 text-center align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{index + 1}</td>
-                                  <td className={`px-3 py-2 font-bold text-slate-800 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{t.title}</td>
-                                  <td className={`px-3 py-2 font-bold text-blue-600 border-r border-slate-300 align-top ${isGeneratingPDF ? 'text-xs' : 'text-[10px]'}`}>{getAssigneesNames(t.assignedTo)}</td>
-                                  
-                                  <td className="px-3 py-2 border-r border-slate-300 align-top">
-                                    <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
-                                      <span className="text-slate-600">Oleh: <span className="font-bold text-blue-600">{getUserName(t.assignedBy)}</span></span>
-                                      <span className="text-slate-600">Diberikan: <span className="font-bold text-slate-800">{t.created_at ? formatDateTime(t.created_at) : '-'}</span></span>
-                                      <span className="text-slate-600">Deadline: <span className={`font-bold ${isNotDoneOverdue ? 'text-red-600' : 'text-slate-800'}`}>{t.dueDate ? formatDateTime(t.dueDate) : '-'}</span></span>
-                                    </div>
-                                  </td>
+                        <div className="flex items-center justify-between mb-2 pdf-no-break">
+                          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-slate-700"/> {isGlobalMode ? 'II. Rincian Aktivitas Pekerjaan' : 'Rincian Aktivitas Pekerjaan'}
+                          </h3>
+                          <span className="text-[9px] font-bold text-slate-500">Total Aktivitas: {targetTasks.length} Tugas</span>
+                        </div>
 
-                                  <td className="px-3 py-2 border-r border-slate-300 align-top">
-                                    <div className={`flex flex-col gap-1 ${isGeneratingPDF ? 'text-xs' : 'text-[9px]'}`}>
-                                      <span className="text-slate-600">Selesai: <span className="font-bold text-emerald-600">{t.completed_at ? formatDateTime(t.completed_at) : '-'}</span></span>
-                                      <span className="text-slate-600">Approve: <span className="font-bold text-blue-600">{t.approved_by ? getUserName(t.approved_by) : '-'}</span></span>
-                                    </div>
-                                  </td>
+                        <div className="w-full">
+                          {/* Table Header (Self-contained Grid Row) */}
+                          <div className="flex w-full bg-slate-800 text-white uppercase tracking-wider font-black text-[8px] border border-slate-800 pdf-no-break">
+                            <div className="w-[5%] px-1.5 py-2 text-center border-r border-slate-700 shrink-0">No</div>
+                            <div className="w-[30%] px-2.5 py-2 border-r border-slate-700 shrink-0">Deskripsi Tugas</div>
+                            <div className="w-[17%] px-2 py-2 border-r border-slate-700 shrink-0">Dikerjakan Oleh</div>
+                            <div className="w-[21%] px-2 py-2 border-r border-slate-700 shrink-0">Pemberi & Waktu</div>
+                            <div className="w-[16%] px-2 py-2 border-r border-slate-700 shrink-0">Data Approval</div>
+                            <div className="w-[11%] px-1.5 py-2 text-center shrink-0">Status</div>
+                          </div>
 
-                                  <td className={`px-3 py-2 text-center border-slate-300 font-black uppercase tracking-wider align-top ${isGeneratingPDF ? 'text-xs' : 'text-[8px]'}`}>
-                                    <div className="flex flex-col items-center justify-center gap-1.5 h-full">
-                                      {isGeneratingPDF ? (
-                                         <span className={`font-black ${t.status === 'done' ? 'text-emerald-600' : 'text-blue-600'}`}>
-                                           {t.status === 'done' ? 'SELESAI' : String(t.status).toUpperCase()}
-                                         </span>
-                                      ) : (
-                                         <Badge type={t.status}>{String(t.status).toUpperCase()}</Badge>
-                                      )}
-                                      
-                                      {isDoneLate && <span className={`bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded shadow-sm w-fit mx-auto ${isGeneratingPDF ? 'text-[9px]' : 'text-[7px]'}`}>SELESAI TELAT</span>}
-                                      {isNotDoneOverdue && <span className={`bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded shadow-sm w-fit mx-auto ${isGeneratingPDF ? 'text-[9px]' : 'text-[7px]'}`}>TERLAMBAT</span>}
-                                    </div>
-                                  </td>
-                                </tr>
-                               )
-                            })}
-                          </tbody>
-                        </table>
+                          {/* Table Body (Each Row has full 4-side border so page breaks never leave hanging lines) */}
+                          {targetTasks.length === 0 ? (
+                            <div className="py-6 text-center text-[10px] font-bold text-slate-400 border border-t-0 border-slate-300">
+                              Tidak ada rincian pekerjaan pada periode ini.
+                            </div>
+                          ) : targetTasks.map((t, index) => {
+                            const nowLocalStr = getNowStr();
+                            const isNotDoneOverdue = t.dueDate && t.dueDate < nowLocalStr && t.status !== 'done' && t.status !== 'laporan-cleaning';
+                            const isDoneLate = t.status === 'done' && t.dueDate && t.completed_at && t.completed_at > t.dueDate;
+                            const statusLabel = t.status === 'done' ? 'SELESAI' : t.status === 'in-progress' ? 'IN-PROGRESS' : t.status === 'waiting-approval' ? 'WAITING' : t.status === 'laporan-cleaning' ? 'SELESAI (OB)' : String(t.status).toUpperCase();
+
+                            return (
+                              <div
+                                key={t.id}
+                                onClick={() => !isGeneratingPDF && handleOpenTaskDetail(t)}
+                                className={`flex w-full text-[9px] border border-slate-300 -mt-[1px] pdf-no-break transition-colors ${
+                                  index % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'
+                                } ${!isGeneratingPDF ? 'cursor-pointer hover:bg-blue-50/40' : ''}`}
+                              >
+                                <div className="w-[5%] px-1.5 py-2 font-bold text-slate-600 border-r border-slate-300 text-center shrink-0">
+                                  {index + 1}
+                                </div>
+
+                                <div className="w-[30%] px-2.5 py-2 font-bold text-slate-800 border-r border-slate-300 break-words leading-snug shrink-0">
+                                  {t.title}
+                                </div>
+
+                                <div className="w-[17%] px-2 py-2 font-bold text-blue-700 border-r border-slate-300 break-words leading-snug uppercase shrink-0">
+                                  {getAssigneesNames(t.assignedTo)}
+                                </div>
+
+                                <div className="w-[21%] px-2 py-2 border-r border-slate-300 shrink-0">
+                                  <div className="flex flex-col gap-0.5 leading-tight">
+                                    <span className="text-slate-600">Oleh: <span className="font-bold text-slate-900 uppercase">{getUserName(t.assignedBy)}</span></span>
+                                    <span className="text-slate-600">Diberikan: <span className="font-bold text-slate-800">{t.created_at ? formatDateTime(t.created_at) : '-'}</span></span>
+                                    <span className="text-slate-600">Deadline: <span className={`font-bold ${isNotDoneOverdue ? 'text-red-600' : 'text-slate-800'}`}>{t.dueDate ? formatDateTime(t.dueDate) : '-'}</span></span>
+                                  </div>
+                                </div>
+
+                                <div className="w-[16%] px-2 py-2 border-r border-slate-300 shrink-0">
+                                  <div className="flex flex-col gap-0.5 leading-tight">
+                                    <span className="text-slate-600">Selesai: <span className="font-bold text-emerald-700">{t.completed_at ? formatDateTime(t.completed_at) : '-'}</span></span>
+                                    <span className="text-slate-600">Approve: <span className="font-bold text-blue-700 uppercase">{t.approved_by ? getUserName(t.approved_by) : '-'}</span></span>
+                                  </div>
+                                </div>
+
+                                <div className="w-[11%] px-1.5 py-2 text-center uppercase tracking-wider shrink-0 flex flex-col items-center justify-center">
+                                  <span className={`text-[8.5px] font-black leading-snug ${
+                                    t.status === 'done' || t.status === 'laporan-cleaning'
+                                      ? 'text-emerald-700'
+                                      : t.status === 'in-progress'
+                                      ? 'text-blue-700'
+                                      : t.status === 'waiting-approval'
+                                      ? 'text-amber-600'
+                                      : 'text-slate-600'
+                                  }`}>
+                                    {statusLabel}
+                                  </span>
+                                  {isDoneLate && (
+                                    <span className="text-[7px] font-extrabold text-amber-600 leading-tight mt-0.5">
+                                      (Telat)
+                                    </span>
+                                  )}
+                                  {isNotDoneOverdue && (
+                                    <span className="text-[7px] font-extrabold text-red-600 leading-tight mt-0.5">
+                                      (Overdue)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                      <div className={`${isGeneratingPDF ? 'flex' : 'hidden md:flex'} justify-between mt-16 pt-8 break-inside-avoid px-8`}>
-                        <div className="text-center w-48">
-                           <p className={`mb-20 font-bold text-slate-800 ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>Mengetahui,<br/>{isGlobalMode ? 'Direktur Utama' : 'Manager Divisi'}</p>
-                           <p className={`font-bold text-slate-800 border-t border-slate-400 pt-2 uppercase ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>
-                              ( ......................................... )
-                           </p>
+
+                      {/* BLOK PENGESAHAN / TANDA TANGAN */}
+                      <div className="flex justify-between items-end pt-7 pb-6 px-6 pdf-no-break">
+                        <div className="text-center w-52">
+                          <p className="text-[10px] font-bold text-slate-700 leading-snug">
+                            Mengetahui,<br/>
+                            <span className="font-black text-slate-900">{isGlobalMode ? 'Direktur Utama' : 'Manager Divisi'}</span>
+                          </p>
+                          <div className="h-14"></div>
+                          <p className="font-bold text-slate-800 border-t border-slate-800 pt-1.5 pb-1 uppercase text-[10px] leading-normal">
+                            ( ......................................... )
+                          </p>
                         </div>
-                        <div className="text-center w-48">
-                           <p className={`mb-20 font-bold text-slate-800 ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}<br/>{isGlobalMode ? 'System Admin' : 'Pembuat Laporan'}</p>
-                           <p className={`font-bold text-slate-800 border-t border-slate-400 pt-2 uppercase ${isGeneratingPDF ? 'text-sm' : 'text-xs'}`}>
-                              {isGlobalMode ? currentUser.name : targetUser.name}
-                           </p>
+
+                        <div className="text-center w-52">
+                          <p className="text-[10px] font-bold text-slate-700 leading-snug">
+                            Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>
+                            <span className="font-black text-slate-900">{isGlobalMode ? 'System Admin' : 'Pembuat Laporan'}</span>
+                          </p>
+                          <div className="h-14"></div>
+                          <p className="font-black text-slate-900 border-t border-slate-800 pt-1.5 pb-1 uppercase text-[10px] leading-normal">
+                            {isGlobalMode ? currentUser.name : targetUser.name}
+                          </p>
                         </div>
                       </div>
                     </Card>
@@ -4876,6 +4964,7 @@ export default function TaskManagement() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+        .pdf-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
 
         @media print {
           @page { size: A4 portrait; margin: 1cm; }
