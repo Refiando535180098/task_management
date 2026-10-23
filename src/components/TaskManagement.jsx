@@ -1315,6 +1315,27 @@ export default function TaskManagement() {
   const getAvatar = (id) => users.find(u => String(u.id) === String(id))?.avatar || '??';
   const getAssigneesNames = (assignedTo) => getAssigneesArray(assignedTo).map(id => getUserName(id)).filter(name => name !== 'Unknown').join(', ') || 'Belum Ada';
 
+  // State untuk memisahkan tab "Tugas Saya" dan "Monitoring Delegasi" di halaman Tugas
+  const [taskViewMode, setTaskViewMode] = useState('my_tasks'); // 'my_tasks' | 'monitoring'
+
+  // Fungsi Validasi: Hanya bernilai TRUE jika tugas benar-benar dikerjakan oleh targetUserId
+  // Jika targetUserId adalah pemberi tugas (assignedBy) kepada orang lain, maka bernilai FALSE (Hanya Monitoring)
+  const isTaskForUser = (task, targetUserId) => {
+    if (!task || !targetUserId) return false;
+    const assignees = getAssigneesArray(task.assignedTo).map(String);
+    const uid = String(targetUserId);
+    const creatorId = String(task.assignedBy);
+
+    // 1. User harus terdaftar di dalam assignedTo
+    if (!assignees.includes(uid)) return false;
+
+    // 2. Jika user adalah pembuat tugas (assignedBy), tapi tugas ini diberikan ke orang lain juga,
+    // maka user tersebut berstatus Pemberi Tugas (Monitoring), bukan pemilik beban tugas.
+    const hasOtherAssignees = assignees.some(id => id !== uid);
+    if (creatorId === uid && hasOtherAssignees) return false;
+
+    return true;
+  };
   
   const handleLogout = () => {
     localStorage.removeItem('syntegra_user_session');
@@ -1852,7 +1873,14 @@ export default function TaskManagement() {
     return isMyOwnTask;
   });
 
-  const activeTasks = myTasks;
+  // Hanya tugas milik sendiri & tugas yang diberikan kepada saya (TIDAK termasuk tugas yang didelegasikan ke orang lain)
+  const myOwnTasks = safeTasks.filter(t => isTaskForUser(t, currentUser.id));
+
+  // Tugas yang saya berikan ke orang lain / pantauan divisi (Hanya untuk Monitoring)
+  const monitoredTasks = myTasks.filter(t => !isTaskForUser(t, currentUser.id));
+
+  // Gunakan myOwnTasks untuk status, jumlah tugas, dan KPI pribadi
+  const activeTasks = myOwnTasks;
   const isHelpdeskViewer = currentUser?.division?.toLowerCase() === 'it' || ['admin', 'direksi', 'manager'].includes(currentUser?.role) || currentUser?.tm_helpdesk_viewer;
   const urgentTasks = activeTasks.filter(t => {
     if (t.status === 'done') return false; 
@@ -2565,11 +2593,11 @@ export default function TaskManagement() {
                     
                     return (uDept === myDept || u.division === currentUser.division || allowedCustom.includes(uDept) || allowedCustom.includes(u.division));
                  }).map(u => {
-                    // Filter berdasarkan bulan jika dipilih, jika kosong ambil semua tugas dari awal
+                    // Filter hanya tugas milik karyawan tersebut (Tugas yang ia berikan ke orang lain tidak dihitung ke KPI-nya)
                     const uTasks = tasks.filter(t => {
-                       if (!getAssigneesArray(t.assignedTo).includes(u.id)) return false;
-                       if (kpiFilterMonth && (!t.dueDate || !t.dueDate.startsWith(kpiFilterMonth))) return false;
-                       return true;
+                        if (!isTaskForUser(t, u.id)) return false;
+                        if (kpiFilterMonth && (!t.dueDate || !t.dueDate.startsWith(kpiFilterMonth))) return false;
+                        return true;
                     });
                     
                     let uPending = 0, uProgress = 0, uOnTime = 0, uLate = 0, uOverdue = 0;
@@ -2780,10 +2808,32 @@ export default function TaskManagement() {
                </div>
 
                {/* KANBAN BOARD GROUPED BY DATE */}
-               <div className="min-h-[60vh]">
+               {/* PILIHAN MODE: TUGAS SAYA VS MONITORING DELEGASI */}
+                <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200/60 w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setTaskViewMode('my_tasks')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${taskViewMode === 'my_tasks' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                  >
+                    <CheckSquare className="w-4 h-4" /> Tugas Saya ({myOwnTasks.filter(t => !(isHelpdeskViewer && t.title?.startsWith('[TIKET IT]'))).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskViewMode('monitoring')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${taskViewMode === 'monitoring' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
+                  >
+                    <Users className="w-4 h-4" /> Monitoring Delegasi / Tim ({monitoredTasks.filter(t => !(isHelpdeskViewer && t.title?.startsWith('[TIKET IT]'))).length})
+                  </button>
+                </div>
+
+                {/* KANBAN BOARD GROUPED BY DATE */}
+                <div className="min-h-[60vh]">
                   {(() => {
-                     // Filter Tugas
-                     const filteredKanbanTasks = myTasks.filter(t => {
+                      // Gunakan sumber data sesuai tab (Tugas Saya vs Monitoring)
+                      const baseKanbanTasks = taskViewMode === 'my_tasks' ? myOwnTasks : monitoredTasks;
+
+                      // Filter Tugas
+                      const filteredKanbanTasks = baseKanbanTasks.filter(t => {
                         if (isHelpdeskViewer && t.title && t.title.startsWith('[TIKET IT]')) return false;
                         if (taskSearchQuery) {
                           const query = taskSearchQuery.toLowerCase();
@@ -3048,7 +3098,7 @@ export default function TaskManagement() {
                    </div>
                 );
 
-                let targetTasks = isGlobalMode ? tasks : tasks.filter(t => getAssigneesArray(t.assignedTo).includes(targetUser.id));
+                let targetTasks = isGlobalMode ? tasks : tasks.filter(t => isTaskForUser(t, targetUser.id));
                 if (reportFilterMonth) {
                   targetTasks = targetTasks.filter(t => t.dueDate.startsWith(reportFilterMonth));
                 }
@@ -3080,7 +3130,7 @@ export default function TaskManagement() {
                 let individualKpis = [];
                 if (isGlobalMode) {
                    individualKpis = users.filter(u => !u.isResign && (u.role === 'staff' || u.role === 'manager')).map(user => {
-                      let uTasks = tasks.filter(t => getAssigneesArray(t.assignedTo).includes(user.id));
+                      let uTasks = tasks.filter(t => isTaskForUser(t, user.id));
                       if (reportFilterMonth) uTasks = uTasks.filter(t => t.dueDate && t.dueDate.startsWith(reportFilterMonth));
                       
                       const utTotal = uTasks.length;
@@ -3332,7 +3382,7 @@ export default function TaskManagement() {
                                   {groupedData[dept][div].map(staff => {
                                       // Gunakan filter periode jika ada, jika tidak tampilkan Semua Waktu
                                       const filteredTasks = tasks.filter(t => {
-                                          if (!getAssigneesArray(t.assignedTo).includes(staff.id)) return false;
+                                          if (!isTaskForUser(t, staff.id)) return false;
                                           if (kpiFilterMonth && (!t.dueDate || !t.dueDate.startsWith(kpiFilterMonth))) return false;
                                           return true;
                                       });
@@ -4182,6 +4232,7 @@ export default function TaskManagement() {
                               <div className="max-h-32 md:max-h-40 overflow-y-auto border-2 border-white rounded-xl p-2 space-y-1 bg-white shadow-inner custom-scrollbar">
                                 {users.filter(u => {
                                    if (u.isResign) return false; // Karyawan Resign hilang dari pilihan delegasi
+                                   if (String(u.id) === String(currentUser?.id)) return false; // Sembunyikan diri sendiri saat mode delegasi ke orang lain
                                    let hasAccess = false;
                                    if (currentUser?.role === 'direksi' || currentUser?.role === 'admin' || currentUser?.tm_access_all_tasks) hasAccess = (u.role === 'manager' || u.role === 'staff');
                                    else if (currentUser?.role === 'manager' || currentUser?.tm_monitor_division) hasAccess = (u.role === 'staff' || u.role === 'manager'); 
