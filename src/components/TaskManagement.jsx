@@ -1708,6 +1708,88 @@ export default function TaskManagement() {
     }, 800); 
   };
 
+  const [isGeneratingSinglePDF, setIsGeneratingSinglePDF] = useState(false);
+  const [pdfTaskImages, setPdfTaskImages] = useState({});
+
+  const isImageFile = (file) => {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    const url = String(file.url || '').toLowerCase().split('?')[0];
+    const exts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    return type.startsWith('image/') || exts.some(ext => name.endsWith(ext) || url.endsWith(ext));
+  };
+
+  const handleDownloadSingleTaskPDF = async () => {
+    if (!selectedTask) return;
+    setIsGeneratingPDF(true);
+    setIsGeneratingSinglePDF(true);
+
+    // 1. Konversi foto lampiran ke Base64 agar 100% tampil di PDF
+    const imageAttachments = (selectedTask.attachments || []).filter(isImageFile);
+
+    const loadedImages = {};
+    for (const img of imageAttachments) {
+      try {
+        let blob = null;
+        if (img.url && img.url.includes('/task-attachments/')) {
+          const storageFileName = img.url.split('/task-attachments/')[1]?.split('?')[0];
+          if (storageFileName) {
+            const { data, error } = await supabase.storage.from('task-attachments').download(decodeURIComponent(storageFileName));
+            if (!error && data) blob = data;
+          }
+        }
+        if (!blob && img.url) {
+          const response = await fetch(img.url, { mode: 'cors' });
+          if (response.ok) blob = await response.blob();
+        }
+        if (blob) {
+          const base64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(img.url);
+            reader.readAsDataURL(blob);
+          });
+          loadedImages[img.id || img.url] = base64;
+        } else {
+          loadedImages[img.id || img.url] = img.url;
+        }
+      } catch (err) {
+        loadedImages[img.id || img.url] = img.url;
+      }
+    }
+    setPdfTaskImages(loadedImages);
+
+    // 2. Scroll ke atas & cetak dokumen A4
+    window.scrollTo(0, 0);
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById('single-task-pdf-content');
+        if (!element) {
+          alert('Gagal memproses: Template PDF tidak ditemukan.');
+          setIsGeneratingSinglePDF(false);
+          setIsGeneratingPDF(false);
+          return;
+        }
+        const opt = {
+          margin:       [8, 10, 10, 10],
+          filename:     `Laporan_Pekerjaan.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, allowTaint: true, logging: false, letterRendering: true, windowWidth: 794, scrollX: 0, scrollY: 0 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-no-break'] }
+        };
+        await html2pdf().set(opt).from(element).save();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Gagal membuat PDF: ' + error.message);
+      } finally {
+        setIsGeneratingSinglePDF(false);
+        setIsGeneratingPDF(false);
+      }
+    }, 700);
+  };
+
   const handleDownloadTemplateCSV = () => {
     const headers = "nik,password,name,role,division,position\n";
     const sampleData = "STF099,password123,Nama Lengkap,staff,Pusat,Staff Keamanan\n";
@@ -3923,6 +4005,9 @@ export default function TaskManagement() {
                                     <Trash2 className="w-3.5 h-3.5" /> <span className="hidden md:inline">Hapus Tugas</span>
                                   </button>
                                 )}
+                                <button type="button" onClick={handleDownloadSingleTaskPDF} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 text-[10px] font-black shadow-sm transition-colors ml-2">
+                                  <Download className="w-3.5 h-3.5" /> <span className="hidden md:inline">Unduh Laporan (PDF)</span>
+                                </button>
                               </div>
                               
                               <div className="flex items-center gap-2">
@@ -4899,6 +4984,246 @@ export default function TaskManagement() {
             </p>
           </div>
         </div>
+
+        {/* --- TEMPLATE CETAK PDF SATUAN --- */}
+        {selectedTask && isGeneratingSinglePDF && (() => {
+          const assigneesIds = getAssigneesArray(selectedTask.assignedTo);
+          const firstAssignee = users.find(u => String(u.id) === String(assigneesIds[0]));
+          const picDivision = firstAssignee?.division || '-';
+          const creatorUser = users.find(u => String(u.id) === String(selectedTask.assignedBy));
+          const nowLocalStr = getNowStr();
+          const isOverdue = selectedTask.dueDate && selectedTask.dueDate < nowLocalStr && selectedTask.status !== 'done' && selectedTask.status !== 'laporan-cleaning';
+          const isDoneLate = selectedTask.status === 'done' && selectedTask.dueDate && selectedTask.completed_at && selectedTask.completed_at > selectedTask.dueDate;
+
+          const imageAttachments = (selectedTask.attachments || []).filter(isImageFile);
+
+          return (
+            <div className="absolute top-0 left-0 w-full min-h-screen bg-white z-[999] py-4">
+              <div
+                id="single-task-pdf-content"
+                className="w-[718px] max-w-[718px] mx-auto pt-1 px-1 pb-8 bg-white text-slate-900 overflow-visible"
+              >
+                {/* KOP SURAT KORPORAT RESMI */}
+                <div className="border-b-[3px] border-slate-900 pb-3.5 mb-1 flex justify-between items-center gap-4 pdf-no-break">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-14 h-14 flex items-center justify-center shrink-0">
+                      <img src="/Logo_apps.png" alt="Logo" className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">{sysConfig.brandName}</h1>
+                      <p className="text-[10px] font-semibold text-slate-600 mt-1.5 leading-snug">
+                        Komp. Ruko BSD Sektor VII, Jl. Pahlawan Seribu No.63 - 64 Blok RN,<br />
+                        Lengkong Wetan, Kec. Serpong, Kota Tangerang Selatan, Banten 15310
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-700 mt-0.5">Telp: 0800 1778889</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="inline-block bg-slate-900 text-white text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded pb-1.5">
+                      DOKUMEN PELAPORAN PEKERJAAN
+                    </span>
+                    <p className="text-[9px] font-bold text-slate-500 mt-1">Ref ID: #TASK-{selectedTask.id}</p>
+                    <p className="text-[8px] font-semibold text-slate-400">
+                      Dicetak: {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="border-b border-amber-500 mb-5"></div>
+
+                {/* JUDUL FORM LAPORAN */}
+                <div className="text-center mb-5 pdf-no-break">
+                  <h2 className="text-base font-black text-slate-900 uppercase tracking-[0.15em]">
+                    {selectedTask.status === 'laporan-cleaning'
+                      ? 'FORMULIR LAPORAN KEBERSIHAN (OB)'
+                      : 'FORMULIR LAPORAN DETAIL PEKERJAAN'}
+                  </h2>
+                  <div className="w-56 h-[1.5px] bg-slate-800 mx-auto my-1"></div>
+                  <p className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">
+                    Status Saat Ini:{' '}
+                    <span className={
+                      selectedTask.status === 'done' || selectedTask.status === 'laporan-cleaning'
+                        ? 'text-emerald-700 font-black'
+                        : isOverdue
+                        ? 'text-red-600 font-black'
+                        : 'text-blue-700 font-black'
+                    }>
+                      {selectedTask.status === 'done'
+                        ? `SELESAI ${isDoneLate ? '(TERLAMBAT)' : '(TEPAT WAKTU)'}`
+                        : selectedTask.status === 'laporan-cleaning'
+                        ? 'SELESAI (LAPORAN OB)'
+                        : isOverdue
+                        ? `${selectedTask.status.toUpperCase()} - OVERDUE`
+                        : selectedTask.status.replace('-', ' ').toUpperCase()}
+                    </span>
+                  </p>
+                </div>
+
+                {/* BAGIAN I: TABEL INFORMASI PEKERJAAN */}
+                <div className="mb-5 pdf-no-break">
+                  <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    I. Informasi & Identitas Pekerjaan
+                  </h3>
+                  <div className="w-full border border-slate-400">
+                    <div className="flex w-full border-b border-slate-300 text-[10px] pdf-no-break">
+                      <div className="w-[24%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Judul Pekerjaan
+                      </div>
+                      <div className="w-[76%] px-3 py-2 font-black text-slate-900 break-words leading-snug">
+                        {selectedTask.title}
+                      </div>
+                    </div>
+
+                    <div className="flex w-full border-b border-slate-300 text-[9.5px] pdf-no-break">
+                      <div className="w-[24%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Diberikan Oleh
+                      </div>
+                      <div className="w-[32%] px-3 py-2 font-bold text-slate-800 border-r border-slate-300 uppercase break-words">
+                        {getUserName(selectedTask.assignedBy)} {creatorUser?.division ? `(${creatorUser.division})` : ''}
+                      </div>
+                      <div className="w-[20%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Prioritas Tugas
+                      </div>
+                      <div className={`w-[24%] px-3 py-2 font-black uppercase ${
+                        selectedTask.priority === 'high' ? 'text-red-600' : selectedTask.priority === 'medium' ? 'text-blue-700' : 'text-slate-700'
+                      }`}>
+                        {selectedTask.priority.toUpperCase()}
+                      </div>
+                    </div>
+
+                    <div className="flex w-full border-b border-slate-300 text-[9.5px] pdf-no-break">
+                      <div className="w-[24%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Pelaksana (PIC)
+                      </div>
+                      <div className="w-[32%] px-3 py-2 font-bold text-blue-700 border-r border-slate-300 uppercase break-words">
+                        {getAssigneesNames(selectedTask.assignedTo)}
+                      </div>
+                      <div className="w-[20%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Divisi Terkait
+                      </div>
+                      <div className="w-[24%] px-3 py-2 font-bold text-slate-800 uppercase break-words">
+                        {picDivision}
+                      </div>
+                    </div>
+
+                    <div className="flex w-full border-b border-slate-300 text-[9.5px] pdf-no-break">
+                      <div className="w-[24%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Waktu Diberikan
+                      </div>
+                      <div className="w-[32%] px-3 py-2 font-bold text-slate-800 border-r border-slate-300">
+                        {selectedTask.created_at ? formatDateTime(selectedTask.created_at) : '-'}
+                      </div>
+                      <div className="w-[20%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Batas Waktu
+                      </div>
+                      <div className={`w-[24%] px-3 py-2 font-black ${isOverdue ? 'text-red-600' : 'text-slate-800'}`}>
+                        {selectedTask.dueDate ? formatDateTime(selectedTask.dueDate) : '-'}
+                      </div>
+                    </div>
+
+                    <div className="flex w-full text-[9.5px] pdf-no-break">
+                      <div className="w-[24%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Waktu Selesai
+                      </div>
+                      <div className="w-[32%] px-3 py-2 font-black text-emerald-700 border-r border-slate-300">
+                        {selectedTask.completed_at ? formatDateTime(selectedTask.completed_at) : 'Belum Selesai'}
+                      </div>
+                      <div className="w-[20%] bg-slate-100 px-3 py-2 font-black text-slate-700 border-r border-slate-300 uppercase shrink-0">
+                        Di-Approve Oleh
+                      </div>
+                      <div className="w-[24%] px-3 py-2 font-bold text-slate-800 uppercase break-words">
+                        {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : '-'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BAGIAN II: DETAIL DESKRIPSI / CATATAN PEKERJAAN */}
+                <div className="mb-5 pdf-no-break">
+                  <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-wider mb-2">
+                    II. Rincian & Catatan Pekerjaan
+                  </h3>
+                  <div className="w-full border border-slate-400 bg-slate-50/60 p-3.5 min-h-[80px]">
+                    <p className="text-[10px] font-semibold text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
+                      {selectedTask.description || 'Tidak ada catatan atau deskripsi tambahan pada pekerjaan ini.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* BAGIAN III: DOKUMENTASI FOTO LAMPIRAN */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2 pdf-no-break">
+                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">
+                      III. Dokumentasi & Lampiran Bukti Foto
+                    </h3>
+                    <span className="text-[9px] font-bold text-slate-500">
+                      Total Lampiran Foto: {imageAttachments.length} Foto
+                    </span>
+                  </div>
+
+                  {imageAttachments.length === 0 ? (
+                    <div className="w-full border border-slate-300 bg-slate-50/40 py-6 text-center text-[9.5px] font-bold text-slate-400 pdf-no-break">
+                      Tidak ada lampiran foto dokumentasi pada pekerjaan ini.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3.5">
+                      {imageAttachments.map((img, idx) => {
+                        const imgSrc = pdfTaskImages[img.id || img.url] || img.url;
+                        return (
+                          <div
+                            key={img.id || idx}
+                            className="border border-slate-400 bg-white p-2 flex flex-col justify-between pdf-no-break"
+                          >
+                            <div className="w-full h-[190px] bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
+                              <img
+                                src={imgSrc}
+                                alt={img.name || `Foto ${idx + 1}`}
+                                className="max-w-full max-h-full object-contain"
+                                crossOrigin="anonymous"
+                              />
+                            </div>
+                            <div className="pt-2 mt-1.5 border-t border-slate-200 flex items-center justify-between gap-2 text-[8.5px]">
+                              <span className="font-black text-slate-800 truncate pb-2">
+                                Foto {idx + 1}: {img.name || 'Dokumentasi'}
+                              </span>
+                              <span className="font-bold text-slate-500 shrink-0 uppercase">
+                                Oleh: {getUserName(img.uploaderId)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* BAGIAN IV: BLOK PENGESAHAN / TANDA TANGAN */}
+                <div className="flex justify-between items-end pt-6 pb-4 px-8 border-t border-slate-300 pdf-no-break">
+                  <div className="text-center w-52">
+                    <p className="text-[10px] font-bold text-slate-700 leading-snug">
+                      Mengetahui / Menyetujui,<br />
+                      <span className="font-black text-slate-900">Pemberi Tugas / Atasan</span>
+                    </p>
+                    <div className="h-14"></div>
+                    <p className="font-black text-slate-900 border-t border-slate-800 pt-1.5 pb-1 uppercase text-[10px] leading-normal">
+                      {selectedTask.approved_by ? getUserName(selectedTask.approved_by) : getUserName(selectedTask.assignedBy)}
+                    </p>
+                  </div>
+
+                  <div className="text-center w-52">
+                    <p className="text-[10px] font-bold text-slate-700 leading-snug">
+                      Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />
+                      <span className="font-black text-slate-900">Pelaksana Pekerjaan (PIC)</span>
+                    </p>
+                    <div className="h-14"></div>
+                    <p className="font-black text-slate-900 border-t border-slate-800 pt-1.5 pb-1 uppercase text-[10px] leading-normal">
+                      {getAssigneesNames(selectedTask.assignedTo).split(',')[0]}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* === MODAL BACKUP & RESET DATABASE === */}
         {isBackupModalOpen && (
