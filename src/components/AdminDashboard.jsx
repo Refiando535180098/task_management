@@ -2472,7 +2472,7 @@ const AdminDashboard = ({ setAuth }) => {
                                <td className="px-4 py-3 text-center text-xs font-medium text-slate-600">{item.site}</td>
                                <td className="px-4 py-3 text-center">
                                  <button onClick={() => setExpandedAttendanceRow(expandedAttendanceRow === idx ? null : idx)} className="text-teal-600 bg-teal-50 border border-teal-100 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-100 transition flex items-center gap-1 mx-auto shadow-sm">
-                                   {expandedAttendanceRow === idx ? <ChevronDown size={14}/> : <ChevronRight size={14}/>} Buka {item.records.length} Hari Kehadiran
+                                   <span>{expandedAttendanceRow === idx ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</span> <span>Buka {item.records.length} Hari Kehadiran</span>
                                  </button>
                                </td>
                              </tr>
@@ -2601,7 +2601,7 @@ const AdminDashboard = ({ setAuth }) => {
                       {/* Tombol Cetak Dipindah Kesini agar Rapi */}
                       <div className="shrink-0 pt-2 xl:pt-0 border-t border-slate-200 xl:border-0 mt-2 xl:mt-0">
                          <button onClick={handlePrintKpiReport} disabled={isGeneratingKpiPdf} className={`w-full xl:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-black shadow-md transition-all text-xs md:text-sm ${isGeneratingKpiPdf ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-900 hover:bg-black text-white hover:-translate-y-0.5'}`}>
-                            <Printer size={16} /> {isGeneratingKpiPdf ? 'Menyusun Dokumen...' : 'Cetak Laporan PDF'}
+                            <Printer size={16} /> <span>{isGeneratingKpiPdf ? 'Menyusun Dokumen...' : 'Cetak Laporan PDF'}</span>
                          </button>
                       </div>
                    </div>
@@ -2825,11 +2825,13 @@ const AdminDashboard = ({ setAuth }) => {
                                            
                                            {leaderboardFilterType === 'ALL' && (
                                               <th className={`${isGeneratingKpiPdf ? 'border border-black px-1.5 py-1.5 text-center w-[16%] bg-gray-100' : 'px-6 py-4 text-center border-r border-slate-200 w-40 bg-indigo-50/50'}`}>
-                                                 {isGeneratingKpiPdf ? 'TOTAL SCORE' : (
-                                                    <>
+                                                 {isGeneratingKpiPdf ? (
+                                                    <div className="font-black uppercase">TOTAL SCORE</div>
+                                                 ) : (
+                                                    <div>
                                                        <div className="font-black uppercase tracking-widest text-[10px] text-indigo-700">TOTAL SCORE</div>
                                                        <div className="text-[8px] font-bold mt-1 text-indigo-500">Gabungan</div>
-                                                    </>
+                                                    </div>
                                                  )}
                                               </th>
                                            )}
@@ -3022,7 +3024,7 @@ const AdminDashboard = ({ setAuth }) => {
                                  <p className="text-xs text-purple-700 font-bold mt-1">Sistem otomatis menghitung gaji berdasarkan {totalHariKerjaSebulan} hari kerja. Telat = Rp{Number(nominalPotonganTelat).toLocaleString()}</p>
                               </div>
                               <button onClick={() => setIsEditingPayroll(!isEditingPayroll)} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 ${isEditingPayroll ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                                 {isEditingPayroll ? <><CheckCircle2 size={14}/> Selesai Edit Manual</> : <><Edit size={14}/> Edit Hasil Sistem</>}
+                                 {isEditingPayroll ? <span className="flex items-center gap-1"><CheckCircle2 size={14}/> Selesai Edit Manual</span> : <span className="flex items-center gap-1"><Edit size={14}/> Edit Hasil Sistem</span>}
                               </button>
                            </div>
                            <div className="overflow-x-auto">
@@ -3677,7 +3679,7 @@ const AdminDashboard = ({ setAuth }) => {
                 <div className="p-5 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
                    <button onClick={() => setShowBulkEditModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-6 py-3 rounded-xl text-sm transition-colors">Batalkan</button>
                    <button onClick={executeSpreadsheetBulkEdit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 py-3 rounded-xl text-sm transition-all shadow-md flex items-center gap-2">
-                      {loading ? 'Menyimpan...' : <><Save size={16}/> Simpan Semua Perubahan ({bulkEditList.length} Data)</>}
+                      {loading ? <span>Menyimpan...</span> : <span className="flex items-center gap-2"><Save size={16}/> Simpan Semua Perubahan ({bulkEditList.length} Data)</span>}
                    </button>
                 </div>
               </div>
@@ -3775,7 +3777,7 @@ const AdminDashboard = ({ setAuth }) => {
           {currentView.module === 'HRIS' && currentView.filter !== 'RESIGN' && (
             <div className="flex items-center gap-2 shrink-0">
                <span className="text-[9px] uppercase text-slate-400 font-bold hidden sm:inline">Aksi HRIS:</span>
-               <button onClick={() => setShowBulkEditModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-amber-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><Edit size={12}/> Edit Massal</button>
+               <button onClick={() => { setBulkEditList(candidates.filter(c => selectedIds.includes(c.id))); setShowBulkEditModal(true); }} className="text-[10px] md:text-xs font-bold hover:bg-amber-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><Edit size={12}/> Edit Massal</button>
                <button onClick={() => setShowBulkModal(true)} className="text-[10px] md:text-xs font-bold hover:bg-blue-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><MapPin size={12}/> Mutasi Lokasi</button>
                <button onClick={() => processResign(null, true)} className="text-[10px] md:text-xs font-bold hover:bg-rose-600 hover:text-white border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"><LogOut size={12}/> Resign Massal</button>
             </div>

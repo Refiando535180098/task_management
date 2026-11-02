@@ -62,16 +62,26 @@ export default function TaskManagement() {
   // --- PEMICU SUARA NOTIFIKASI INTERNAL ---
   const isFirstLoad = useRef(true);
 
-  // --- MINTA IZIN BROWSER UNTUK PUSH NOTIFICATION ---
+  // --- MINTA IZIN BROWSER UNTUK PUSH NOTIFICATION (ANTI ERROR 400) ---
   useEffect(() => {
-    if (currentUser?.id) { 
-      OneSignal.init({
-        appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f", 
-      }).then(() => {
-        OneSignal.login(String(currentUser?.id)); 
-      });
-    }
-  }, [currentUser]);
+    if (!currentUser?.id) return;
+    const initOneSignal = async () => {
+      try {
+        if (!window.__oneSignalInitialized) {
+          await OneSignal.init({
+            appId: "69d9f780-2a9f-4490-8aef-a7e8fa96fe2f",
+            allowLocalhostAsSecureOrigin: true,
+          });
+          window.__oneSignalInitialized = true;
+        }
+        // Gunakan prefix minimal 5 karakter agar tidak ditolak (Error 400) oleh server OneSignal
+        await OneSignal.login(`syntegra_user_${currentUser.id}`);
+      } catch (err) {
+        console.warn("OneSignal dilewati:", err);
+      }
+    };
+    initOneSignal();
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) return;
