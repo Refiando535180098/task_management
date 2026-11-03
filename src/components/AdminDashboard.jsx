@@ -1121,186 +1121,522 @@ const AdminDashboard = ({ setAuth }) => {
     } catch (err) { alert("Gagal menyimpan KPI: " + err.message); }
   };
 
-  // --- FUNGSI PAYROLL HRD OTOMATIS ---
-  const handleUploadAttendance = (e) => {
+  // --- FUNGSI PAYROLL HRD OTOMATIS (TARIK DARI REKAP ABSENSI & FLEKSIBEL KOMPONEN GAJI) ---
+
+  // 1. Download Template Fleksibel Gaji Pokok & Tunjangan
+  const downloadSalaryTemplate = () => {
+    const templateData = [
+      {
+        "NIK Karyawan": "CONTOH-001 (Baris contoh ini diabaikan sistem)",
+        "Nama Lengkap": "Budi Santoso",
+        "Gaji Pokok": 4500000,
+        "Tunjangan Jabatan": 500000,
+        "Tunjangan Makan": 300000,
+        "Tunjangan Transport": 250000,
+        "(-) Potongan BPJS": 100000
+      },
+      {
+        "NIK Karyawan": "CONTOH-002 (Tambah kolom baru sesuka hati di kanan)",
+        "Nama Lengkap": "Siti Aminah",
+        "Gaji Pokok": 4000000,
+        "Tunjangan Jabatan": "",
+        "Tunjangan Makan": 300000,
+        "Tunjangan Transport": "",
+        "(-) Potongan BPJS": ""
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    worksheet['!cols'] = [
+      { wch: 28 }, // NIK Karyawan
+      { wch: 25 }, // Nama Lengkap
+      { wch: 18 }, // Gaji Pokok
+      { wch: 20 }, // Tunjangan Jabatan
+      { wch: 20 }, // Tunjangan Makan
+      { wch: 22 }, // Tunjangan Transport
+      { wch: 20 }  // (-) Potongan BPJS
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template_Gaji_Tunjangan');
+    XLSX.writeFile(workbook, 'Template_Gaji_Pokok_Dan_Tunjangan.xlsx');
+  };
+
+  // 2. Upload Khusus Data Gaji Pokok, Tunjangan & Komponen Gaji Fleksibel ke Data Karyawan
+  const handleUploadSalaryComponents = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if(!selectedPayrollSite) { alert("Pilih lokasi cabang terlebih dahulu."); return; }
+    if (!window.confirm(`Upload dan perbarui data Gaji Pokok & Tunjangan karyawan dari file "${file.name}"?`)) {
+      e.target.value = null;
+      return;
+    }
 
+    setLoading(true);
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+        const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        const siteCandidates = candidates.filter(c => c.lokasi_penempatan === selectedPayrollSite && c.status === 'INTI');
-        const groupedData = {};
+        const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        data.forEach(row => {
-           const nik = String(row['NIK / Username'] || '').trim();
-           if (!nik) return;
+        if (data.length === 0) {
+          alert("File Excel kosong atau format tidak sesuai!");
+          return;
+        }
 
-           const dbKaryawan = siteCandidates.find(c => c.nik_karyawan === nik);
-           
-           if (!groupedData[nik]) {
-               groupedData[nik] = {
-                  nik: nik,
-                  nama: row['Nama Lengkap'] || dbKaryawan?.nama_lengkap || 'Tidak Terdaftar DB',
-                  valid_db: !!dbKaryawan,
-                  gaji_pokok_bulanan: dbKaryawan ? Number(dbKaryawan.base_salary || 0) : 0,
-                  total_hari_kerja: 0,
-                  total_potongan_telat: 0,
-                  custom_values: {} // Tempat nyimpan nilai kolom dinamis
-               };
-           }
+        const ignoredColumns = [
+          'no', 'nik', 'nik karyawan', 'nik / username', 
+          'nama', 'nama lengkap', 'nama karyawan', 
+          'gaji pokok', 'gaji pokok utama', 'gapok'
+        ];
 
-           // Logika Regex Pintar Membaca Jam dari Format Apapun
-           const rawMasuk = row['Jam Masuk'] || row['jam masuk'] || row['Jam masuk'];
-           let jamAbsen = null;
-           
-           if (typeof rawMasuk === 'string') {
-               const match = rawMasuk.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
-               if (match) jamAbsen = `${match[1].padStart(2, '0')}:${match[2]}`;
-           } else if (rawMasuk instanceof Date) {
-               jamAbsen = rawMasuk.toTimeString().substring(0,5);
-           }
+        let updatedCount = 0;
+        let notFoundNiks = [];
 
-           let isTelat = false;
-           let potonganHariIni = 0;
+        for (const row of data) {
+          const rawNik = String(row['NIK Karyawan'] || row['NIK'] || row['NIK / Username'] || '').trim();
+          if (!rawNik || rawNik.toUpperCase().includes('CONTOH')) continue;
 
-           // Cek telat (hanya membandingkan jika format jam valid)
-           if (jamAbsen && jamAbsen !== '00:00' && jamAbsen > jamMasukKerja) {
-               isTelat = true;
-               potonganHariIni = Number(nominalPotonganTelat);
-           }
+          // Cari karyawan berdasarkan NIK di state candidates
+          const dbEmp = candidates.find(
+            c => c.nik_karyawan && String(c.nik_karyawan).trim().toLowerCase() === rawNik.toLowerCase()
+          );
 
-           // Tambah Kehadiran & Potongan Hari Ini ke Karyawan Tersebut
-           if (jamAbsen || rawMasuk) {
-               groupedData[nik].total_hari_kerja += 1;
-               groupedData[nik].total_potongan_telat += potonganHariIni;
-           }
-        });
-        
-        // Finalisasi Kalkulasi Prorata Gaji (Gaji / Total Hari Sebulan x Kehadiran)
-        const validData = Object.values(groupedData).filter(item => item.valid_db).map(item => {
-            const gajiProrata = Math.round((item.gaji_pokok_bulanan / Number(totalHariKerjaSebulan)) * item.total_hari_kerja);
-            return { ...item, gaji_prorata: gajiProrata };
-        });
-        
-        if(validData.length === 0) { alert("Data Excel tidak cocok dengan NIK karyawan di cabang ini."); return; }
+          if (!dbEmp) {
+            notFoundNiks.push(rawNik);
+            continue;
+          }
 
-        setParsedAttendance(validData);
-        setPayrollStep(1);
-      } catch (err) { alert("Gagal memproses file excel: " + err.message); } finally { e.target.value = null; }
+          // Cek apakah kolom Gaji Pokok diisi
+          const rawGapok = row['Gaji Pokok'] ?? row['Gaji Pokok Utama'] ?? row['Gapok'] ?? '';
+          const parsedGapok = typeof rawGapok === 'number' 
+            ? rawGapok 
+            : Number(String(rawGapok).replace(/[^0-9-]/g, ''));
+          
+          const finalBaseSalary = (String(rawGapok).trim() !== '' && !isNaN(parsedGapok) && parsedGapok > 0)
+            ? parsedGapok
+            : Number(dbEmp.base_salary || 0);
+
+          // Ambil komponen gaji yang sudah ada sebelumnya di data karyawan
+          const existingComponents = safeParseJSON(dbEmp.salary_components);
+          const componentMap = {};
+          existingComponents.forEach(comp => {
+            if (comp && comp.name && Number(comp.amount) > 0) {
+              componentMap[comp.name.trim().toLowerCase()] = {
+                name: comp.name.trim(),
+                type: comp.type === 'deduction' ? 'deduction' : 'addition',
+                amount: Number(comp.amount)
+              };
+            }
+          });
+
+          // Pindai seluruh kolom dinamis di Excel
+          Object.keys(row).forEach(colName => {
+            const cleanHeader = colName.trim();
+            if (!cleanHeader || ignoredColumns.includes(cleanHeader.toLowerCase())) return;
+
+            const rawVal = row[colName];
+            const strVal = String(rawVal ?? '').trim();
+            if (strVal === '' || strVal === '-') return; // Jika kosong, JANGAN tambahkan apapun ke data karyawan
+
+            const numVal = typeof rawVal === 'number'
+              ? rawVal
+              : Number(strVal.replace(/[^0-9-]/g, ''));
+
+            // Hanya tambahkan jika ada isinya dan bukan 0
+            if (!isNaN(numVal) && numVal !== 0) {
+              const isDeduction = cleanHeader.startsWith('(-)') || cleanHeader.toLowerCase().includes('potongan') || numVal < 0;
+              const compName = cleanHeader.replace(/^\(\+\)|\(-\)/g, '').trim();
+              const compKey = compName.toLowerCase();
+
+              componentMap[compKey] = {
+                name: compName,
+                type: isDeduction ? 'deduction' : 'addition',
+                amount: Math.abs(numVal)
+              };
+            }
+          });
+
+          const finalComponents = Object.values(componentMap);
+
+          // Update ke tabel candidates
+          const { error: candErr } = await supabase
+            .from('candidates')
+            .update({
+              base_salary: finalBaseSalary,
+              salary_components: finalComponents
+            })
+            .eq('id', dbEmp.id);
+
+          if (candErr) throw candErr;
+
+          // Sinkronkan juga ke tabel initial_users (jika sudah punya akun portal)
+          await supabase
+            .from('initial_users')
+            .update({
+              base_salary: finalBaseSalary,
+              salary_components: finalComponents
+            })
+            .eq('nik', dbEmp.nik_karyawan);
+
+          updatedCount++;
+        }
+
+        await fetchData();
+        let msg = `SUKSES: Berhasil memperbarui Gaji Pokok & Komponen Tunjangan untuk ${updatedCount} karyawan!`;
+        if (notFoundNiks.length > 0) {
+          msg += `\n\nCatatan: ${notFoundNiks.length} NIK tidak ditemukan di database (${notFoundNiks.slice(0, 5).join(', ')}).`;
+        }
+        alert(msg);
+      } catch (err) {
+        alert("Gagal mengupload data gaji & tunjangan: " + err.message);
+      } finally {
+        setLoading(false);
+        e.target.value = null;
+      }
     };
     reader.readAsBinaryString(file);
   };
 
-  // Logika Menambahkan Kolom Bebas (Tunjangan / Potongan)
+  // 3. Tarik Data Absensi Otomatis dari Menu Rekap Absensi (Tanpa Upload Ulang)
+  const handleLoadAttendanceForPayroll = () => {
+    if (!selectedPayrollSite) {
+      alert("Pilih Lokasi Cabang/Client terlebih dahulu.");
+      return;
+    }
+    if (!payrollPeriod) {
+      alert("Pilih Periode Gaji (Bulan) terlebih dahulu.");
+      return;
+    }
+
+    const siteCandidates = candidates.filter(
+      c => c.lokasi_penempatan === selectedPayrollSite && c.status === 'INTI'
+    );
+
+    if (siteCandidates.length === 0) {
+      alert(`Tidak ada karyawan aktif (INTI) yang terdaftar di penempatan "${selectedPayrollSite}".`);
+      return;
+    }
+
+    // Kumpulkan semua jenis komponen gaji/tunjangan yang dimiliki karyawan di site ini
+    const colMap = {};
+    siteCandidates.forEach(emp => {
+      const comps = safeParseJSON(emp.salary_components);
+      comps.forEach(comp => {
+        if (comp && comp.name && Number(comp.amount) > 0) {
+          const compType = comp.type === 'deduction' ? 'deduction' : 'addition';
+          const key = `${comp.name.trim().toLowerCase()}__${compType}`;
+          if (!colMap[key]) {
+            colMap[key] = {
+              id: 'col_' + key.replace(/[^a-z0-9]/g, '_'),
+              name: comp.name.trim(),
+              type: compType
+            };
+          }
+        }
+      });
+    });
+
+    const dynamicColumns = Object.values(colMap);
+    setPayrollColumns(dynamicColumns);
+
+    let totalAttendanceRecordsMatched = 0;
+    const pembagiHari = Number(totalHariKerjaSebulan) > 0 ? Number(totalHariKerjaSebulan) : 22;
+
+    const processedPayrollData = siteCandidates.map(dbKaryawan => {
+      const nik = String(dbKaryawan.nik_karyawan || '').trim();
+      const empAtt = attendanceData.find(
+        a => String(a.nik || '').trim().toLowerCase() === nik.toLowerCase()
+      );
+
+      // Filter record absensi sesuai periode bulan yang dipilih
+      const periodRecords = empAtt
+        ? empAtt.records.filter(r => r.tanggal && r.tanggal.startsWith(payrollPeriod))
+        : [];
+
+      let totalHariKerja = 0;
+      let totalPotonganTelat = 0;
+      let jumlahHariTelat = 0;
+
+      periodRecords.forEach(rec => {
+        totalAttendanceRecordsMatched++;
+        const ket = String(rec.keterangan_asli || '').toLowerCase();
+        const isLiburOrLeave = ket.includes('libur') || ket.includes('off') || ket.includes('izin') || ket.includes('cuti');
+        const hasJamMasuk = rec.jamMasuk && rec.jamMasuk !== '-' && !String(rec.jamMasuk).toLowerCase().includes('belum');
+
+        if (!isLiburOrLeave && (hasJamMasuk || ket.includes('hadir'))) {
+          totalHariKerja += 1;
+
+          // Cek telat berdasarkan batas jamMasukKerja atau telatMenit dari rekap absensi
+          const isLateByClock = hasJamMasuk && rec.jamMasuk > jamMasukKerja;
+          const isLateByRecord = Number(rec.telatMenit || 0) > 0;
+
+          if (isLateByClock || isLateByRecord) {
+            jumlahHariTelat += 1;
+            totalPotonganTelat += Number(nominalPotonganTelat || 0);
+          }
+        }
+      });
+
+      // Petakan nilai komponen tunjangan/potongan dari data karyawan
+      const customValues = {};
+      dynamicColumns.forEach(col => {
+        customValues[col.id] = 0;
+      });
+
+      const empComps = safeParseJSON(dbKaryawan.salary_components);
+      empComps.forEach(comp => {
+        if (comp && comp.name && Number(comp.amount) > 0) {
+          const compType = comp.type === 'deduction' ? 'deduction' : 'addition';
+          const key = `${comp.name.trim().toLowerCase()}__${compType}`;
+          const matchedCol = colMap[key];
+          if (matchedCol) {
+            customValues[matchedCol.id] = Number(comp.amount);
+          }
+        }
+      });
+
+      const gajiPokok = Number(dbKaryawan.base_salary || 0);
+      const gajiProrata = Math.round((gajiPokok / pembagiHari) * totalHariKerja);
+
+      return {
+        candidate_id: dbKaryawan.id,
+        nik: nik,
+        nama: dbKaryawan.nama_lengkap,
+        posisi: dbKaryawan.posisi_jabatan || '-',
+        valid_db: true,
+        gaji_pokok_bulanan: gajiPokok,
+        total_hari_kerja: totalHariKerja,
+        jumlah_hari_telat: jumlahHariTelat,
+        total_potongan_telat: totalPotonganTelat,
+        gaji_prorata: gajiProrata,
+        custom_values: customValues
+      };
+    });
+
+    if (totalAttendanceRecordsMatched === 0) {
+      const tetapLanjut = window.confirm(
+        `Perhatian: Belum ditemukan rekaman absensi pada menu Upload Absensi untuk site "${selectedPayrollSite}" di periode "${payrollPeriod}".\n\nApakah Anda tetap ingin melanjutkan proses payroll (kehadiran awal = 0 dan dapat disesuaikan manual)?`
+      );
+      if (!tetapLanjut) return;
+    }
+
+    setParsedAttendance(processedPayrollData);
+    setPayrollStep(1);
+  };
+
+  // 4. Penyesuaian Gaji Pokok Langsung di Menu Payroll
+  const handleBaseSalaryChange = (empNik, newGapokValue) => {
+    const gapokNum = Number(newGapokValue) || 0;
+    const pembagiHari = Number(totalHariKerjaSebulan) > 0 ? Number(totalHariKerjaSebulan) : 22;
+
+    const updated = parsedAttendance.map(emp => {
+      if (emp.nik === empNik) {
+        const newProrata = Math.round((gapokNum / pembagiHari) * Number(emp.total_hari_kerja || 0));
+        return {
+          ...emp,
+          gaji_pokok_bulanan: gapokNum,
+          gaji_prorata: newProrata
+        };
+      }
+      return emp;
+    });
+    setParsedAttendance(updated);
+  };
+
+  // 5. Tambah & Hapus Kolom Komponen Gaji (Tunjangan / Potongan)
   const handleAddCustomColumn = (e) => {
-      e.preventDefault();
-      if(!newColName) return;
-      const newId = 'col_' + Date.now();
-      
-      setPayrollColumns([...payrollColumns, { id: newId, name: newColName, type: newColType }]);
-      
-      // Beri nilai default 0 untuk semua orang di kolom baru ini
-      const updatedData = parsedAttendance.map(emp => ({
-          ...emp, custom_values: { ...emp.custom_values, [newId]: 0 }
-      }));
-      setParsedAttendance(updatedData);
-      setShowAddComponent(false);
-      setNewColName('');
+    e.preventDefault();
+    if (!newColName.trim()) return;
+    const newId = 'col_' + Date.now();
+
+    setPayrollColumns([...payrollColumns, { id: newId, name: newColName.trim(), type: newColType }]);
+
+    const updatedData = parsedAttendance.map(emp => ({
+      ...emp,
+      custom_values: { ...emp.custom_values, [newId]: 0 }
+    }));
+    setParsedAttendance(updatedData);
+    setShowAddComponent(false);
+    setNewColName('');
+  };
+
+  const handleDeletePayrollColumn = (colId, colName) => {
+    if (!window.confirm(`Hapus kolom komponen "${colName}" dari tabel payroll ini?`)) return;
+    setPayrollColumns(payrollColumns.filter(c => c.id !== colId));
+    setParsedAttendance(parsedAttendance.map(emp => {
+      const updatedValues = { ...emp.custom_values };
+      delete updatedValues[colId];
+      return { ...emp, custom_values: updatedValues };
+    }));
   };
 
   const handleCustomValueChange = (empNik, colId, value) => {
-      const updated = parsedAttendance.map(emp => {
-          if(emp.nik === empNik) {
-              return { ...emp, custom_values: { ...emp.custom_values, [colId]: Number(value) } };
+    const updated = parsedAttendance.map(emp => {
+      if (emp.nik === empNik) {
+        return { ...emp, custom_values: { ...emp.custom_values, [colId]: Number(value) } };
+      }
+      return emp;
+    });
+    setParsedAttendance(updated);
+  };
+
+  // 6. Simpan Penyesuaian Gaji Pokok & Komponen Tunjangan dari Payroll ke Data Karyawan (Database)
+  const savePayrollMasterToEmployeeDB = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+
+      for (const item of parsedAttendance) {
+        // Hanya simpan komponen yang ada isinya (nominal > 0) ke data karyawan
+        const activeComponents = [];
+        payrollColumns.forEach(col => {
+          const val = Number(item.custom_values?.[col.id] || 0);
+          if (val > 0) {
+            activeComponents.push({
+              name: col.name,
+              type: col.type === 'deduction' ? 'deduction' : 'addition',
+              amount: val
+            });
           }
-          return emp;
-      });
-      setParsedAttendance(updated);
+        });
+
+        const gapok = Number(item.gaji_pokok_bulanan || 0);
+
+        if (item.candidate_id) {
+          await supabase
+            .from('candidates')
+            .update({
+              base_salary: gapok,
+              salary_components: activeComponents
+            })
+            .eq('id', item.candidate_id);
+        } else if (item.nik) {
+          await supabase
+            .from('candidates')
+            .update({
+              base_salary: gapok,
+              salary_components: activeComponents
+            })
+            .eq('nik_karyawan', item.nik);
+        }
+
+        if (item.nik) {
+          await supabase
+            .from('initial_users')
+            .update({
+              base_salary: gapok,
+              salary_components: activeComponents
+            })
+            .eq('nik', item.nik);
+        }
+      }
+
+      await fetchData();
+      if (!silent) {
+        alert("SUKSES: Penyesuaian Gaji Pokok & Komponen Tunjangan berhasil disimpan ke Master Data Karyawan!");
+      }
+    } catch (err) {
+      if (!silent) alert("Gagal menyimpan ke data karyawan: " + err.message);
+      console.error("Error sync master gaji karyawan:", err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
 
   const hitungTHP = (item) => {
-      // Mulai dari Gaji yang sudah diprorata sesuai hari masuk, dikurangi telat
-      let total = Number(item.gaji_prorata) - Number(item.total_potongan_telat);
-      
-      // Tambah/Kurang nilai dari kolom-kolom custom buatan HRD
-      payrollColumns.forEach(col => {
-          const val = Number(item.custom_values?.[col.id] || 0);
-          if(col.type === 'addition') total += val;
-          else if(col.type === 'deduction') total -= val;
-      });
-      return total > 0 ? total : 0; // Cegah minus
+    let total = Number(item.gaji_prorata || 0) - Number(item.total_potongan_telat || 0);
+
+    payrollColumns.forEach(col => {
+      const val = Number(item.custom_values?.[col.id] || 0);
+      if (col.type === 'addition') total += val;
+      else if (col.type === 'deduction') total -= val;
+    });
+    return total > 0 ? total : 0;
   };
 
   const submitToFinance = async () => {
-      if (parsedAttendance.length === 0) {
-          alert("Tidak ada data payroll untuk dikirim.");
-          return;
+    if (parsedAttendance.length === 0) {
+      alert("Tidak ada data payroll untuk dikirim.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Simpan otomatis penyesuaian Gaji Pokok & Tunjangan terbaru ke Master Data Karyawan
+      await savePayrollMasterToEmployeeDB(true);
+
+      // Ambil data karyawan di database berdasarkan NIK untuk mendapatkan user_id
+      const { data: dbUsers, error: userErr } = await supabase.from('initial_users').select('id, nik');
+      if (userErr) throw userErr;
+
+      const userNikMap = {};
+      if (dbUsers) {
+        dbUsers.forEach(u => {
+          if (u.nik) userNikMap[String(u.nik).trim().toLowerCase()] = u.id;
+        });
       }
 
-      try {
-          setLoading(true);
-          const currentMonth = new Date().toISOString().slice(0, 7);
+      // Siapkan payload untuk dimasukkan ke tabel finance_payroll Supabase
+      const payloads = parsedAttendance.map(item => {
+        const userId = userNikMap[String(item.nik || '').trim().toLowerCase()];
+        const finalThp = hitungTHP(item);
 
-          // Ambil data karyawan di database berdasarkan NIK untuk mendapatkan user_id
-          const { data: dbUsers, error: userErr } = await supabase.from('initial_users').select('id, nik');
-          if (userErr) throw userErr;
-
-          const userNikMap = {};
-          if (dbUsers) {
-              dbUsers.forEach(u => { if (u.nik) userNikMap[u.nik] = u.id; });
+        // Susun rincian komponen gaji (tunjangan & potongan) yang ada isinya
+        const dynamicDetails = [];
+        payrollColumns.forEach(col => {
+          const val = Number(item.custom_values?.[col.id] || 0);
+          if (val > 0) {
+            dynamicDetails.push({
+              name: col.name,
+              type: col.type === 'addition' ? 'earning' : 'deduction',
+              amount: val
+            });
           }
+        });
 
-          // Siapkan payload untuk dimasukkan ke tabel finance_payroll Supabase
-          const payloads = parsedAttendance.map(item => {
-              const userId = userNikMap[item.nik];
-              const finalThp = hitungTHP(item);
+        if (Number(item.total_potongan_telat || 0) > 0) {
+          dynamicDetails.push({
+            name: 'Potongan Keterlambatan',
+            type: 'deduction',
+            amount: Number(item.total_potongan_telat)
+          });
+        }
 
-              return {
-                  user_id: userId || null,
-                  period_month: payrollPeriod, // <-- Gunakan periode yang dipilih HRD, bukan bulan otomatis lagi
-                  base_salary: Number(item.gaji_pokok_bulanan || item.gaji_prorata || 0),
-                  custom_details: [
-                      ...(item.komponen_tambahan || []).map(k => ({ name: k.name, type: 'earning', amount: k.amount })),
-                      ...(item.komponen_potongan || []).map(k => ({ name: k.name, type: 'deduction', amount: k.amount })),
-                      { name: 'Potongan Keterlambatan', type: 'deduction', amount: Number(item.total_potongan_telat || 0) }
-                  ],
-                  net_salary: finalThp,
-                  site_location: selectedPayrollSite,
-                  status: 'WAITING_APPROVAL' // <-- STATUS KRUSIAL AGAR MUNCUL DI FINANCE
-              };
-          }).filter(p => p.user_id !== null); // Pastikan user_id ditemukan di sistem
+        return {
+          user_id: userId || null,
+          period_month: payrollPeriod,
+          base_salary: Number(item.gaji_prorata || item.gaji_pokok_bulanan || 0),
+          custom_details: dynamicDetails,
+          net_salary: finalThp,
+          site_location: selectedPayrollSite,
+          status: 'WAITING_APPROVAL'
+        };
+      }).filter(p => p.user_id !== null);
 
-          if (payloads.length === 0) {
-              alert("Gagal: NIK karyawan pada absensi tidak ditemukan di tabel user portal (initial_users). Pastikan sudah disinkronkan.");
-              setLoading(false);
-              return;
-          }
-
-          // Kirim ke database Supabase tabel finance_payroll
-          const { error: insertErr } = await supabase.from('finance_payroll').insert(payloads);
-          if (insertErr) throw insertErr;
-
-          // Tampilkan Animasi Sukses
-          setShowPayrollSuccessModal(true);
-          setTimeout(() => {
-              setShowPayrollSuccessModal(false);
-              setPayrollStep(0);
-              setParsedAttendance([]);
-              handleNavClick('PAYROLL', 'SUMMARY', 'Ringkasan Data Payroll');
-          }, 3000);
-
-      } catch (err) {
-          alert("Gagal mengirim payroll ke Finance: " + err.message);
-      } finally {
-          setLoading(false);
+      if (payloads.length === 0) {
+        alert("Gagal: NIK karyawan pada site ini belum ditemukan di tabel user portal (initial_users). Pastikan sudah klik 'Sync Akun Portal' di menu HRIS.");
+        setLoading(false);
+        return;
       }
+
+      const { error: insertErr } = await supabase.from('finance_payroll').insert(payloads);
+      if (insertErr) throw insertErr;
+
+      setShowPayrollSuccessModal(true);
+      setTimeout(() => {
+        setShowPayrollSuccessModal(false);
+        setPayrollStep(0);
+        setParsedAttendance([]);
+        handleNavClick('PAYROLL', 'SUMMARY', 'Ringkasan Data Payroll');
+      }, 3000);
+
+    } catch (err) {
+      alert("Gagal mengirim payroll ke Finance: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const executeImportExcel = async (e) => {
@@ -2956,75 +3292,128 @@ const AdminDashboard = ({ setAuth }) => {
              <div className="animate-fade-in max-w-7xl mx-auto">
                 {currentView.filter === 'PROCESS' && (
                    <>
-                     {/* STEP 0: SETUP OTOMATISASI & UPLOAD */}
+                     {/* STEP 0: UPLOAD MASTER GAJI/TUNJANGAN & TARIK ABSENSI OTOMATIS */}
                      {payrollStep === 0 && (
-                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 max-w-3xl mx-auto mt-6">
-                           <div className="text-center mb-6">
-                             <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><FileText size={32}/></div>
-                             <h2 className="font-black text-2xl text-slate-800 mb-2">Sistem Payroll Otomatis</h2>
-                             <p className="text-slate-500 text-sm">Atur parameter pembagi gaji, lalu unggah absensi. Sistem akan memproses prorata dan keterlambatan secara instan.</p>
-                           </div>
+                        <div className="space-y-6 max-w-4xl mx-auto mt-4">
                            
-                           <div className="bg-purple-50/50 p-6 rounded-2xl border border-purple-100 mb-6">
-                              <h3 className="font-black text-purple-900 mb-4 text-sm uppercase tracking-widest flex items-center gap-2"><Settings size={16}/> 1. Parameter Perhitungan</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Lokasi Cabang/Client</label>
-                                   <select value={selectedPayrollSite} onChange={(e) => setSelectedPayrollSite(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold text-slate-800">
-                                      <option value="">-- Pilih Lokasi --</option>
-                                      {masterSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
-                                   </select>
-                                </div>
-                                {/* TAMBAHAN INPUT PERIODE DI SINI */}
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Periode Gaji</label>
-                                   <input type="month" value={payrollPeriod} onChange={(e) => setPayrollPeriod(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold text-slate-800" />
-                                </div>
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Total Hari Kerja</label>
-                                   <input type="number" value={totalHariKerjaSebulan} onChange={(e) => setTotalHariKerjaSebulan(e.target.value)} placeholder="Contoh: 22 atau 26" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-black text-blue-700" />
-                                </div>
+                           {/* KARTU 1: UPLOAD KHUSUS GAJI POKOK & TUNJANGAN FLEKSIBEL */}
+                           <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+                                 <div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md">Master Komponen Gaji</span>
+                                    <h3 className="font-black text-lg text-slate-800 mt-2 flex items-center gap-2">
+                                       <Upload size={18} className="text-emerald-600"/> Upload Data Gaji Pokok & Tunjangan Karyawan
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                       Gunakan fitur ini untuk mengupdate Gaji Pokok dan Tunjangan ke dalam data karyawan. Anda bebas menambah kolom tunjangan baru di Excel; hanya kolom yang <b>ada isinya</b> yang akan dimasukkan ke data karyawan.
+                                    </p>
+                                 </div>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Jam Masuk (Batas)</label>
-                                   <input type="time" value={jamMasukKerja} onChange={(e) => setJamMasukKerja(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold" />
-                                </div>
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Jam Keluar (Batas)</label>
-                                   <input type="time" value={jamKeluarKerja} onChange={(e) => setJamKeluarKerja(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold" />
-                                </div>
-                                <div>
-                                   <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Potongan / Telat (Rp)</label>
-                                   <input type="number" value={nominalPotonganTelat} onChange={(e) => setNominalPotonganTelat(e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-red-500 font-black text-red-600" />
-                                </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                                 <button 
+                                    type="button"
+                                    onClick={downloadSalaryTemplate} 
+                                    className="flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl font-bold text-xs transition shadow-sm"
+                                 >
+                                    <Download size={16} className="text-emerald-600"/> 1. Download Template Gaji & Tunjangan (Fleksibel)
+                                 </button>
+
+                                 <label className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 px-4 rounded-xl font-black text-xs cursor-pointer transition shadow-md">
+                                    <Upload size={16}/> 2. Upload Excel Gaji & Tunjangan (Auto-Update Karyawan)
+                                    <input type="file" className="hidden" accept=".xls, .xlsx" onChange={handleUploadSalaryComponents} disabled={loading} />
+                                 </label>
                               </div>
                            </div>
 
-                           <div className="mb-2">
-                             <h3 className="font-black text-purple-900 mb-2 text-sm uppercase tracking-widest">2. Upload File Absen</h3>
-                           </div>
-                           <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition group ${selectedPayrollSite ? 'border-purple-300 bg-purple-50 hover:bg-purple-100' : 'border-slate-300 bg-slate-50 opacity-60 cursor-not-allowed'}`}>
-                              <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
-                                  <Upload className={`w-8 h-8 mb-2 ${selectedPayrollSite ? 'text-purple-500' : 'text-slate-400'}`} />
-                                  <p className="text-sm font-bold text-slate-600">Klik untuk Upload File Absen (Excel)</p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Sistem akan otomatis menghitung hari kerja & potongan telat</p>
+                           {/* KARTU 2: PARAMETER PERHITUNGAN & TARIK DATA DARI REKAP ABSENSI */}
+                           <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200">
+                              <div className="text-center mb-6">
+                                 <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><FileText size={32}/></div>
+                                 <h2 className="font-black text-2xl text-slate-800 mb-2">Proses Payroll Otomatis</h2>
+                                 <p className="text-slate-500 text-sm">Tidak perlu upload ulang file absensi. Sistem otomatis mengambil data dari menu <b>Rekap Absensi (Data Upload Absensi)</b> serta komponen gaji dari data karyawan.</p>
                               </div>
-                              <input type="file" className="hidden" accept=".xls, .xlsx" onChange={handleUploadAttendance} disabled={!selectedPayrollSite} />
-                           </label>
+                              
+                              <div className="bg-purple-50/50 p-6 rounded-2xl border border-purple-100 mb-6">
+                                 <h3 className="font-black text-purple-900 mb-4 text-sm uppercase tracking-widest flex items-center gap-2"><Settings size={16}/> Parameter Perhitungan Payroll</h3>
+                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Lokasi Cabang/Client</label>
+                                       <select 
+                                          value={selectedPayrollSite} 
+                                          onChange={(e) => {
+                                             const siteVal = e.target.value;
+                                             setSelectedPayrollSite(siteVal);
+                                             if (siteVal && siteTimeConfig[siteVal]) {
+                                                setJamMasukKerja(siteTimeConfig[siteVal].masuk || '08:00');
+                                                setJamKeluarKerja(siteTimeConfig[siteVal].keluar || '17:00');
+                                             }
+                                          }} 
+                                          className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold text-slate-800"
+                                       >
+                                          <option value="">-- Pilih Lokasi --</option>
+                                          {masterSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
+                                       </select>
+                                    </div>
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Periode Gaji</label>
+                                       <input type="month" value={payrollPeriod} onChange={(e) => setPayrollPeriod(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold text-slate-800" />
+                                    </div>
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Total Hari Kerja</label>
+                                       <input type="number" value={totalHariKerjaSebulan} onChange={(e) => setTotalHariKerjaSebulan(e.target.value)} placeholder="Contoh: 22 atau 26" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-black text-blue-700" />
+                                    </div>
+                                 </div>
+                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Jam Masuk (Batas)</label>
+                                       <input type="time" value={jamMasukKerja} onChange={(e) => setJamMasukKerja(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold" />
+                                    </div>
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Jam Keluar (Batas)</label>
+                                       <input type="time" value={jamKeluarKerja} onChange={(e) => setJamKeluarKerja(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-purple-500 font-bold" />
+                                    </div>
+                                    <div>
+                                       <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Potongan / Telat (Rp)</label>
+                                       <input type="number" value={nominalPotonganTelat} onChange={(e) => setNominalPotonganTelat(e.target.value)} placeholder="0" className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-red-500 font-black text-red-600" />
+                                    </div>
+                                 </div>
+
+                                 {/* Info Ringkas Ketersediaan Data */}
+                                 {selectedPayrollSite && (
+                                    <div className="mt-4 pt-4 border-t border-purple-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                       <span className="font-bold text-purple-900">
+                                          Karyawan Aktif di Site Ini: <b className="bg-white px-2 py-0.5 rounded border border-purple-200">{candidates.filter(c => c.lokasi_penempatan === selectedPayrollSite && c.status === 'INTI').length} Orang</b>
+                                       </span>
+                                       <span className="font-bold text-teal-700">
+                                          Sumber Absensi: <b>Menu Rekap Absensi ({payrollPeriod})</b>
+                                       </span>
+                                    </div>
+                                 )}
+                              </div>
+
+                              <button 
+                                 type="button"
+                                 onClick={handleLoadAttendanceForPayroll}
+                                 disabled={!selectedPayrollSite}
+                                 className={`w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${selectedPayrollSite ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                              >
+                                 <CheckSquare size={18}/> Tarik Data Absensi & Proses Payroll Sekarang
+                              </button>
+                           </div>
                         </div>
                      )}
 
-                     {/* STEP 1: VALIDASI REKAP OTOMATIS */}
+                     {/* STEP 1: VALIDASI REKAP ABSENSI & GAJI POKOK */}
                      {payrollStep === 1 && (
                         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
                            <div className="p-6 border-b border-slate-100 bg-purple-50/50 flex flex-col md:flex-row justify-between md:items-center gap-4">
                               <div>
-                                 <h3 className="font-black text-purple-900 flex items-center gap-2">Step 1: Kalkulasi Prorata & Keterlambatan</h3>
-                                 <p className="text-xs text-purple-700 font-bold mt-1">Sistem otomatis menghitung gaji berdasarkan {totalHariKerjaSebulan} hari kerja. Telat = Rp{Number(nominalPotonganTelat).toLocaleString()}</p>
+                                 <h3 className="font-black text-purple-900 flex items-center gap-2">Step 1: Kalkulasi Kehadiran, Gaji Pokok & Keterlambatan</h3>
+                                 <p className="text-xs text-purple-700 font-bold mt-1">Data diambil dari Rekap Absensi periode <b>{payrollPeriod}</b> ({totalHariKerjaSebulan} hari kerja). Anda dapat menyesuaikan Gaji Pokok & Kehadiran langsung di bawah ini.</p>
                               </div>
                               <button onClick={() => setIsEditingPayroll(!isEditingPayroll)} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1 ${isEditingPayroll ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                                 {isEditingPayroll ? <span className="flex items-center gap-1"><CheckCircle2 size={14}/> Selesai Edit Manual</span> : <span className="flex items-center gap-1"><Edit size={14}/> Edit Hasil Sistem</span>}
+                                 {isEditingPayroll ? <span className="flex items-center gap-1"><CheckCircle2 size={14}/> Selesai Edit Manual</span> : <span className="flex items-center gap-1"><Edit size={14}/> Sesuaikan Gaji Pokok & Absen</span>}
                               </button>
                            </div>
                            <div className="overflow-x-auto">
@@ -3032,6 +3421,7 @@ const AdminDashboard = ({ setAuth }) => {
                                  <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase border-b border-slate-200">
                                     <tr>
                                        <th className="px-6 py-4 font-black">Karyawan (NIK)</th>
+                                       <th className="px-6 py-4 font-black text-emerald-700">Gaji Pokok Master (Rp)</th>
                                        <th className="px-6 py-4 font-black text-center">Kehadiran / Sebulan</th>
                                        <th className="px-6 py-4 font-black text-blue-700">Gaji Prorata (Sesuai Hadir)</th>
                                        <th className="px-6 py-4 font-black text-red-500">Auto Potongan Telat</th>
@@ -3042,15 +3432,27 @@ const AdminDashboard = ({ setAuth }) => {
                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                           <td className="px-6 py-4">
                                              <div className="font-bold text-slate-800">{item.nama}</div>
-                                             <div className="text-[10px] text-slate-500 font-medium">NIK: {item.nik} | Gapok: Rp{item.gaji_pokok_bulanan.toLocaleString()}</div>
+                                             <div className="text-[10px] text-slate-500 font-medium">NIK: {item.nik} • {item.posisi}</div>
+                                          </td>
+                                          <td className="px-6 py-4">
+                                             {isEditingPayroll ? (
+                                                <input 
+                                                   type="number" 
+                                                   value={item.gaji_pokok_bulanan} 
+                                                   onChange={(e) => handleBaseSalaryChange(item.nik, e.target.value)}
+                                                   className="border border-emerald-300 focus:border-emerald-500 rounded-lg p-1.5 w-36 text-xs font-black text-emerald-700 bg-emerald-50/40 outline-none"
+                                                />
+                                             ) : (
+                                                <span className="font-black text-emerald-700">Rp {Number(item.gaji_pokok_bulanan || 0).toLocaleString()}</span>
+                                             )}
                                           </td>
                                           <td className="px-6 py-4 text-center">
                                              {isEditingPayroll ? (
                                                 <input type="number" value={item.total_hari_kerja} onChange={(e) => {
                                                    const val = Number(e.target.value);
-                                                   const newData=[...parsedAttendance]; 
+                                                   const newData = [...parsedAttendance]; 
                                                    newData[idx].total_hari_kerja = val;
-                                                   newData[idx].gaji_prorata = Math.round((newData[idx].gaji_pokok_bulanan / totalHariKerjaSebulan) * val);
+                                                   newData[idx].gaji_prorata = Math.round((newData[idx].gaji_pokok_bulanan / (Number(totalHariKerjaSebulan) || 22)) * val);
                                                    setParsedAttendance(newData);
                                                 }} className="border border-blue-300 w-16 text-center rounded p-1 outline-none text-xs font-bold"/>
                                              ) : (
@@ -3058,13 +3460,40 @@ const AdminDashboard = ({ setAuth }) => {
                                              )}
                                           </td>
                                           <td className="px-6 py-4 font-black text-blue-700 text-base">
-                                             Rp {item.gaji_prorata.toLocaleString()}
+                                             {isEditingPayroll ? (
+                                                <div className="flex items-center gap-1">
+                                                   <input 
+                                                      type="number" 
+                                                      value={item.gaji_prorata} 
+                                                      onChange={(e) => {
+                                                         const newData = [...parsedAttendance];
+                                                         newData[idx].gaji_prorata = Number(e.target.value);
+                                                         setParsedAttendance(newData);
+                                                      }}
+                                                      className="border border-blue-300 focus:border-blue-500 rounded-lg p-1.5 w-36 text-xs font-black text-blue-700 bg-blue-50/40 outline-none"
+                                                   />
+                                                   <button 
+                                                      type="button"
+                                                      title="Gunakan Gaji Pokok Penuh (Non-Prorata)"
+                                                      onClick={() => {
+                                                         const newData = [...parsedAttendance];
+                                                         newData[idx].gaji_prorata = Number(newData[idx].gaji_pokok_bulanan || 0);
+                                                         setParsedAttendance(newData);
+                                                      }}
+                                                      className="text-[9px] bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded font-bold"
+                                                   >
+                                                      Full
+                                                   </button>
+                                                </div>
+                                             ) : (
+                                                <span>Rp {Number(item.gaji_prorata || 0).toLocaleString()}</span>
+                                             )}
                                           </td>
                                           <td className="px-6 py-4">
                                              {isEditingPayroll ? (
-                                                <input type="number" value={item.total_potongan_telat} onChange={(e) => { const newData=[...parsedAttendance]; newData[idx].total_potongan_telat=e.target.value; setParsedAttendance(newData); }} className="border border-red-300 focus:border-red-500 rounded p-1.5 w-full text-xs text-red-600 font-black outline-none bg-red-50"/>
+                                                <input type="number" value={item.total_potongan_telat} onChange={(e) => { const newData=[...parsedAttendance]; newData[idx].total_potongan_telat=Number(e.target.value); setParsedAttendance(newData); }} className="border border-red-300 focus:border-red-500 rounded p-1.5 w-32 text-xs text-red-600 font-black outline-none bg-red-50"/>
                                              ) : (
-                                                <span className="text-red-600 font-black bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">-Rp {item.total_potongan_telat.toLocaleString()}</span>
+                                                <span className="text-red-600 font-black bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">-Rp {Number(item.total_potongan_telat || 0).toLocaleString()}</span>
                                              )}
                                           </td>
                                        </tr>
@@ -3073,21 +3502,36 @@ const AdminDashboard = ({ setAuth }) => {
                               </table>
                            </div>
                            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
-                              <button onClick={() => setPayrollStep(0)} className="bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-bold text-xs transition">Batal</button>
-                              <button onClick={() => { if(isEditingPayroll) { alert("Selesaikan mode edit terlebih dahulu!"); return; } setPayrollStep(2); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md flex items-center gap-2 transform hover:-translate-y-0.5 transition">Lanjut Penyesuaian Gaji <ChevronRight size={16}/></button>
+                              <button onClick={() => setPayrollStep(0)} className="bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-bold text-xs transition">Kembali</button>
+                              <button onClick={() => { if(isEditingPayroll) { alert("Selesaikan mode edit terlebih dahulu!"); return; } setPayrollStep(2); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md flex items-center gap-2 transform hover:-translate-y-0.5 transition">Lanjut Penyesuaian Gaji & Tunjangan <ChevronRight size={16}/></button>
                            </div>
                         </div>
                      )}
 
-                     {/* STEP 2: PENYESUAIAN FLEKSIBEL (SPREADSHEET MODE) */}
+                     {/* STEP 2: PENYESUAIAN GAJI POKOK, TUNJANGAN & KOMPONEN GAJI KARYAWAN */}
                      {payrollStep === 2 && (
                         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
                            <div className="p-6 border-b border-slate-100 bg-slate-900 flex flex-col md:flex-row justify-between md:items-center gap-4 text-white">
                               <div>
-                                 <h3 className="font-black flex items-center gap-2">Step 2: Penyesuaian Komponen Gaji (Fleksibel)</h3>
-                                 <p className="text-xs text-slate-400 mt-1">Tambahkan kolom tunjangan/potongan sesuai kebutuhan lalu ketik nominal langsung di tabel.</p>
+                                 <h3 className="font-black flex items-center gap-2">Step 2: Penyesuaian Gaji Pokok, Tunjangan & Komponen Gaji</h3>
+                                 <p className="text-xs text-slate-400 mt-1">Komponen gaji dari data karyawan otomatis dimuat. Anda dapat menyesuaikan Gaji Pokok, menambah/mengubah tunjangan, lalu menyimpannya ke data karyawan.</p>
                               </div>
-                              <button onClick={() => setShowAddComponent(!showAddComponent)} className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition"><PlusCircle size={14}/> Tambah Kolom Baru</button>
+                              <div className="flex flex-wrap gap-2">
+                                 <button 
+                                    type="button"
+                                    onClick={() => savePayrollMasterToEmployeeDB(false)} 
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition"
+                                 >
+                                    <Save size={14}/> Simpan Gaji & Tunjangan ke Data Karyawan
+                                 </button>
+                                 <button 
+                                    type="button"
+                                    onClick={() => setShowAddComponent(!showAddComponent)} 
+                                    className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition"
+                                 >
+                                    <PlusCircle size={14}/> Tambah Kolom Komponen
+                                 </button>
+                              </div>
                            </div>
 
                            {/* FORM BUAT KOLOM BARU */}
@@ -3095,14 +3539,14 @@ const AdminDashboard = ({ setAuth }) => {
                               <div className="bg-slate-800 p-6 border-b border-slate-700 animate-fade-in text-white">
                                  <form onSubmit={handleAddCustomColumn} className="flex flex-col md:flex-row items-end gap-4 max-w-2xl">
                                     <div className="flex-1 w-full">
-                                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Nama Kolom (Cth: Lembur, Kasbon, PPN)</label>
-                                       <input type="text" value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="Ketik nama kolom..." required className="w-full bg-slate-900 border border-slate-600 text-white rounded-xl py-2.5 px-4 text-xs outline-none focus:border-purple-500"/>
+                                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Nama Komponen (Cth: Tunjangan Jabatan, Lembur, Kasbon)</label>
+                                       <input type="text" value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="Ketik nama tunjangan/potongan..." required className="w-full bg-slate-900 border border-slate-600 text-white rounded-xl py-2.5 px-4 text-xs outline-none focus:border-purple-500"/>
                                     </div>
                                     <div className="flex-1 w-full">
-                                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Sifat Angka</label>
+                                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Sifat Komponen</label>
                                        <select value={newColType} onChange={e => setNewColType(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white font-bold rounded-xl py-2.5 px-4 text-xs outline-none focus:border-purple-500">
-                                          <option value="addition">Tunjangan (+)</option>
-                                          <option value="deduction">Potongan (-)</option>
+                                          <option value="addition">Tunjangan / Penambah (+)</option>
+                                          <option value="deduction">Potongan / Pengurang (-)</option>
                                        </select>
                                     </div>
                                     <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black py-2.5 px-6 rounded-xl text-xs h-[42px] transition shadow-md w-full md:w-auto">Buat Kolom</button>
@@ -3115,13 +3559,24 @@ const AdminDashboard = ({ setAuth }) => {
                                  <thead className="bg-slate-50 text-[10px] text-slate-500 uppercase border-b border-slate-200">
                                     <tr>
                                        <th className="px-6 py-4 font-black sticky left-0 bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Karyawan</th>
+                                       <th className="px-4 py-4 font-black text-emerald-700 bg-emerald-50/40">Gaji Pokok (Master)</th>
                                        <th className="px-4 py-4 font-black text-blue-700 bg-blue-50/50">Gaji (Prorata)</th>
                                        <th className="px-4 py-4 font-black text-red-500 bg-red-50/50">Pot. Telat</th>
                                        
-                                       {/* Render Kolom Dinamis HRD */}
+                                       {/* Render Kolom Dinamis HRD & Data Karyawan */}
                                        {payrollColumns.map(col => (
                                           <th key={col.id} className={`px-4 py-4 font-black ${col.type === 'addition' ? 'text-emerald-600 bg-emerald-50/30' : 'text-rose-600 bg-rose-50/30'}`}>
-                                             {col.name} {col.type === 'addition' ? '(+)' : '(-)'}
+                                             <div className="flex items-center justify-between gap-2">
+                                                <span>{col.name} {col.type === 'addition' ? '(+)' : '(-)'}</span>
+                                                <button 
+                                                   type="button" 
+                                                   onClick={() => handleDeletePayrollColumn(col.id, col.name)}
+                                                   className="text-slate-400 hover:text-red-500 transition"
+                                                   title="Hapus Kolom"
+                                                >
+                                                   <X size={12}/>
+                                                </button>
+                                             </div>
                                           </th>
                                        ))}
 
@@ -3133,10 +3588,42 @@ const AdminDashboard = ({ setAuth }) => {
                                        <tr key={idx} className="hover:bg-slate-50 transition-colors group">
                                           <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                              <div className="font-black text-slate-800">{item.nama}</div>
-                                             <div className="text-[10px] text-slate-400 mt-0.5">NIK: {item.nik}</div>
+                                             <div className="text-[10px] text-slate-400 mt-0.5">NIK: {item.nik} ({item.total_hari_kerja}/{totalHariKerjaSebulan} hr)</div>
                                           </td>
-                                          <td className="px-4 py-4 font-bold text-slate-700 bg-blue-50/10">Rp {item.gaji_prorata.toLocaleString()}</td>
-                                          <td className="px-4 py-4 font-bold text-red-500 bg-red-50/10">- Rp {Number(item.total_potongan_telat).toLocaleString()}</td>
+
+                                          {/* Input Penyesuaian Gaji Pokok Master */}
+                                          <td className="px-4 py-4 bg-emerald-50/10">
+                                             <div className="relative">
+                                                <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                                                <input 
+                                                   type="number" 
+                                                   value={item.gaji_pokok_bulanan || ''} 
+                                                   onChange={(e) => handleBaseSalaryChange(item.nik, e.target.value)}
+                                                   className="pl-8 pr-3 py-2 w-36 border border-emerald-200 focus:border-emerald-500 rounded-xl text-xs font-black text-emerald-800 bg-white outline-none"
+                                                   placeholder="0"
+                                                />
+                                             </div>
+                                          </td>
+
+                                          {/* Input Penyesuaian Gaji Prorata */}
+                                          <td className="px-4 py-4 font-bold text-slate-700 bg-blue-50/10">
+                                             <div className="relative">
+                                                <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                                                <input 
+                                                   type="number" 
+                                                   value={item.gaji_prorata || ''} 
+                                                   onChange={(e) => {
+                                                      const updated = [...parsedAttendance];
+                                                      updated[idx].gaji_prorata = Number(e.target.value);
+                                                      setParsedAttendance(updated);
+                                                   }}
+                                                   className="pl-8 pr-3 py-2 w-36 border border-blue-200 focus:border-blue-500 rounded-xl text-xs font-bold text-blue-700 bg-white outline-none"
+                                                   placeholder="0"
+                                                />
+                                             </div>
+                                          </td>
+
+                                          <td className="px-4 py-4 font-bold text-red-500 bg-red-50/10">- Rp {Number(item.total_potongan_telat || 0).toLocaleString()}</td>
                                           
                                           {/* Render Input untuk setiap Kolom Dinamis */}
                                           {payrollColumns.map(col => (
@@ -3147,7 +3634,7 @@ const AdminDashboard = ({ setAuth }) => {
                                                       type="number" 
                                                       value={item.custom_values[col.id] || ''} 
                                                       onChange={(e) => handleCustomValueChange(item.nik, col.id, e.target.value)}
-                                                      className={`pl-8 pr-3 py-2 w-32 border rounded-xl text-xs font-bold outline-none transition-colors ${col.type === 'addition' ? 'border-emerald-200 focus:border-emerald-500 text-emerald-700 bg-emerald-50/30' : 'border-rose-200 focus:border-rose-500 text-rose-700 bg-rose-50/30'}`}
+                                                      className={`pl-8 pr-3 py-2 w-36 border rounded-xl text-xs font-bold outline-none transition-colors ${col.type === 'addition' ? 'border-emerald-200 focus:border-emerald-500 text-emerald-700 bg-emerald-50/30' : 'border-rose-200 focus:border-rose-500 text-rose-700 bg-rose-50/30'}`}
                                                       placeholder="0"
                                                    />
                                                 </div>
@@ -3162,9 +3649,14 @@ const AdminDashboard = ({ setAuth }) => {
                                  </tbody>
                               </table>
                            </div>
-                           <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
-                              <button onClick={() => setPayrollStep(1)} className="bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-bold text-xs"><ArrowLeft size={14} className="inline mr-1"/> Kembali</button>
-                              <button onClick={submitToFinance} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-2.5 rounded-xl font-black text-sm shadow-lg flex items-center gap-2 transform hover:-translate-y-0.5 transition"><Save size={16}/> Kirim THP ke Finance</button>
+                           <div className="p-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50">
+                              <span className="text-[11px] font-bold text-slate-500">
+                                 *Komponen dengan nominal Rp 0 / kosong tidak akan ditambahkan ke dalam data karyawan.
+                              </span>
+                              <div className="flex gap-3 w-full sm:w-auto justify-end">
+                                 <button onClick={() => setPayrollStep(1)} className="bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-bold text-xs"><ArrowLeft size={14} className="inline mr-1"/> Kembali</button>
+                                 <button onClick={submitToFinance} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-2.5 rounded-xl font-black text-sm shadow-lg flex items-center gap-2 transform hover:-translate-y-0.5 transition"><Save size={16}/> Simpan & Kirim THP ke Finance</button>
+                              </div>
                            </div>
 
                            {/* MODAL SUCCESS ANIMASI */}
@@ -3172,7 +3664,7 @@ const AdminDashboard = ({ setAuth }) => {
                               <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in">
                                  <div className="w-28 h-28 bg-emerald-100 rounded-full flex items-center justify-center mb-6 animate-bounce shadow-xl"><CheckCircle2 size={56} className="text-emerald-500" /></div>
                                  <h2 className="text-3xl font-black text-slate-900 mb-2">Sukses Terkirim!</h2>
-                                 <p className="text-slate-600 font-bold max-w-md bg-white p-4 rounded-xl border border-slate-200 shadow-sm">Data Final Payroll cabang {selectedPayrollSite} telah dikirim ke Dashboard Finance untuk dieksekusi pembayarannya.</p>
+                                 <p className="text-slate-600 font-bold max-w-md bg-white p-4 rounded-xl border border-slate-200 shadow-sm">Data Gaji & Tunjangan karyawan telah diperbarui dan Tagihan Payroll cabang {selectedPayrollSite} telah dikirim ke Dashboard Finance.</p>
                               </div>
                            )}
                         </div>
@@ -4116,6 +4608,26 @@ const AdminDashboard = ({ setAuth }) => {
                            <div><span className="block text-[10px] font-bold text-slate-400 uppercase">Bergabung</span><span className="font-black text-slate-900">{selectedCandidate.tanggal_bergabung || '-'}</span></div>
                            <div className="w-px bg-slate-100"></div>
                            <div><span className="block text-[10px] font-bold text-slate-400 uppercase">Status</span><span className="font-black text-emerald-600">{selectedCandidate.status_kontrak || 'Probation'}</span></div>
+                           <div className="w-px bg-slate-100"></div>
+                           <div>
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Gaji Pokok</span>
+                              <span className="font-black text-emerald-700">Rp {Number(selectedCandidate.base_salary || 0).toLocaleString('id-ID')}</span>
+                           </div>
+                           {safeParseJSON(selectedCandidate.salary_components).length > 0 && (
+                              <>
+                                 <div className="w-px bg-slate-100"></div>
+                                 <div>
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Tunjangan & Komponen</span>
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                       {safeParseJSON(selectedCandidate.salary_components).map((comp, idx) => (
+                                          <span key={idx} className={`text-[10px] font-bold px-2 py-0.5 rounded border ${comp.type === 'deduction' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                             {comp.name}: {comp.type === 'deduction' ? '-' : '+'}Rp {Number(comp.amount || 0).toLocaleString('id-ID')}
+                                          </span>
+                                       ))}
+                                    </div>
+                                 </div>
+                              </>
+                           )}
                         </div>
                       </div>
                     )}

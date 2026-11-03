@@ -7,7 +7,7 @@ import {
   Plus, CheckCircle2, X, RefreshCw, FileText, Menu, Settings, Save, Users,
   Upload, DownloadCloud, FileSpreadsheet, Trash2, Search, ShieldCheck, Check,
   BarChart3, MapPin, Building, Sparkles, TrendingUp, TrendingDown,
-  Info, Activity, History, Printer, ChevronDown, ChevronRight, Edit, AlertCircle
+  Info, Activity, History, Printer, ChevronDown, ChevronRight, Edit, AlertCircle, Target, Lock, AlertTriangle,
 } from 'lucide-react';
 
 const FinanceDashboard = () => {
@@ -16,13 +16,39 @@ const FinanceDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // States Cost Control (Database-Driven & Flexible Period)
+  const [costControlSubTab, setCostControlSubTab] = useState('master');
+  const [budgets, setBudgets] = useState([]);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   
-  // States Data Database
-  const [cashflows, setCashflows] = useState([]);
+  // Default saat modal dibuka: Bulanan dan mengambil bulan ini
+  const [budgetForm, setBudgetForm] = useState({
+    period_type: 'MONTHLY', 
+    period_value: new Date().toISOString().slice(0, 7), 
+    site_location: '',
+    department: '', // State Baru
+    division: '',   // State Baru
+    category: '',
+    allocated_amount: ''
+  });
+
+  const [cashflowItems, setCashflowItems] = useState([
+    { 
+      id: Date.now(), transaction_type: 'EXPENSE', category: '', amount: '', description: '', 
+      transaction_date: new Date().toISOString().split('T')[0],
+      department: '', // State Baru
+      division: ''    // State Baru
+    }
+  ]);
+  const [cashflows, setCashflows] = useState([]); // <- TAMBAHKAN BARIS INI KEMBALI
   const [payrolls, setPayrolls] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [userLocation, setUserLocation] = useState('Pusat (HO)');
+  // Konstanta Struktur Organisasi
+  const DEPARTMENTS = ['Ops', 'Finance', 'HRD', 'Sales and Marketing'];
+  const OPS_DIVISIONS = ['IT', 'Labour Supply', 'Security', 'Parking'];
   
   // Pengaturan Global Finance
   const [sysConfig, setSysConfig] = useState({
@@ -45,6 +71,7 @@ const FinanceDashboard = () => {
   // States Pusat Approval & History Filter
   const [approvalSubTab, setApprovalSubTab] = useState('pending'); // 'pending' | 'history'
   const [payrollSubTab, setPayrollSubTab] = useState('approval'); // Tab default langsung ke Review Tagihan // 'manage' | 'approval' | 'pending' | 'history'
+  const [selectedPayrollIds, setSelectedPayrollIds] = useState([]); // State Checkbox Approval Massal Payroll
   const [historyMonth, setHistoryMonth] = useState('');
   const [historyName, setHistoryName] = useState('');
   const [historyLocation, setHistoryLocation] = useState('');
@@ -77,10 +104,6 @@ const FinanceDashboard = () => {
   // States Modal Import Massal
   const [showImportCashflow, setShowImportCashflow] = useState(false);
   const [showImportPayroll, setShowImportPayroll] = useState(false);
-
-  const [cashflowItems, setCashflowItems] = useState([
-    { id: Date.now(), transaction_type: 'EXPENSE', category: '', amount: '', description: '', transaction_date: new Date().toISOString().split('T')[0] }
-  ]);
   const [payrollForm, setPayrollForm] = useState({ user_id: '', period_month: new Date().toISOString().slice(0, 7), base_salary: '' });
   const [customComponents, setCustomComponents] = useState([]);
   const [invoiceFilterStatus, setInvoiceFilterStatus] = useState('');
@@ -113,12 +136,13 @@ const FinanceDashboard = () => {
   const fetchData = async (currentUser = user) => {
     setLoading(true);
     try {
-      const [cashflowRes, payrollRes, invoiceRes, userRes, candidateRes] = await Promise.all([
+      const [cashflowRes, payrollRes, invoiceRes, userRes, candidateRes, budgetRes] = await Promise.all([
         supabase.from('finance_cashflow').select('*, initial_users!finance_cashflow_created_by_fkey(name)').order('transaction_date', { ascending: false }),
         supabase.from('finance_payroll').select('*, initial_users!finance_payroll_user_id_fkey(name, nik, division, position)').order('created_at', { ascending: false }),
         supabase.from('finance_invoices').select('*').order('created_at', { ascending: false }),
         supabase.from('initial_users').select('id, name, nik, role, division, position, base_salary').in('role', ['staff', 'manager', 'direksi']),
-        supabase.from('candidates').select('nik_karyawan, lokasi_penempatan, status_pernikahan') 
+        supabase.from('candidates').select('nik_karyawan, lokasi_penempatan, status_pernikahan'),
+        supabase.from('finance_budgets').select('*').order('created_at', { ascending: false })
       ]);
 
       const locMap = {};
@@ -151,6 +175,7 @@ const FinanceDashboard = () => {
       if (enrichedPayrolls) setPayrolls(enrichedPayrolls);
       if (invoiceRes.data) setInvoices(invoiceRes.data);
       if (enrichedEmployees) setEmployees(enrichedEmployees);
+      if (budgetRes?.data) setBudgets(budgetRes.data);
 
     } catch (error) { console.error(error); } finally { setLoading(false); }
   };
@@ -211,6 +236,54 @@ const FinanceDashboard = () => {
       return (p.site_location || 'Pusat (HO)') === userLocation;
     });
   }, [payrolls, isAdminOrDireksi, userLocation]);
+
+  // ==========================================
+  // KALKULASI COST CONTROL (REAL-TIME ENGINE)
+  // ==========================================
+  const processedBudgets = useMemo(() => {
+    return budgets.map(b => {
+       const relatedCashflows = accessibleCashflows.filter(c => {
+          const isExpense = c.transaction_type === 'EXPENSE';
+          const isSameSite = c.site_location === b.site_location;
+          const isSameDept = c.department === b.department; // Cek Departemen
+          const isSameDiv = (!b.division) || (c.division === b.division); // Cek Divisi (jika ada)
+          const isSameCategory = c.category.toLowerCase() === b.category.toLowerCase();
+          const isInPeriod = c.transaction_date.startsWith(b.period_value);
+
+          return isExpense && isSameSite && isSameDept && isSameDiv && isSameCategory && isInPeriod;
+       });
+
+       const actual = relatedCashflows.filter(c => c.status === 'PAID').reduce((sum, c) => sum + Number(c.amount), 0);
+       const committed = relatedCashflows.filter(c => c.status === 'WAITING_APPROVAL').reduce((sum, c) => sum + Number(c.amount), 0);
+       
+       return { ...b, actual, committed };
+    });
+  }, [budgets, accessibleCashflows]);
+
+  const handleSaveBudget = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+       const payload = { 
+          period_type: budgetForm.period_type,
+          period_value: budgetForm.period_value,
+          site_location: budgetForm.site_location,
+          department: budgetForm.department,
+          division: budgetForm.division,
+          category: budgetForm.category,
+          allocated_amount: Number(budgetForm.allocated_amount), 
+          created_by: user.id 
+       };
+       const { error } = await supabase.from('finance_budgets').insert([payload]);
+       if (error) throw error;
+       
+       alert('Pagu Anggaran Baru Berhasil Ditetapkan!');
+       setShowBudgetModal(false);
+       setBudgetForm({ period_type: 'MONTHLY', period_value: new Date().toISOString().slice(0, 7), site_location: '', department: '', division: '', category: '', allocated_amount: '' });
+       fetchData();
+    } catch (err) { alert('Gagal menyimpan pagu: ' + err.message); } 
+    finally { setIsSubmitting(false); }
+  };
 
   // ==========================================
   // PERHITUNGAN DASHBOARD & AI SUMMARY
@@ -405,30 +478,69 @@ const FinanceDashboard = () => {
     const hasEmptyFields = cashflowItems.some(item => !item.category || !item.amount);
     if (hasEmptyFields) return alert("Mohon lengkapi semua kolom yang wajib diisi!");
 
+    // ========================================================
+    // 1. COST CONTROL VALIDATION (Sistem Penjaga Pagu Anggaran)
+    // ========================================================
+    for (const item of cashflowItems) {
+      if (item.transaction_type === 'EXPENSE') {
+        // Cari Master Pagu yang cocok dengan data inputan staf
+        const budgetMatch = processedBudgets.find(b => 
+          b.site_location === userLocation &&
+          b.department === item.department &&
+          (b.division === item.division || (!b.division && !item.division)) &&
+          b.category.toLowerCase() === item.category.toLowerCase() &&
+          item.transaction_date.startsWith(b.period_value)
+        );
+
+        if (budgetMatch) {
+          // Jika pagu ditemukan, hitung sisa dan validasi
+          const sisaPagu = budgetMatch.allocated_amount - (budgetMatch.actual + budgetMatch.committed);
+          if (Number(item.amount) > sisaPagu) {
+            return alert(`BLOKIR SISTEM: Pengajuan Ditolak!\n\nPengajuan "${item.category}" sebesar Rp ${Number(item.amount).toLocaleString('id-ID')} melebihi batas.\nSisa Pagu Divisi saat ini hanya: Rp ${sisaPagu.toLocaleString('id-ID')}`);
+          }
+        } else {
+          // Blokir keras jika Admin Finance belum membuatkan Master Pagu
+          return alert(`BLOKIR SISTEM: Pagu Anggaran Tidak Ditemukan!\n\nSistem tidak menemukan Pagu Master untuk Kategori: "${item.category}" pada Departemen: "${item.department}".\nHarap hubungi Admin Finance untuk menetapkan Pagu Anggaran terlebih dahulu di menu Cost Control.`);
+        }
+      }
+    }
+
+    // ========================================================
+    // 2. EKSEKUSI PENYIMPANAN & PEMAKSAAN ALUR APPROVAL
+    // ========================================================
     setIsSubmitting(true);
     try {
-      const isAutoApproved = !sysConfig.finance_req_appv_cashflow; 
-      
-      const payloads = cashflowItems.map(item => ({
-        transaction_date: item.transaction_date,
-        transaction_type: item.transaction_type,
-        category: item.category,
-        amount: Number(item.amount),
-        description: item.description,
-        site_location: userLocation, 
-        created_by: user.id,
-        status: isAutoApproved ? 'PAID' : 'WAITING_APPROVAL',
-        approved_by: isAutoApproved ? user.id : null
-      }));
+      const payloads = cashflowItems.map(item => {
+        const isExpense = item.transaction_type === 'EXPENSE';
+        
+        return {
+          transaction_date: item.transaction_date,
+          transaction_type: item.transaction_type,
+          category: item.category,
+          amount: Number(item.amount),
+          description: item.description,
+          site_location: userLocation, 
+          department: item.department,
+          division: item.division,
+          created_by: user.id,
+          // WAJIBKAN APPROVAL: Uang keluar wajib masuk Pusat Approval, uang masuk langsung Lunas
+          status: isExpense ? 'WAITING_APPROVAL' : 'PAID',
+          approved_by: isExpense ? null : user.id
+        };
+      });
       
       const { error } = await supabase.from('finance_cashflow').insert(payloads);
       if (error) throw error;
       
-      alert(isAutoApproved ? 'Transaksi Lunas berhasil disimpan!' : 'Semua Transaksi dikirim ke Pusat Approval!');
+      alert('Berhasil! Pengajuan dana telah dikunci dan masuk ke antrean Pusat Approval.');
       setShowCashflowModal(false); 
-      setCashflowItems([{ id: Date.now(), transaction_type: 'EXPENSE', category: '', amount: '', description: '', transaction_date: new Date().toISOString().split('T')[0] }]);
+      setCashflowItems([{ id: Date.now(), transaction_type: 'EXPENSE', category: '', amount: '', description: '', transaction_date: new Date().toISOString().split('T')[0], department: '', division: '' }]);
       fetchData();
-    } catch (err) { alert('Gagal menyimpan: ' + err.message); } finally { setIsSubmitting(false); }
+    } catch (err) { 
+      alert('Gagal menyimpan: ' + err.message); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const [expandedCashflowGroups, setExpandedCashflowGroups] = useState({});
@@ -910,6 +1022,89 @@ const FinanceDashboard = () => {
     } catch(err) { alert("Gagal memproses. Pesan Supabase: " + err.message); }
   };
 
+  // --- FUNGSI CHECKBOX & EKSEKUSI MASSAL REVIEW TAGIHAN HRD ---
+  const toggleSelectPayroll = (id) => {
+    setSelectedPayrollIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllPayroll = (e, waitingList) => {
+    if (e.target.checked) {
+      setSelectedPayrollIds(waitingList.map(item => item.id));
+    } else {
+      setSelectedPayrollIds([]);
+    }
+  };
+
+  const handleBulkPayrollAction = async (actionType) => {
+    const waitingList = payrolls.filter(p => p.status === 'WAITING_APPROVAL');
+    const targetSlips = waitingList.filter(p => selectedPayrollIds.includes(p.id));
+    const targetIds = targetSlips.map(p => p.id);
+
+    if (targetIds.length === 0) return;
+
+    try {
+      setLoading(true);
+
+      if (actionType === 'LUNAS') {
+        if (!window.confirm(`Bayar LUNAS sekaligus untuk ${targetIds.length} tagihan gaji yang dipilih?`)) return;
+
+        const { error: updErr } = await supabase
+          .from('finance_payroll')
+          .update({ status: 'PAID', approved_by: user.id })
+          .in('id', targetIds);
+        if (updErr) throw updErr;
+
+        const cashflowPayloads = targetSlips.map(slip => ({
+          transaction_date: new Date().toISOString().split('T')[0],
+          transaction_type: 'EXPENSE',
+          category: `Payroll Area: ${slip.site_location || 'Pusat (HO)'} (${slip.period_month})`,
+          amount: Number(slip.net_salary),
+          description: `Gaji: ${slip.initial_users?.name || 'Karyawan'} - ${slip.initial_users?.nik || ''}`,
+          site_location: slip.site_location || 'Pusat (HO)',
+          status: 'PAID',
+          created_by: user.id,
+          approved_by: user.id
+        }));
+
+        const { error: insErr } = await supabase.from('finance_cashflow').insert(cashflowPayloads);
+        if (insErr) throw insErr;
+
+        alert(`SUKSES: ${targetIds.length} tagihan gaji berhasil dibayar lunas dan dicatat ke Arus Kas!`);
+      } 
+      else if (actionType === 'TUNDA') {
+        if (!window.confirm(`Tunda pembayaran untuk ${targetIds.length} tagihan gaji yang dipilih? Data akan masuk ke daftar Hutang Gaji (Split Pay).`)) return;
+
+        const { error: updErr } = await supabase
+          .from('finance_payroll')
+          .update({ status: 'PENDING_PAYROLL', paid_amount: 0 })
+          .in('id', targetIds);
+        if (updErr) throw updErr;
+
+        alert(`SUKSES: ${targetIds.length} tagihan gaji dialihkan ke status Hutang Gaji (Tunda).`);
+      } 
+      else if (actionType === 'TOLAK') {
+        if (!window.confirm(`Tolak dan HAPUS ${targetIds.length} tagihan gaji yang dipilih?`)) return;
+
+        const { error: delErr } = await supabase
+          .from('finance_payroll')
+          .delete()
+          .in('id', targetIds);
+        if (delErr) throw delErr;
+
+        alert(`${targetIds.length} data tagihan gaji ditolak dan dihapus!`);
+      }
+
+      setSelectedPayrollIds([]);
+      fetchData();
+    } catch (err) {
+      alert("Gagal memproses aksi massal: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImportCashflow = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1000,6 +1195,12 @@ const FinanceDashboard = () => {
            {(user?.can_access_invoice || isAdminOrDireksi) && (
              <button onClick={() => handleNav('invoice')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-bold ${activeTab === 'invoice' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800'}`}>
                <Receipt size={18}/> Tagihan (Invoice)
+             </button>
+           )}
+
+           {(user?.can_manage_finance || isAdminOrDireksi) && (
+             <button onClick={() => handleNav('cost_control')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-bold ${activeTab === 'cost_control' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800'}`}>
+               <Target size={18}/> Cost Control & Anggaran
              </button>
            )}
            
@@ -1268,60 +1469,152 @@ const FinanceDashboard = () => {
                   <button onClick={() => setPayrollSubTab('history')} className={`px-4 py-3 text-sm font-black transition-colors whitespace-nowrap ${payrollSubTab === 'history' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}>Riwayat Pembayaran</button>
                 </div>
 
-                {payrollSubTab === 'approval' && (
-                  <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-                     <div className="p-4">
-                       {payrolls.filter(p => p.status === 'WAITING_APPROVAL').length === 0 ? (
-                         <p className="text-center text-xs text-slate-400 font-bold py-6">Tidak ada slip gaji yang perlu di-approve/dibayar saat ini.</p>
-                       ) : (
-                         <div className="overflow-x-auto">
-                           <table className="min-w-full text-left">
-                             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase">
-                               <tr>
-                                 <th className="px-4 py-3">Periode</th>
-                                 <th className="px-4 py-3">Karyawan & Penempatan</th>
-                                 <th className="px-4 py-3 text-right">Total THP</th>
-                                 <th className="px-4 py-3 text-center w-64">Keputusan Pembayaran</th>
-                               </tr>
-                             </thead>
-                             <tbody className="text-sm">
-                               {payrolls.filter(p => p.status === 'WAITING_APPROVAL').map(slip => (
-                                 <tr key={slip.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                   <td className="px-4 py-3 font-bold text-slate-700">{slip.period_month}</td>
-                                   <td className="px-4 py-3">
-                                      <span className="font-black text-slate-800">{slip.initial_users?.name}</span><br/>
-                                      <span className="text-[10px] text-slate-500">NIK: {slip.initial_users?.nik} • {slip.site_location || 'Pusat (HO)'}</span>
-                                   </td>
-                                   <td className="px-4 py-3 text-right font-black text-emerald-600">{formatRupiah(slip.net_salary)}</td>
-                                   <td className="px-4 py-3">
-                                     <div className="flex flex-col gap-1.5">
-                                       <button onClick={() => processApproval('finance_payroll', slip.id, true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex items-center justify-center gap-1 w-full"><Check size={12}/> Bayar Lunas</button>
-                                       
-                                       <div className="flex gap-1.5">
-                                         <button onClick={async () => {
-                                             if(!window.confirm(`Tunda pembayaran untuk ${slip.initial_users?.name}? Data akan masuk ke daftar Hutang Gaji (Pending Payroll).`)) return;
-                                             try {
-                                                // PERBAIKAN: Gunakan text murni, pastikan huruf besar semua agar aman dari error Supabase 400
-                                                const { error } = await supabase.from('finance_payroll').update({ status: 'PENDING_PAYROLL', paid_amount: 0 }).eq('id', slip.id);
-                                                if (error) throw error;
-                                                fetchData();
-                                                alert("Gaji dialihkan ke status Hutang (Tunda).");
-                                             } catch(err) { alert("Error dari Supabase: " + err.message + ". Pastikan kolom 'paid_amount' (int8) sudah ada di tabel."); }
-                                         }} className="flex-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-2 py-1.5 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center gap-1"><Wallet size={10}/> Tunda (Kas Kurang)</button>
-                                         
-                                         <button onClick={() => processApproval('finance_payroll', slip.id, false)} className="flex-[0.5] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1.5 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center"><X size={12} title="Tolak / Hapus"/></button>
-                                       </div>
-                                     </div>
-                                   </td>
-                                 </tr>
-                               ))}
-                             </tbody>
-                           </table>
-                         </div>
-                       )}
-                     </div>
-                  </div>
-                )}
+                {payrollSubTab === 'approval' && (() => {
+                  const waitingPayrolls = payrolls.filter(p => p.status === 'WAITING_APPROVAL');
+                  const activeSelectedIds = selectedPayrollIds.filter(id => waitingPayrolls.some(p => p.id === id));
+                  const hasSelection = activeSelectedIds.length > 0;
+                  const isAllPayrollSelected = waitingPayrolls.length > 0 && activeSelectedIds.length === waitingPayrolls.length;
+                  const totalSelectedTHP = waitingPayrolls
+                    .filter(p => activeSelectedIds.includes(p.id))
+                    .reduce((sum, p) => sum + Number(p.net_salary || 0), 0);
+
+                  return (
+                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in relative">
+                      <div className="p-4">
+                        {waitingPayrolls.length === 0 ? (
+                          <p className="text-center text-xs text-slate-400 font-bold py-6">Tidak ada slip gaji yang perlu di-approve/dibayar saat ini.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-left">
+                              <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase">
+                                <tr>
+                                  <th className="px-4 py-3 w-12 text-center">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={isAllPayrollSelected}
+                                      onChange={(e) => toggleSelectAllPayroll(e, waitingPayrolls)}
+                                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                      title="Pilih Semua Tagihan"
+                                    />
+                                  </th>
+                                  <th className="px-4 py-3">Periode</th>
+                                  <th className="px-4 py-3">Karyawan & Penempatan</th>
+                                  <th className="px-4 py-3 text-right">Total THP</th>
+                                  {/* Kolom Keputusan di samping otomatis hilang jika ada checkbox yang dicentang */}
+                                  {!hasSelection && (
+                                    <th className="px-4 py-3 text-center w-64">Keputusan Pembayaran</th>
+                                  )}
+                                </tr>
+                              </thead>
+                              <tbody className="text-sm">
+                                {waitingPayrolls.map(slip => {
+                                  const isChecked = activeSelectedIds.includes(slip.id);
+                                  return (
+                                    <tr 
+                                      key={slip.id} 
+                                      onClick={() => toggleSelectPayroll(slip.id)}
+                                      className={`border-b border-slate-100 transition-colors cursor-pointer ${isChecked ? 'bg-emerald-50/60 hover:bg-emerald-50' : 'hover:bg-slate-50'}`}
+                                    >
+                                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isChecked}
+                                          onChange={() => toggleSelectPayroll(slip.id)}
+                                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                        />
+                                      </td>
+                                      <td className="px-4 py-3 font-bold text-slate-700">{slip.period_month}</td>
+                                      <td className="px-4 py-3">
+                                        <span className="font-black text-slate-800">{slip.initial_users?.name}</span><br/>
+                                        <span className="text-[10px] text-slate-500">NIK: {slip.initial_users?.nik} • {slip.site_location || 'Pusat (HO)'}</span>
+                                      </td>
+                                      <td className="px-4 py-3 text-right font-black text-emerald-600">{formatRupiah(slip.net_salary)}</td>
+                                      
+                                      {/* Tombol di samping kanan hanya tampil jika TIDAK ADA checkbox yang dicentang */}
+                                      {!hasSelection && (
+                                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                          <div className="flex flex-col gap-1.5">
+                                            <button onClick={() => processApproval('finance_payroll', slip.id, true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm flex items-center justify-center gap-1 w-full"><Check size={12}/> Bayar Lunas</button>
+                                            
+                                            <div className="flex gap-1.5">
+                                              <button onClick={async () => {
+                                                  if(!window.confirm(`Tunda pembayaran untuk ${slip.initial_users?.name}? Data akan masuk ke daftar Hutang Gaji (Pending Payroll).`)) return;
+                                                  try {
+                                                     const { error } = await supabase.from('finance_payroll').update({ status: 'PENDING_PAYROLL', paid_amount: 0 }).eq('id', slip.id);
+                                                     if (error) throw error;
+                                                     fetchData();
+                                                     alert("Gaji dialihkan ke status Hutang (Tunda).");
+                                                  } catch(err) { alert("Error dari Supabase: " + err.message + ". Pastikan kolom 'paid_amount' (int8) sudah ada di tabel."); }
+                                              }} className="flex-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-2 py-1.5 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center gap-1"><Wallet size={10}/> Tunda (Kas Kurang)</button>
+                                              
+                                              <button onClick={() => processApproval('finance_payroll', slip.id, false)} className="flex-[0.5] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1.5 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center"><X size={12} title="Tolak / Hapus"/></button>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* PANEL KEPUTUSAN MASSAL DI BAWAH (MUNCUL SAAT CHECKBOX DICENTANG) */}
+                      {hasSelection && (
+                        <div className="bg-slate-900 text-white p-4 md:px-6 md:py-4 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="bg-emerald-500 text-slate-950 text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
+                              <CheckCircle2 size={14}/> {activeSelectedIds.length} Tagihan Dipilih
+                            </span>
+                            <div className="text-xs font-bold text-slate-300">
+                              Total THP Terpilih: <span className="text-emerald-400 font-black text-sm ml-1">{formatRupiah(totalSelectedTHP)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-center gap-2 w-full md:w-auto">
+                            <button 
+                              type="button"
+                              onClick={() => handleBulkPayrollAction('LUNAS')} 
+                              disabled={loading}
+                              className="flex-1 md:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all"
+                            >
+                              <Check size={14}/> Bayar Lunas ({activeSelectedIds.length})
+                            </button>
+
+                            <button 
+                              type="button"
+                              onClick={() => handleBulkPayrollAction('TUNDA')} 
+                              disabled={loading}
+                              className="flex-1 md:flex-initial bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all"
+                            >
+                              <Wallet size={14}/> Tunda (Kas Kurang)
+                            </button>
+
+                            <button 
+                              type="button"
+                              onClick={() => handleBulkPayrollAction('TOLAK')} 
+                              disabled={loading}
+                              className="bg-red-950/80 hover:bg-red-800 border border-red-700 text-red-200 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all"
+                              title="Tolak & Hapus Tagihan Terpilih"
+                            >
+                              <Trash2 size={14}/> Tolak
+                            </button>
+
+                            <button 
+                              type="button"
+                              onClick={() => setSelectedPayrollIds([])} 
+                              className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all"
+                            >
+                              <X size={14}/> Batal
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* ========================================= */}
                 {/* TAB: HUTANG GAJI (SPLIT PAY / CICILAN) */}
@@ -1425,13 +1718,94 @@ const FinanceDashboard = () => {
                   </div>
                 )}
 
-                {payrollSubTab === 'history' && (
-                   <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
-                      <div className="bg-slate-50 border-b border-slate-100 p-4"><h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><History size={16}/> Riwayat Pembayaran Gaji</h3></div>
+                {payrollSubTab === 'history' && (() => {
+                  const isFilterApplied = Boolean(
+                    historyMonth.trim() !== '' || 
+                    historyName.trim() !== '' || 
+                    historyLocation.trim() !== ''
+                  );
+
+                  const availableHistoryLocations = [
+                    ...new Set([
+                      ...uniqueDivisions,
+                      ...payrolls
+                        .filter(p => p.status === 'PAID' || p.status === 'REJECTED')
+                        .map(p => p.site_location || 'Pusat (HO)')
+                    ].filter(Boolean))
+                  ].sort();
+
+                  const filteredHistoryPayrolls = !isFilterApplied
+                    ? []
+                    : payrolls
+                        .filter(p => p.status === 'PAID' || p.status === 'REJECTED')
+                        .filter(p => {
+                          const matchMonth = !historyMonth || p.period_month === historyMonth;
+                          const matchLoc = !historyLocation || (p.site_location || 'Pusat (HO)') === historyLocation;
+                          const searchLower = historyName.trim().toLowerCase();
+                          const matchNameOrNik = !searchLower || 
+                            (p.initial_users?.name || '').toLowerCase().includes(searchLower) ||
+                            (p.initial_users?.nik || '').toLowerCase().includes(searchLower);
+                          return matchMonth && matchLoc && matchNameOrNik;
+                        });
+
+                  const totalFilteredHistoryTHP = filteredHistoryPayrolls
+                    .filter(p => p.status === 'PAID')
+                    .reduce((sum, p) => sum + Number(p.net_salary || 0), 0);
+
+                  return (
+                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+                      <div className="bg-slate-50 border-b border-slate-100 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                          <History size={16}/> Riwayat Pembayaran Gaji
+                        </h3>
+                        {isFilterApplied && (
+                          <div className="text-xs font-bold text-slate-500">
+                            Ditemukan: <span className="text-slate-800 font-black">{filteredHistoryPayrolls.length} Data</span> • Total Lunas: <span className="text-emerald-600 font-black">{formatRupiah(totalFilteredHistoryTHP)}</span>
+                          </div>
+                        )}
+                      </div>
                       
-                      <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-2 bg-white">
-                         <input type="month" value={historyMonth} onChange={(e) => setHistoryMonth(e.target.value)} className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:outline-none" />
-                         <input type="text" placeholder="Cari nama karyawan..." value={historyName} onChange={(e) => setHistoryName(e.target.value)} className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none" />
+                      {/* BAR FILTER RIWAYAT PEMBAYARAN */}
+                      <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row items-center gap-2 bg-white">
+                        <input 
+                          type="month" 
+                          value={historyMonth} 
+                          onChange={(e) => setHistoryMonth(e.target.value)} 
+                          className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500" 
+                        />
+                        <select 
+                          value={historyLocation} 
+                          onChange={(e) => setHistoryLocation(e.target.value)} 
+                          className="w-full md:w-auto px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="">-- Pilih Lokasi / Site --</option>
+                          {availableHistoryLocations.map(loc => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                        <div className="relative flex-1 w-full">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input 
+                            type="text" 
+                            placeholder="Cari nama atau NIK karyawan..." 
+                            value={historyName} 
+                            onChange={(e) => setHistoryName(e.target.value)} 
+                            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-emerald-500" 
+                          />
+                        </div>
+                        {isFilterApplied && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setHistoryMonth('');
+                              setHistoryLocation('');
+                              setHistoryName('');
+                            }}
+                            className="w-full md:w-auto px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-black transition-colors shrink-0"
+                          >
+                            Reset Filter
+                          </button>
+                        )}
                       </div>
 
                       <div className="overflow-x-auto">
@@ -1445,29 +1819,45 @@ const FinanceDashboard = () => {
                             </tr>
                           </thead>
                           <tbody className="text-sm divide-y divide-slate-100">
-                            {payrolls.filter(p => p.status === 'PAID' || p.status === 'REJECTED').length === 0 ? (
-                              <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold text-xs">Riwayat payroll tidak ditemukan.</td></tr>
+                            {!isFilterApplied ? (
+                              <tr>
+                                <td colSpan="4" className="px-6 py-14 text-center text-slate-400 font-bold text-xs bg-slate-50/40">
+                                  <Search size={28} className="mx-auto mb-2 text-slate-300" />
+                                  Silakan pilih filter <span className="text-slate-600">Periode Bulan</span>, <span className="text-slate-600">Lokasi / Site</span>, atau ketik <span className="text-slate-600">Nama / NIK Karyawan</span> terlebih dahulu untuk menampilkan riwayat pembayaran.
+                                </td>
+                              </tr>
+                            ) : filteredHistoryPayrolls.length === 0 ? (
+                              <tr>
+                                <td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold text-xs">
+                                  Tidak ada riwayat pembayaran gaji yang cocok dengan filter yang dipilih.
+                                </td>
+                              </tr>
                             ) : (
-                               payrolls.filter(p => p.status === 'PAID' || p.status === 'REJECTED').map(p => (
-                                  <tr key={`p-${p.id}`} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-slate-700">{p.period_month}</td>
-                                    <td className="px-6 py-4">
-                                       <span className="font-black text-slate-800">{p.initial_users?.name}</span><br/>
-                                       <span className="text-[10px] text-slate-500">NIK: {p.initial_users?.nik} • {p.site_location || '-'}</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-black text-emerald-600">{formatRupiah(p.net_salary)}</td>
-                                    <td className="px-6 py-4 text-center">
-                                       <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${p.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{p.status === 'PAID' ? 'DISETUJUI / LUNAS' : 'DITOLAK'}</span>
-                                       <button onClick={() => setViewPayslip(p)} className="block mx-auto mt-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[9px] font-black transition-colors uppercase w-max shadow-sm"><FileText size={10} className="inline mr-1"/> Detail</button>
-                                    </td>
-                                  </tr>
-                               ))
+                              filteredHistoryPayrolls.map(p => (
+                                <tr key={`p-${p.id}`} className="hover:bg-slate-50 transition-colors">
+                                  <td className="px-6 py-4 font-bold text-slate-700">{p.period_month}</td>
+                                  <td className="px-6 py-4">
+                                    <span className="font-black text-slate-800">{p.initial_users?.name}</span><br/>
+                                    <span className="text-[10px] text-slate-500">NIK: {p.initial_users?.nik} • {p.site_location || '-'}</span>
+                                  </td>
+                                  <td className="px-6 py-4 text-right font-black text-emerald-600">{formatRupiah(p.net_salary)}</td>
+                                  <td className="px-6 py-4 text-center">
+                                    <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${p.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                                      {p.status === 'PAID' ? 'DISETUJUI / LUNAS' : 'DITOLAK'}
+                                    </span>
+                                    <button onClick={() => setViewPayslip(p)} className="block mx-auto mt-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[9px] font-black transition-colors uppercase w-max shadow-sm">
+                                      <FileText size={10} className="inline mr-1"/> Detail
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
                             )}
                           </tbody>
                         </table>
                       </div>
-                   </div>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1850,6 +2240,151 @@ const FinanceDashboard = () => {
                  </div>
               </div>
             )}
+
+            {/* ========================================== */}
+            {/* FITUR BARU: COST CONTROL & ANGGARAN BUJP */}
+            {/* ========================================== */}
+            {activeTab === 'cost_control' && (
+              <div className="animate-fade-in space-y-4">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-2">
+                  <div>
+                    <h3 className="font-black text-slate-800">Pengendalian Anggaran (Cost Control) {isAdminOrDireksi ? '' : `(${userLocation})`}</h3>
+                    <p className="text-xs text-slate-500 font-medium">Pantau batas maksimal pengeluaran operasional per area penempatan.</p>
+                  </div>
+                  {(user.can_manage_finance || isAdminOrDireksi) && (
+                    <button onClick={() => setShowBudgetModal(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                      <Plus size={14}/> Set Pagu Anggaran Baru
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex gap-2 border-b border-slate-200 mb-6 overflow-x-auto custom-scrollbar">
+                  <button onClick={() => setCostControlSubTab('master')} className={`px-4 py-3 text-sm font-black transition-colors whitespace-nowrap flex items-center gap-2 ${costControlSubTab === 'master' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                     <Target size={16}/> Master Pagu Anggaran
+                  </button>
+                  <button onClick={() => setCostControlSubTab('request')} className={`px-4 py-3 text-sm font-black transition-colors whitespace-nowrap flex items-center gap-2 ${costControlSubTab === 'request' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                     <Lock size={16}/> Antrean Pengajuan (Committed)
+                  </button>
+                </div>
+
+                {/* SUB-TAB 1: MASTER LIMIT */}
+                {costControlSubTab === 'master' && (
+                  <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+                     <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center">
+                        <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">Status Penyerapan Anggaran Berjalan</h3>
+                     </div>
+                     <div className="overflow-x-auto">
+                        <table className="min-w-full text-left">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                            <tr>
+                              <th className="px-6 py-4">Periode & Area</th>
+                              <th className="px-6 py-4 text-right">Pagu Maksimal (Limit)</th>
+                              <th className="px-6 py-4 text-right">Terpakai (Actual + Pending)</th>
+                              <th className="px-6 py-4">Progress Penyerapan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-sm">
+                            {processedBudgets.length === 0 ? (
+                               <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold text-xs">Belum ada pagu anggaran yang diset.</td></tr>
+                            ) : (
+                              processedBudgets.map(b => {
+                               const totalUsed = b.actual + b.committed;
+                               const sisaDana = b.allocated_amount - totalUsed;
+                               const percent = Math.round((totalUsed / b.allocated_amount) * 100) || 0;
+                               const isWarning = percent > 85;
+                               
+                               return (
+                                 <tr key={b.id} className="hover:bg-slate-50 transition-colors">
+                                   <td className="px-6 py-4">
+                                     <span className="font-black text-slate-800 block">{b.category}</span>
+                                     <div className="flex flex-wrap gap-2 mt-1.5">
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${b.period_type === 'YEARLY' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                          {b.period_type === 'YEARLY' ? `Thn: ${b.period_value}` : `Bln: ${b.period_value}`}
+                                        </span>
+                                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                          <Users size={10}/> {b.department} {b.division && `> ${b.division}`}
+                                        </span>
+                                        <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                          <MapPin size={10}/> {b.site_location}
+                                        </span>
+                                     </div>
+                                   </td>
+                                   <td className="px-6 py-4 text-right font-black text-slate-800">{formatRupiah(b.allocated_amount)}</td>
+                                   <td className="px-6 py-4 text-right">
+                                      <span className="font-black text-slate-700">{formatRupiah(totalUsed)}</span>
+                                      <span className="block text-[9px] font-bold text-slate-400 mt-0.5">Sisa Pagu: <span className={sisaDana <= 0 ? "text-red-500" : "text-emerald-500"}>{formatRupiah(sisaDana)}</span></span>
+                                   </td>
+                                   <td className="px-6 py-4">
+                                      <div className="flex items-center gap-3">
+                                         <div className="w-full bg-slate-200 rounded-full h-2 flex-1 max-w-[150px] overflow-hidden">
+                                            <div className={`h-2 rounded-full transition-all duration-500 ${percent >= 100 ? 'bg-red-600' : isWarning ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{width: `${Math.min(percent, 100)}%`}}></div>
+                                         </div>
+                                         <span className={`text-[10px] font-black w-10 ${percent >= 100 ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-emerald-600'}`}>{percent}%</span>
+                                         {isWarning && <AlertTriangle size={14} className={`${percent >= 100 ? 'text-red-600 animate-bounce' : 'text-amber-500 animate-pulse'} shrink-0`} title="Anggaran Menipis/Over-budget"/>}
+                                      </div>
+                                      {b.committed > 0 && (
+                                         <p className="text-[9px] font-bold text-amber-600 mt-1">*{formatRupiah(b.committed)} masih antre approval (Committed).</p>
+                                      )}
+                                   </td>
+                                 </tr>
+                               );
+                            }))}
+                          </tbody>
+                        </table>
+                     </div>
+                  </div>
+                )}
+                
+                {/* SUB-TAB 2: DETAIL REQUEST (COMMITTED COST) */}
+                {costControlSubTab === 'request' && (
+                   <div className="animate-fade-in space-y-4">
+                     <div className="bg-amber-50 border border-amber-100 p-6 rounded-[2rem] shadow-sm flex items-start gap-4">
+                        <div className="bg-white p-3 rounded-full shadow-sm text-amber-600"><Lock size={24}/></div>
+                        <div>
+                           <h3 className="font-black text-amber-900 text-lg">Dana Terkunci (Committed Cost)</h3>
+                           <p className="text-xs text-amber-700 font-bold mt-1">Daftar pengajuan pengeluaran yang sedang menunggu approval. Saldo di daftar ini <b>sudah memotong pagu anggaran</b> secara virtual agar tidak terjadi double-spending (kecolongan kuota).</p>
+                        </div>
+                     </div>
+
+                     <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-left">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                              <tr>
+                                <th className="px-6 py-4">Tanggal Pengajuan</th>
+                                <th className="px-6 py-4">Kategori & Deskripsi</th>
+                                <th className="px-6 py-4">Lokasi Beban</th>
+                                <th className="px-6 py-4 text-right">Nilai Diajukan</th>
+                                <th className="px-6 py-4 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                              {accessibleCashflows.filter(c => c.transaction_type === 'EXPENSE' && c.status === 'WAITING_APPROVAL').length === 0 ? (
+                                 <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-400 font-bold text-xs">Tidak ada antrean dana terkunci saat ini. Aman.</td></tr>
+                              ) : (
+                                 accessibleCashflows.filter(c => c.transaction_type === 'EXPENSE' && c.status === 'WAITING_APPROVAL').map(item => (
+                                    <tr key={item.id} className="hover:bg-slate-50">
+                                      <td className="px-6 py-4 font-bold text-slate-700">{item.transaction_date}</td>
+                                      <td className="px-6 py-4">
+                                         <span className="font-black text-slate-800">{item.category}</span><br/>
+                                         <span className="text-[10px] text-slate-500">{item.description || 'Tidak ada deskripsi'}</span>
+                                      </td>
+                                      <td className="px-6 py-4 text-[11px] font-bold text-blue-600">{item.site_location || 'Pusat (HO)'}</td>
+                                      <td className="px-6 py-4 text-right font-black text-amber-600">{formatRupiah(item.amount)}</td>
+                                      <td className="px-6 py-4 text-center">
+                                         <span className="text-[9px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-md animate-pulse uppercase tracking-widest">Dana Terkunci</span>
+                                      </td>
+                                    </tr>
+                                 ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                     </div>
+                   </div>
+                )}
+              </div>
+            )}
         </div>
       </main>
 
@@ -1959,27 +2494,49 @@ const FinanceDashboard = () => {
                        <button type="button" onClick={() => removeCashflowItem(item.id)} className="md:hidden absolute top-2 right-2 text-red-500 p-1 bg-red-100 rounded-md"><X size={14}/></button>
                      )}
                      <div className="md:col-span-2">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Tanggal</label>
-                       <input required type="date" value={item.transaction_date} onChange={e => updateCashflowItem(item.id, 'transaction_date', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-emerald-500" />
-                     </div>
-                     <div className="md:col-span-2">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Tipe</label>
-                       <select required value={item.transaction_type} onChange={e => updateCashflowItem(item.id, 'transaction_type', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-emerald-500">
-                          <option value="EXPENSE">Pengeluaran (-)</option>
-                          <option value="INCOME">Pemasukan (+)</option>
-                       </select>
+                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Tanggal & Tipe</label>
+                       <div className="flex gap-1">
+                         <input required type="date" value={item.transaction_date} onChange={e => updateCashflowItem(item.id, 'transaction_date', e.target.value)} className="w-1/2 px-2 py-2 bg-white border border-slate-200 rounded-lg font-bold text-[10px] outline-none focus:border-emerald-500" />
+                         <select required value={item.transaction_type} onChange={e => updateCashflowItem(item.id, 'transaction_type', e.target.value)} className="w-1/2 px-2 py-2 bg-white border border-slate-200 rounded-lg font-bold text-[10px] outline-none focus:border-emerald-500">
+                            <option value="EXPENSE">Keluaran</option>
+                            <option value="INCOME">Pemasukan</option>
+                         </select>
+                       </div>
                      </div>
                      <div className="md:col-span-3">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Kategori / Judul</label>
-                       <input required type="text" placeholder="Cth: ATK, Seragam" value={item.category} onChange={e => updateCashflowItem(item.id, 'category', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-emerald-500" />
+                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Dept & Divisi Pemohon</label>
+                       <div className="flex gap-1">
+                         <select required value={item.department} onChange={e => {
+                             updateCashflowItem(item.id, 'department', e.target.value);
+                             if(e.target.value !== 'Ops') updateCashflowItem(item.id, 'division', '');
+                         }} className="w-1/2 px-2 py-2 bg-white border border-slate-200 rounded-lg font-bold text-[10px] outline-none focus:border-emerald-500">
+                            <option value="">- Dept -</option>
+                            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                         </select>
+                         <select value={item.division} disabled={item.department !== 'Ops'} onChange={e => updateCashflowItem(item.id, 'division', e.target.value)} className="w-1/2 px-2 py-2 bg-white border border-slate-200 rounded-lg font-bold text-[10px] outline-none focus:border-emerald-500 disabled:bg-slate-100">
+                            <option value="">- Divisi -</option>
+                            {item.department === 'Ops' && OPS_DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                         </select>
+                       </div>
                      </div>
                      <div className="md:col-span-2">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Nominal (Rp)</label>
+                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Kategori / Cost Center</label>
+                       <input required type="text" list="budget-categories" placeholder="Pilih / Ketik Kategori..." value={item.category} onChange={e => updateCashflowItem(item.id, 'category', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-xs outline-none focus:border-emerald-500" />
+                       
+                       {/* Fitur Auto-Suggest mengambil dari data Master Pagu */}
+                       <datalist id="budget-categories">
+                          {[...new Set(budgets.map(b => b.category))].map(cat => (
+                             <option key={cat} value={cat} />
+                          ))}
+                       </datalist>
+                     </div>
+                     <div className="md:col-span-2">
+                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Nominal Pengajuan (Rp)</label>
                        <input required type="number" min="0" value={item.amount} onChange={e => updateCashflowItem(item.id, 'amount', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-black text-emerald-600 text-xs outline-none focus:border-emerald-500" />
                      </div>
                      <div className="md:col-span-2">
-                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Keterangan Tambahan</label>
-                       <input type="text" placeholder="Opsional" value={item.description} onChange={e => updateCashflowItem(item.id, 'description', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-medium text-xs outline-none focus:border-emerald-500" />
+                       <label className="block text-[9px] font-black text-slate-500 uppercase mb-1">Keterangan / Tujuan</label>
+                       <input required type="text" placeholder="Untuk keperluan..." value={item.description} onChange={e => updateCashflowItem(item.id, 'description', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-medium text-xs outline-none focus:border-emerald-500" />
                      </div>
                      <div className="hidden md:flex md:col-span-1 justify-center pb-0.5">
                        <button type="button" onClick={() => removeCashflowItem(item.id)} disabled={cashflowItems.length === 1} className={`p-2 rounded-lg transition-colors ${cashflowItems.length === 1 ? 'text-slate-300 bg-slate-100 cursor-not-allowed' : 'text-red-500 bg-red-100 hover:bg-red-200'}`}><Trash2 size={16}/></button>
@@ -2448,6 +3005,89 @@ const FinanceDashboard = () => {
                </div>
                
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* MODAL INPUT PAGU ANGGARAN (COST CONTROL) */}
+      {/* ========================================== */}
+      {showBudgetModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex justify-center items-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-fade-in flex flex-col border border-slate-200">
+            <div className="p-5 bg-emerald-600 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-lg tracking-tight flex items-center gap-2"><Target size={18}/> Tetapkan Pagu Anggaran</h3>
+                <p className="text-[10px] font-bold mt-0.5 opacity-80">Batasi maksimum pengeluaran operasional divisi.</p>
+              </div>
+              <button onClick={() => setShowBudgetModal(false)} className="bg-slate-900/10 p-2 rounded-full hover:bg-slate-900/20 transition-colors"><X size={18}/></button>
+            </div>
+            
+            <form onSubmit={handleSaveBudget} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Tipe Masa Berlaku Pagu</label>
+                 <select value={budgetForm.period_type} onChange={e => {
+                    const type = e.target.value;
+                    const defaultVal = type === 'YEARLY' ? new Date().getFullYear().toString() : new Date().toISOString().slice(0, 7);
+                    setBudgetForm({...budgetForm, period_type: type, period_value: defaultVal});
+                 }} className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 transition-all mb-4 shadow-sm">
+                    <option value="MONTHLY">Bulanan (Per Bulan)</option>
+                    <option value="YEARLY">Tahunan (1 Tahun Penuh)</option>
+                 </select>
+                 
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pilih {budgetForm.period_type === 'YEARLY' ? 'Tahun Berlaku' : 'Bulan Berlaku'}</label>
+                 {budgetForm.period_type === 'MONTHLY' ? (
+                   <input required type="month" value={budgetForm.period_value} onChange={e => setBudgetForm({...budgetForm, period_value: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 transition-all shadow-sm" />
+                 ) : (
+                   <input required type="number" min="2020" max="2100" placeholder="Cth: 2026" value={budgetForm.period_value} onChange={e => setBudgetForm({...budgetForm, period_value: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg font-bold text-sm outline-none focus:border-emerald-500 transition-all shadow-sm" />
+                 )}
+              </div>
+              
+              <div>
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Area Penempatan / Divisi</label>
+                 <select required value={budgetForm.site_location} onChange={e => setBudgetForm({...budgetForm, site_location: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-emerald-500 transition-all">
+                    <option value="">-- Pilih Lokasi --</option>
+                    {uniqueDivisions.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                 </select>
+              </div>
+
+              {/* Sisipkan 2 blok ini di bawah Area Penempatan/Site */}
+              <div>
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Departemen Penerima Dana</label>
+                 <select required value={budgetForm.department} onChange={e => {
+                    setBudgetForm({...budgetForm, department: e.target.value, division: e.target.value === 'Ops' ? budgetForm.division : ''});
+                 }} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-emerald-500 transition-all">
+                    <option value="">-- Pilih Departemen --</option>
+                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                 </select>
+              </div>
+
+              {budgetForm.department === 'Ops' && (
+                <div className="animate-fade-in">
+                   <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Sub-Divisi Ops (Opsional)</label>
+                   <select value={budgetForm.division} onChange={e => setBudgetForm({...budgetForm, division: e.target.value})} className="w-full px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl font-bold text-sm text-blue-700 outline-none focus:bg-white focus:border-blue-500 transition-all">
+                      <option value="">Semua Divisi Ops (Global)</option>
+                      {OPS_DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                   </select>
+                </div>
+              )}
+
+              <div>
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Kategori / Cost Center</label>
+                 <input required type="text" placeholder="Cth: Pengadaan Seragam, Maintenance" value={budgetForm.category} onChange={e => setBudgetForm({...budgetForm, category: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:bg-white focus:border-emerald-500 transition-all" />
+              </div>
+
+              <div>
+                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Nominal Pagu (Max Limit)</label>
+                 <input required type="number" min="0" placeholder="Rp" value={budgetForm.allocated_amount} onChange={e => setBudgetForm({...budgetForm, allocated_amount: e.target.value})} className="w-full px-4 py-3 bg-white border border-emerald-300 rounded-xl font-black text-emerald-600 text-lg outline-none focus:border-emerald-500 shadow-inner transition-all" />
+              </div>
+
+              <div className="pt-4 flex gap-3 border-t border-slate-100">
+                <button type="button" onClick={() => setShowBudgetModal(false)} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 hover:bg-slate-200 rounded-xl text-sm transition-colors">Batal</button>
+                <button type="submit" disabled={isSubmitting} className="flex-[2] py-3 text-white font-black bg-emerald-600 hover:bg-emerald-700 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2"><Save size={16}/> {isSubmitting ? 'Menyimpan...' : 'Simpan Pagu'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
